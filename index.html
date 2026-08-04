@@ -553,13 +553,14 @@
       try{
         const res = await fetch(DB_URL + "/pid_map/" + pid + ".json");
         const mapped = await res.json();
-        if(mapped) return mapped;
+        if(res.ok && mapped && typeof mapped === "string") return mapped;
         const newId = randomShortId();
-        await fetch(DB_URL + "/pid_map/" + pid + ".json", {
+        const putRes = await fetch(DB_URL + "/pid_map/" + pid + ".json", {
           method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(newId)
         });
+        if(!putRes.ok){ console.error("Firebase pid_map write failed — check Database Rules (read/write should be allowed)."); }
         return newId;
-      }catch(e){ return randomShortId(); }
+      }catch(e){ console.error("Firebase pid_map error", e); return randomShortId(); }
     }
     // 3) standalone/testing mode — no Telegram, no pid in the link
     const existing = params.get("id");
@@ -616,7 +617,8 @@
     try{
       const res = await fetch(DB_URL + "/guests/" + id + ".json");
       const data = await res.json();
-      return data || { stamps: 0 };
+      if(res.ok && data && typeof data === "object" && !("error" in data)) return data;
+      return { stamps: 0 };
     }catch(e){ console.error("Firebase get failed", e); return { stamps: 0 }; }
   }
   async function setGuest(id, data){
@@ -752,6 +754,30 @@
   const scanStatus = document.getElementById("scanStatus");
 
   document.getElementById("startScanBtn").addEventListener("click", async function(){
+    const tgWebApp = window.Telegram && window.Telegram.WebApp;
+
+    // Preferred: Telegram's own native QR scanner — reliable, no browser camera permission issues.
+    if(tgWebApp && typeof tgWebApp.showScanQrPopup === "function"){
+      scanStatus.textContent = "Открываем сканер Telegram…";
+      try{
+        tgWebApp.showScanQrPopup({ text: "Наведите на QR-код гостя" }, function(text){
+          if(text && !scanLock){
+            scanLock = true;
+            scanStatus.textContent = "Найден: " + text;
+            chargeGuest(text.trim()).then(()=>{
+              setTimeout(()=>{ scanLock = false; scanStatus.textContent = "Наведите камеру на QR-код гостя"; }, 1200);
+            });
+          }
+          tgWebApp.closeScanQrPopup();
+          return true;
+        });
+      }catch(e){
+        scanStatus.textContent = "Сканер Telegram недоступен — введите ID вручную.";
+      }
+      return;
+    }
+
+    // Fallback: plain browser camera (works when testing outside Telegram, e.g. on desktop)
     if(scanStream){ stopScan(); this.textContent = "📷 Включить камеру"; return; }
     try{
       scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
