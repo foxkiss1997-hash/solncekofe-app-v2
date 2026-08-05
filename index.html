@@ -534,6 +534,15 @@
   // We map that stable, permanent id to a short, easy 4-char code stored in Firebase,
   // so the same guest always gets the same short card — even though the bot always
   // sends the same link.
+  async function linkTelegramId(guestShortId, telegramId){
+    try{
+      await fetch(DB_URL + "/guests/" + guestShortId + ".json", {
+        method: "PATCH", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ tg: telegramId })
+      });
+    }catch(e){ console.error("Firebase tg link failed", e); }
+  }
+
   async function resolveGuestId(){
     // 1) Real Telegram Mini App — Telegram gives us the guest's id securely, no link tricks needed.
     let pid = null;
@@ -553,12 +562,16 @@
       try{
         const res = await fetch(DB_URL + "/pid_map/" + pid + ".json");
         const mapped = await res.json();
-        if(res.ok && mapped && typeof mapped === "string") return mapped;
+        if(res.ok && mapped && typeof mapped === "string"){
+          linkTelegramId(mapped, pid);
+          return mapped;
+        }
         const newId = randomShortId();
         const putRes = await fetch(DB_URL + "/pid_map/" + pid + ".json", {
           method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(newId)
         });
         if(!putRes.ok){ console.error("Firebase pid_map write failed — check Database Rules (read/write should be allowed)."); }
+        linkTelegramId(newId, pid);
         return newId;
       }catch(e){ console.error("Firebase pid_map error", e); return randomShortId(); }
     }
@@ -648,7 +661,7 @@
       "Ещё " + (GOAL - shown) + " " + cupWord(GOAL - shown) + " до бесплатного кофе";
 
     document.getElementById("rewardBanner").classList.toggle("show", data.justRewarded === true);
-    if(data.justRewarded){ setGuest(guestId, { stamps: shown, justRewarded: false }); }
+    if(data.justRewarded){ setGuest(guestId, Object.assign({}, data, { stamps: shown, justRewarded: false })); }
 
     if(!qrDrawn && window.QRCode){
       try{
@@ -728,7 +741,7 @@
     let stamps = (data.stamps || 0) + 1;
     let justRewarded = false;
     if(stamps >= GOAL){ stamps = 0; justRewarded = true; }
-    await setGuest(id, { stamps, justRewarded });
+    await setGuest(id, { stamps, justRewarded, tg: data.tg || null, lastStampAt: Date.now(), reminded: false });
     if(justRewarded){
       msg.className = "msg gift";
       msg.textContent = "🎉 Гость получает бесплатный кофе — классика, М! Счётчик сброшен.";
@@ -884,7 +897,7 @@
   async function adjustGuest(id, delta, reset){
     const data = await getGuest(id);
     let stamps = reset ? 0 : Math.max(0, (data.stamps||0) + delta);
-    await setGuest(id, { stamps, justRewarded: false });
+    await setGuest(id, Object.assign({}, data, { stamps, justRewarded: false }));
     loadAdminData();
   }
   document.getElementById("adminSearch").addEventListener("input", function(){
