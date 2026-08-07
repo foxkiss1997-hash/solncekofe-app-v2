@@ -1,915 +1,280 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Солнцекофе</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
-<style>
-  :root{
-    --ink: #0b0b10;
-    --ink-2: #15141c;
-    --surface: rgba(255,255,255,0.06);
-    --surface-strong: rgba(255,255,255,0.09);
-    --border: rgba(255,255,255,0.10);
-    --text: #f5f4f7;
-    --muted: #9b98a8;
-    --sun1: #ff7a4d;
-    --sun2: #ffb648;
-    --sun3: #ff4d8d;
-    --good: #6ee7a0;
-    --radius: 28px;
-    font-family: -apple-system, "Inter", "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-  }
-  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
-  html,body{margin:0;padding:0;}
-  body{
-    min-height:100vh;
-    background: var(--ink);
-    color: var(--text);
-    display:flex; justify-content:center;
-    padding: 24px 16px 70px;
-    position:relative;
-    overflow-x:hidden;
-  }
-  .glow{
-    position:fixed; z-index:0; border-radius:50%;
-    filter: blur(70px); opacity:0.55; pointer-events:none;
-  }
-  .glow1{ width:340px; height:340px; top:-140px; left:-90px; background: radial-gradient(circle, var(--sun3), transparent 70%);}
-  .glow2{ width:380px; height:380px; top:60px; right:-160px; background: radial-gradient(circle, var(--sun2), transparent 70%);}
-  .glow3{ width:300px; height:300px; bottom:-120px; left:30%; background: radial-gradient(circle, var(--sun1), transparent 70%); opacity:0.35;}
-
-  .suntravel{
-    position:fixed; z-index:0; pointer-events:none;
-    left:-70px; top:56px;
-    width:52px; height:52px; border-radius:50%;
-    background: radial-gradient(circle at 35% 30%, #fff6d8, var(--sun2) 45%, var(--sun3) 100%);
-    box-shadow: 0 0 36px 10px rgba(255,182,72,0.5);
-    animation: suncross 16s cubic-bezier(.42,0,.58,1) infinite;
-  }
-  .suntravel::before{
-    content:""; position:absolute; right:100%; top:50%; transform: translateY(-50%);
-    width:100px; height:5px; border-radius:10px; filter: blur(3px);
-    background: linear-gradient(90deg, transparent, rgba(255,182,72,0.5));
-  }
-  @keyframes suncross{
-    0%   { left:-70px; top:110px; opacity:0; }
-    6%   { opacity:0.9; }
-    50%  { top:20px; }
-    94%  { opacity:0.9; }
-    100% { left:100vw; top:110px; opacity:0; }
-  }
-  @media (prefers-reduced-motion: reduce){
-    .suntravel{ animation: none; display:none; }
-  }
-
-  .wrap{ width:100%; max-width:400px; position:relative; z-index:1; animation: rise .5s cubic-bezier(.2,.8,.2,1) both; }
-  @keyframes rise{ from{ opacity:0; transform: translateY(14px);} to{ opacity:1; transform:none; } }
-
-  .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:22px; padding: 0 2px;}
-  .brand{ display:flex; align-items:center; gap:10px; }
-  .mark{
-    width:30px; height:30px; border-radius:9px;
-    background: linear-gradient(135deg, var(--sun2), var(--sun3));
-    display:flex; align-items:center; justify-content:center;
-    font-size:15px;
-  }
-  .brand b{ font-size:15px; font-weight:700; letter-spacing:-0.01em; }
-  .modepill{
-    font-size:11px; font-weight:600; color: var(--muted);
-    background: var(--surface); border:1px solid var(--border);
-    padding:6px 11px; border-radius:100px; letter-spacing:0.02em;
-  }
-
-  .card{
-    background: linear-gradient(180deg, var(--surface-strong), var(--surface));
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 28px 24px 26px;
-    backdrop-filter: blur(20px);
-    box-shadow: 0 30px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08);
-  }
-
-  .ringrow{ display:flex; align-items:center; gap:20px; margin-bottom:22px; }
-  .ringwrap{ position:relative; width:96px; height:96px; flex:0 0 auto;}
-  .ringwrap svg{ transform: rotate(-90deg); width:96px; height:96px; }
-  .ringwrap circle{ fill:none; stroke-width:8; }
-  .ringbg{ stroke: rgba(255,255,255,0.08); }
-  .ringfg{
-    stroke: url(#sungrad);
-    stroke-linecap: round;
-    transition: stroke-dashoffset 0.9s cubic-bezier(.2,.9,.2,1);
-  }
-  .ringcenter{
-    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
-  }
-  .ringcenter .n{ font-size:26px; font-weight:800; letter-spacing:-0.02em; line-height:1;}
-  .ringcenter .d{ font-size:10px; color:var(--muted); font-weight:600; letter-spacing:0.04em; margin-top:2px;}
-
-  .headtext .eyebrow{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color: var(--sun2); margin:0 0 6px;}
-  .headtext h1{ font-size:19px; font-weight:700; letter-spacing:-0.01em; margin:0; line-height:1.3; }
-
-  .reward{
-    margin: 0 0 18px; padding:14px 16px; border-radius:16px;
-    background: linear-gradient(120deg, var(--sun1), var(--sun3));
-    font-weight:700; font-size:13.5px; color:#1a0a06;
-    display:none; align-items:center; gap:8px;
-  }
-  .reward.show{ display:flex; }
-
-  .idrow{
-    display:flex; align-items:center; justify-content:space-between; gap:10px;
-    background: rgba(0,0,0,0.28); border:1px solid var(--border);
-    border-radius: 16px; padding: 13px 14px 13px 16px;
-  }
-  .idrow .lab{ font-size:10.5px; text-transform:uppercase; letter-spacing:0.08em; color: var(--muted); margin-bottom:3px; font-weight:600;}
-  .idrow .val{ font-family: "SF Mono","JetBrains Mono","Consolas",monospace; font-size:15px; font-weight:600; letter-spacing:0.01em; word-break:break-all;}
-  .copybtn{
-    flex:0 0 auto; border:none; cursor:pointer;
-    background: var(--text); color:#0b0b10;
-    font-weight:700; font-size:12.5px; padding:9px 13px; border-radius:11px;
-    transition: transform .15s ease;
-  }
-  .copybtn:active{ transform: scale(0.94); }
-
-  .hint{ font-size:12px; color: var(--muted); margin: 14px 2px 0; line-height:1.55; }
-
-  .qrbox{
-    display:flex; flex-direction:column; align-items:center; gap:10px;
-    background:#fff; border-radius:18px; padding:16px; margin-bottom:16px;
-  }
-  .qrbox #qrCanvas img, .qrbox #qrCanvas canvas{ border-radius:8px; display:block; }
-  .qrbox .qrcap{ font-size:11.5px; color:#3a3945; text-align:center; font-weight:600; margin:0; }
-
-  .footlink{ text-align:center; margin-top:20px; }
-  .footlink a{ color: var(--muted); font-size:12.5px; text-decoration:none; }
-  .footlink a:hover{ color: var(--text); }
-
-  /* tabs */
-  .tabs{
-    display:flex; gap:6px; background: var(--surface); border:1px solid var(--border);
-    border-radius:100px; padding:4px; margin-bottom:18px;
-  }
-  .tab{
-    flex:1; text-align:center; padding:9px 6px; border-radius:100px;
-    font-size:12.5px; font-weight:700; color: var(--muted); cursor:pointer;
-    transition: all .2s ease; border:none; background:transparent; font-family:inherit;
-  }
-  .tab.active{ background: linear-gradient(120deg, var(--sun2), var(--sun3)); color:#1a0a06; }
-
-  /* menu */
-  .menucat{ font-size:11px; text-transform:uppercase; letter-spacing:0.1em; color:var(--sun2); font-weight:700; margin: 20px 0 10px; }
-  .menucat:first-child{ margin-top:2px; }
-  .menuitem{
-    display:flex; align-items:center; justify-content:space-between; gap:10px;
-    padding:13px 0; border-bottom:1px solid var(--border);
-  }
-  .menuitem:last-child{ border-bottom:none; }
-  .menuitem .name{ font-size:14.5px; font-weight:600; }
-  .menuitem .desc{ font-size:12px; color:var(--muted); margin-top:2px; }
-  .menuitem .price{ font-size:13px; font-weight:800; color: var(--sun2); white-space:nowrap; text-align:right; }
-
-  .channelcard{
-    display:flex; align-items:center; gap:14px; text-decoration:none; color:inherit;
-    padding:16px; border-radius:18px; margin-top:6px;
-    background: linear-gradient(120deg, rgba(255,122,77,0.16), rgba(255,77,141,0.16));
-    border:1px solid var(--border);
-  }
-  .channelcard .cicon{
-    width:44px;height:44px;border-radius:13px;flex:0 0 auto;
-    background: linear-gradient(135deg, var(--sun2), var(--sun3));
-    display:flex; align-items:center; justify-content:center; font-size:20px;
-  }
-  .channelcard .ctext b{ display:block; font-size:14px; font-weight:700; }
-  .channelcard .ctext span{ display:block; font-size:12px; color:var(--muted); margin-top:2px; }
-  .channelcard .arrow{ margin-left:auto; color:var(--muted); font-size:16px; }
-
-  .addrcard{
-    display:flex; align-items:center; gap:14px; text-decoration:none; color:inherit;
-    padding:16px; border-radius:18px; margin-bottom:10px;
-    background: rgba(255,255,255,0.04); border:1px solid var(--border);
-    transition: background .2s ease, transform .15s ease;
-  }
-  .addrcard:last-child{ margin-bottom:0; }
-  .addrcard:active{ transform: scale(0.98); background: rgba(255,255,255,0.08); }
-  .addrcard .aicon{
-    width:44px;height:44px;border-radius:13px;flex:0 0 auto;
-    background: linear-gradient(135deg, var(--sun2), var(--sun3));
-    display:flex; align-items:center; justify-content:center; font-size:19px;
-  }
-  .addrcard .atext{ flex:1; min-width:0; }
-  .addrcard .atext b{ display:block; font-size:14px; font-weight:700; line-height:1.35; }
-  .addrcard .atext span{ display:block; font-size:12px; color:var(--muted); margin-top:3px; }
-  .addrcard .arrow{ color:var(--muted); font-size:16px; flex:0 0 auto; }
-
-  /* staff */
-  .field{ margin-bottom:14px; }
-  .field label{ display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); font-weight:600; margin-bottom:7px; }
-  .field input{
-    width:100%; padding:14px 15px; border-radius:14px;
-    border:1px solid var(--border); background: rgba(0,0,0,0.28);
-    font-family:"SF Mono","JetBrains Mono","Consolas",monospace; font-size:15px; color:var(--text);
-  }
-  .field input::placeholder{ color:#5c5966; }
-  .field input:focus{ outline:none; border-color: var(--sun2); box-shadow: 0 0 0 3px rgba(255,182,72,0.18); }
-
-  .btn{
-    width:100%; padding:15px; border:none; border-radius:14px; cursor:pointer;
-    background: linear-gradient(120deg, var(--sun2), var(--sun1));
-    color:#1a0a06; font-weight:800; font-size:14.5px; letter-spacing:0.01em;
-    transition: transform .15s ease;
-  }
-  .btn:active{ transform: scale(0.98); }
-
-  .msg{ margin-top:14px; padding:13px 15px; border-radius:14px; font-size:13px; line-height:1.5; display:none; font-weight:600;}
-  .msg.ok{ background: rgba(110,231,160,0.14); color:var(--good); display:block; border:1px solid rgba(110,231,160,0.25);}
-  .msg.err{ background: rgba(255,90,90,0.14); color:#ff8787; display:block; border:1px solid rgba(255,90,90,0.25);}
-  .msg.gift{ background: linear-gradient(120deg, var(--sun1), var(--sun3)); color:#1a0a06; display:block; }
-
-  .stafficon{
-    width:48px;height:48px;border-radius:14px;
-    background: linear-gradient(135deg, var(--sun2), var(--sun3));
-    display:flex; align-items:center; justify-content:center; font-size:22px; margin-bottom:16px;
-  }
-  .staffcard h2{ font-size:18px; margin:0 0 4px; font-weight:700; letter-spacing:-0.01em; }
-  .staffcard p.sub{ font-size:12.5px; color:var(--muted); margin:0 0 20px; line-height:1.5; }
-
-  .scanbox{
-    position:relative; width:100%; aspect-ratio:1/1; border-radius:18px; overflow:hidden;
-    background:#000; border:1px solid var(--border);
-  }
-  .scanbox video{ width:100%; height:100%; object-fit:cover; display:block; }
-  .scanline{
-    position:absolute; left:8%; right:8%; height:2px; top:50%;
-    background: linear-gradient(90deg, transparent, var(--sun2), transparent);
-    box-shadow: 0 0 10px 2px rgba(255,182,72,0.7);
-    animation: scanmove 1.8s ease-in-out infinite;
-    display:none;
-  }
-  .scanbox.live .scanline{ display:block; }
-  @keyframes scanmove{ 0%{ top:12%; } 50%{ top:88%; } 100%{ top:12%; } }
-  .scanstatus{ text-align:center; font-size:12.5px; color:var(--muted); margin:12px 0 0; font-weight:600; }
-  .ortext{ text-align:center; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em; margin: 18px 0 14px; }
-  .btnghost{ background: var(--surface-strong); color: var(--text); border:1px solid var(--border); }
-
-  .statsrow{
-    display:flex; gap:10px; margin-bottom:18px;
-  }
-  .statbox{
-    flex:1; background: rgba(0,0,0,0.28); border:1px solid var(--border); border-radius:14px;
-    padding:14px; text-align:center;
-  }
-  .statbox .num{ font-size:22px; font-weight:800; color: var(--sun2); }
-  .statbox .lab{ font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; margin-top:3px; }
-
-  .guestrow{
-    display:flex; align-items:center; justify-content:space-between; gap:10px;
-    padding:12px 0; border-bottom:1px solid var(--border);
-  }
-  .guestrow:last-child{ border-bottom:none; }
-  .guestrow .gid{ font-family:"SF Mono","JetBrains Mono","Consolas",monospace; font-size:12.5px; }
-  .guestrow .gstamps{ font-size:12px; color:var(--muted); margin-top:2px; }
-  .guestrow .gbtns{ display:flex; gap:6px; }
-  .minibtn{
-    border:1px solid var(--border); background: var(--surface); color:var(--text);
-    width:28px; height:28px; border-radius:9px; font-size:14px; font-weight:700; cursor:pointer;
-  }
-  .minibtn:active{ transform: scale(0.9); }
-</style>
-</head>
-<body>
-<div class="glow glow1"></div>
-<div class="glow glow2"></div>
-<div class="glow glow3"></div>
-<div class="suntravel"></div>
-
-<div class="wrap">
-  <div class="topbar">
-    <div class="brand"><div class="mark">☀️</div><b>Солнцекофе</b></div>
-    <div class="modepill" id="modeLabel">Карта гостя</div>
-  </div>
-
-  <div class="tabs" id="mainTabs">
-    <button class="tab active" data-tab="card">Карта</button>
-    <button class="tab" data-tab="menu">Меню</button>
-    <button class="tab" data-tab="locations">Адреса</button>
-    <button class="tab" id="channelTab">Канал ↗</button>
-  </div>
-
-  <div id="guestView">
-    <div class="card">
-      <div class="ringrow">
-        <div class="ringwrap">
-          <svg viewBox="0 0 96 96">
-            <defs>
-              <linearGradient id="sungrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#ffb648"/>
-                <stop offset="100%" stop-color="#ff4d8d"/>
-              </linearGradient>
-            </defs>
-            <circle class="ringbg" cx="48" cy="48" r="40"></circle>
-            <circle class="ringfg" id="ringfg" cx="48" cy="48" r="40"></circle>
-          </svg>
-          <div class="ringcenter">
-            <div class="n" id="ringN">0/7</div>
-            <div class="d">чашек</div>
-          </div>
-        </div>
-        <div class="headtext">
-          <p class="eyebrow">твой прогресс</p>
-          <h1 id="greetLine">Загружаем карту…</h1>
-        </div>
-      </div>
-
-      <div class="reward" id="rewardBanner">🎉&nbsp; Кофе за наш счёт — покажи это сообщение бариста</div>
-
-      <div class="qrbox" id="qrBox">
-        <div id="qrCanvas"></div>
-        <p class="qrcap">Покажи этот QR на кассе — начислим визит</p>
-      </div>
-
-      <div class="idrow">
-        <div>
-          <div class="lab">ID для персонала</div>
-          <div class="val" id="guestIdVal">—</div>
-        </div>
-        <button class="copybtn" id="copyBtn">Копировать</button>
-      </div>
-
-      <p class="hint">Покажи этот ID на кассе — начислим визит. 7 чашек = классический кофе (M) в подарок.</p>
-
-      <a class="addrcard" href="https://eda.yandex.ru/search?hideSelector=true&query=солнцекофе" target="_blank" rel="noopener" style="margin-top:16px;">
-        <div class="aicon">🛵</div>
-        <div class="atext">
-          <b>Доставка</b>
-          <span>Заказать на Яндекс Еде</span>
-        </div>
-        <div class="arrow">↗</div>
-      </a>
-    </div>
-    <p class="footlink"><a href="#" id="toStaff">Я сотрудник →</a></p>
-  </div>
-
-  <div id="menuView" style="display:none;">
-    <div class="card">
-      <div class="headtext" style="margin-bottom:6px;">
-        <p class="eyebrow">наше меню</p>
-        <h1>Что сегодня варим</h1>
-      </div>
-
-      <div class="menucat">Классика</div>
-      <div class="menuitem"><div><div class="name">Эспрессо</div></div><div class="price">S 190 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Американо</div></div><div class="price">S 220 · M 270 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Флэт уайт</div></div><div class="price">S 300 · M 350 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Капучино</div></div><div class="price">S 250 · M 300 · L 340 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Латте</div></div><div class="price">M 320 · L 360 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Раф</div></div><div class="price">M 360 · L 400 ₽</div></div>
-
-      <div class="menucat">Авторские рафы</div>
-      <div class="menuitem"><div><div class="name">Раф апельсин ★</div></div><div class="price">M 380 · L 420 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Раф сырный</div></div><div class="price">M 380 · L 420 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Раф халва</div></div><div class="price">M 380 · L 420 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Раф Пана котта с вишней ★</div></div><div class="price">M 380 · L 420 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Раф банановое мороженое</div></div><div class="price">M 380 · L 420 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Раф малина кокос ★</div></div><div class="price">M 380 · L 420 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Раф Сникерс ★</div></div><div class="price">M 380 · L 420 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Раф птичье молоко</div></div><div class="price">M 380 · L 420 ₽</div></div>
-
-      <div class="menucat">Другие авторские</div>
-      <div class="menuitem"><div><div class="name">Карамель маккиато</div></div><div class="price">M 380 · L 420 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Вишнёвый американо</div></div><div class="price">M 380 · L 420 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Малиновое какао</div></div><div class="price">M 380 · L 420 ₽</div></div>
-
-      <div class="menucat">Холодные напитки</div>
-      <div class="menuitem"><div><div class="name">Эспрессо тоник</div></div><div class="price">M 320 · L 370 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Айс латте</div></div><div class="price">M 320 · L 370 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Айс капучино</div></div><div class="price">M 320 · L 370 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Матча персик-кокос ★</div></div><div class="price">M 320 · L 370 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Бабл</div></div><div class="price">M 320 · L 370 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Вишнёвый бабл</div></div><div class="price">M 320 · L 370 ₽</div></div>
-
-      <div class="menucat">Не кофе</div>
-      <div class="menuitem"><div><div class="name">Какао ★</div></div><div class="price">S 250 · M 300 · L 350 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Матча ★</div></div><div class="price">S 290 · M 340 · L 420 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Матча смородина</div></div><div class="price">S 330 · M 360 · L 390 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Пуэр апельсин</div></div><div class="price">M 310 · L 450 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Манго ромашка</div></div><div class="price">M 310 · L 450 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Манго малина ★</div></div><div class="price">M 310 · L 450 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Кленовый пекан</div></div><div class="price">M 310 · L 450 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Фрэш ★</div></div><div class="price">S 400 · M 450 · L 500 ₽</div></div>
-
-      <div class="menucat">Чай листовой</div>
-      <div class="menuitem"><div><div class="name">Эрл Грей</div></div><div class="price">M 220 · L 250 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Чёрный с чабрецом</div></div><div class="price">M 220 · L 250 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Зелёный с жасмином</div></div><div class="price">M 220 · L 250 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Гречишный</div></div><div class="price">M 220 · L 250 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Те гуань инь</div></div><div class="price">M 220 · L 250 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Пуэр</div></div><div class="price">M 220 · L 250 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Дикий персик</div></div><div class="price">M 220 · L 250 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Земляника персик</div></div><div class="price">M 220 · L 250 ₽</div></div>
-
-      <div class="menucat">Добавь в напиток</div>
-      <div class="menuitem"><div><div class="name">Альтернативное молоко</div><div class="desc">миндальное, кокосовое, фундучное, банановое, безлактозное</div></div><div class="price">60–90 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Сироп</div><div class="desc">ваниль, карамель, лесной орех и другие</div></div><div class="price">40 ₽</div></div>
-      <div class="menuitem"><div><div class="name">Доп. шот эспрессо</div></div><div class="price">70 ₽</div></div>
-    </div>
-    <p class="hint" style="text-align:center; margin-top:14px;">★ — хиты меню. Актуальные позиции уточняйте у бариста.</p>
-  </div>
-
-  <div id="locationsView" style="display:none;">
-    <div class="card">
-      <div class="headtext" style="margin-bottom:14px;">
-        <p class="eyebrow">наши кофейни</p>
-        <h1>Где нас найти</h1>
-      </div>
-
-      <a class="addrcard" href="https://yandex.ru/maps/?pt=37.789429,55.715088&z=17&l=map" target="_blank" rel="noopener">
-        <div class="aicon">📍</div>
-        <div class="atext">
-          <b>1-я Новокузьминская, 15/5</b>
-          <span>Открыть на Яндекс.Картах</span>
-        </div>
-        <div class="arrow">↗</div>
-      </a>
-
-      <a class="addrcard" href="https://yandex.ru/maps/?pt=37.641308,55.678413&z=17&l=map" target="_blank" rel="noopener">
-        <div class="aicon">📍</div>
-        <div class="atext">
-          <b>2-й Нагатинский проезд, 2/2к2</b>
-          <span>Открыть на Яндекс.Картах</span>
-        </div>
-        <div class="arrow">↗</div>
-      </a>
-    </div>
-    <p class="hint" style="text-align:center; margin-top:14px;">Нажмите на адрес, чтобы построить маршрут.</p>
-  </div>
-
-  <div id="staffView" style="display:none;">
-    <div class="card staffcard">
-      <div class="stafficon">🔑</div>
-      <h2>Раздел для персонала</h2>
-      <p class="sub">Введите код доступа, затем наведите камеру на QR-код гостя.</p>
-
-      <div id="pinStep">
-        <div class="field">
-          <label>Код доступа</label>
-          <input type="password" id="pinInput" placeholder="••••••••" autocomplete="off">
-        </div>
-        <button class="btn" id="pinBtn">Войти</button>
-        <div class="msg" id="pinMsg"></div>
-      </div>
-
-      <div id="scanStep" style="display:none;">
-        <div class="scanbox" id="scanBox">
-          <video id="scanVideo" playsinline muted></video>
-          <div class="scanline"></div>
-        </div>
-        <canvas id="scanCanvas" style="display:none;"></canvas>
-        <p class="scanstatus" id="scanStatus">Наведите камеру на QR-код гостя</p>
-
-        <button class="btn" id="startScanBtn" style="margin-top:8px;">📷 Включить камеру</button>
-
-        <p class="ortext">или</p>
-        <div class="field">
-          <label>ID гостя вручную</label>
-          <input type="text" id="guestIdInput" placeholder="Вставьте или введите ID" autocomplete="off">
-        </div>
-        <button class="btn btnghost" id="chargeBtn">Начислить визит</button>
-        <div class="msg" id="chargeMsg"></div>
-      </div>
-    </div>
-    <p class="footlink"><a href="#" id="toGuest">← Вернуться к карте гостя</a></p>
-    <p class="footlink"><a href="#" id="toAdmin">Я администратор →</a></p>
-  </div>
-
-  <div id="adminView" style="display:none;">
-    <div class="card staffcard">
-      <div class="stafficon">📊</div>
-      <h2>Панель администратора</h2>
-      <p class="sub" id="adminSub">Введите код администратора.</p>
-
-      <div id="adminPinStep">
-        <div class="field">
-          <label>Код администратора</label>
-          <input type="password" id="adminPinInput" placeholder="••••••••" autocomplete="off">
-        </div>
-        <button class="btn" id="adminPinBtn">Войти</button>
-        <div class="msg" id="adminPinMsg"></div>
-      </div>
-
-      <div id="adminPanel" style="display:none;">
-        <div class="statsrow" id="statsRow"></div>
-        <div class="field">
-          <label>Поиск по ID</label>
-          <input type="text" id="adminSearch" placeholder="Фильтр по ID гостя" autocomplete="off">
-        </div>
-        <div id="guestList"></div>
-      </div>
-    </div>
-    <p class="footlink"><a href="#" id="toGuestFromAdmin">← Вернуться к карте гостя</a></p>
-  </div>
-
-</div>
-
-<script>
-(function(){
-  const STAFF_CODE = "4444";
-  const GOAL = 7;
-  const CIRC = 2 * Math.PI * 40;
-  const DB_URL = "https://solncekofe-fdcad-default-rtdb.firebaseio.com";
-
-  const params = new URLSearchParams(window.location.search);
-  const ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"; // no 0/O/1/I to avoid mix-ups
-  function randomShortId(){
-    let s = "";
-    for(let i=0;i<4;i++){ s += ALPHABET[Math.floor(Math.random()*ALPHABET.length)]; }
-    return s;
-  }
-
-  let guestId = null;
-  // If opened from the Telegram bot, pid = the guest's Telegram platform_id (#{platform_id}).
-  // We map that stable, permanent id to a short, easy 4-char code stored in Firebase,
-  // so the same guest always gets the same short card — even though the bot always
-  // sends the same link.
-  async function linkTelegramId(guestShortId, telegramId){
-    try{
-      await fetch(DB_URL + "/guests/" + guestShortId + ".json", {
-        method: "PATCH", headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ tg: telegramId })
-      });
-    }catch(e){ console.error("Firebase tg link failed", e); }
-  }
-
-  async function resolveGuestId(){
-    // 1) Real Telegram Mini App — Telegram gives us the guest's id securely, no link tricks needed.
-    let pid = null;
-    try{
-      if(window.Telegram && window.Telegram.WebApp){
-        window.Telegram.WebApp.ready();
-        window.Telegram.WebApp.expand();
-        const u = window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user;
-        if(u && u.id) pid = String(u.id);
-      }
-    }catch(e){ /* not running inside Telegram — fine, fall through */ }
-
-    // 2) Fallback: opened via a plain link with ?pid= (e.g. from a SaleBot button)
-    if(!pid) pid = params.get("pid");
-
-    if(pid){
-      try{
-        const res = await fetch(DB_URL + "/pid_map/" + pid + ".json");
-        const mapped = await res.json();
-        if(res.ok && mapped && typeof mapped === "string"){
-          linkTelegramId(mapped, pid);
-          return mapped;
-        }
-        const newId = randomShortId();
-        const putRes = await fetch(DB_URL + "/pid_map/" + pid + ".json", {
-          method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(newId)
-        });
-        if(!putRes.ok){ console.error("Firebase pid_map write failed — check Database Rules (read/write should be allowed)."); }
-        linkTelegramId(newId, pid);
-        return newId;
-      }catch(e){ console.error("Firebase pid_map error", e); return randomShortId(); }
-    }
-    // 3) standalone/testing mode — no Telegram, no pid in the link
-    const existing = params.get("id");
-    if(existing) return existing;
-    const id = randomShortId();
-    try{
-      const url = new URL(window.location.href);
-      url.searchParams.set("id", id);
-      window.history.replaceState({}, "", url);
-    }catch(e){ /* preview sandbox — safe to ignore */ }
-    return id;
-  }
-
-  const guestView = document.getElementById("guestView");
-  const staffView = document.getElementById("staffView");
-  const menuView = document.getElementById("menuView");
-  const adminView = document.getElementById("adminView");
-  const locationsView = document.getElementById("locationsView");
-  const modeLabel = document.getElementById("modeLabel");
-  const CHANNEL_URL = "https://t.me/solncecoffee";
-  const ADMIN_CODE = "55555";
-
-  document.getElementById("channelTab").addEventListener("click", function(){
-    window.open(CHANNEL_URL, "_blank");
+async function sendMessage(API, chatId, text, replyMarkup) {
+  const body = { chat_id: chatId, text, parse_mode: "HTML" };
+  if (replyMarkup) body.reply_markup = replyMarkup;
+  const res = await fetch(`${API}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
+  return res.ok;
+}
 
-  function showTab(tab){
-    document.querySelectorAll("#mainTabs .tab[data-tab]").forEach(b => b.classList.toggle("active", b.getAttribute("data-tab")===tab));
-    staffView.style.display = "none";
-    adminView.style.display = "none";
-    guestView.style.display = "none";
-    menuView.style.display = "none";
-    locationsView.style.display = "none";
-    if(tab === "card"){
-      guestView.style.display = "block";
-      modeLabel.textContent = "Карта гостя";
-      renderGuest();
-    } else if(tab === "menu"){
-      menuView.style.display = "block";
-      modeLabel.textContent = "Меню";
-    } else if(tab === "locations"){
-      locationsView.style.display = "block";
-      modeLabel.textContent = "Адреса";
-    }
-  }
-  document.querySelectorAll("#mainTabs .tab[data-tab]").forEach(function(btn){
-    btn.addEventListener("click", function(){ showTab(btn.getAttribute("data-tab")); });
+async function answerCallback(API, id, text) {
+  await fetch(`${API}/answerCallbackQuery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ callback_query_id: id, text: text || "" }),
   });
-  const ringfg = document.getElementById("ringfg");
-  ringfg.style.strokeDasharray = CIRC;
-  ringfg.style.strokeDashoffset = CIRC;
+}
 
-  async function getGuest(id){
-    try{
-      const res = await fetch(DB_URL + "/guests/" + id + ".json");
-      const data = await res.json();
-      if(res.ok && data && typeof data === "object" && !("error" in data)) return data;
-      return { stamps: 0 };
-    }catch(e){ console.error("Firebase get failed", e); return { stamps: 0 }; }
+// Today's date as YYYY-MM-DD in Moscow time (UTC+3, no DST).
+function moscowDateString() {
+  const moscow = new Date(Date.now() + 3 * 60 * 60 * 1000);
+  return moscow.toISOString().slice(0, 10);
+}
+
+async function getAllGuestChatIds(DB_URL) {
+  const res = await fetch(`${DB_URL}/guests.json`);
+  const guests = await res.json();
+  if (!guests) return [];
+  return Object.values(guests).filter(g => g && g.tg).map(g => g.tg);
+}
+
+// Orders from the pre-order mini page land here and get routed to the right shop's staff chat.
+// Set SHOP1_CHAT_ID / SHOP2_CHAT_ID as Cloudflare variables for per-location routing;
+// falls back to OWNER_CHAT_ID if a shop-specific chat isn't set.
+//
+// Prep-time queue: each shop has one running "busy until" clock in Firebase
+// (/queue/{shopId}). Every new order's ready time starts after whichever is
+// later — right now, or when the shop's current queue clears — so orders
+// stack up realistically instead of all claiming to be ready in 6 minutes.
+const PREP_MINUTES = { pizza: 15, default: 6 };
+
+function prepMinutesForItems(items) {
+  if (!Array.isArray(items)) return 6;
+  return items.reduce((sum, it) => {
+    const per = PREP_MINUTES[it.category] || PREP_MINUTES.default;
+    return sum + per * (it.qty || 1);
+  }, 0);
+}
+
+async function reserveQueueSlot(env, shopId, prepMinutes) {
+  const key = `${env.DB_URL}/queue/${shopId}.json`;
+  let busyUntil = 0;
+  try {
+    const res = await fetch(key);
+    const data = res.ok ? await res.json() : null;
+    busyUntil = (data && data.busyUntil) || 0;
+  } catch (e) { /* fine, treat as empty queue */ }
+
+  const now = Date.now();
+  const startAt = Math.max(now, busyUntil);
+  const readyAt = startAt + prepMinutes * 60000;
+
+  try {
+    await fetch(key, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ busyUntil: readyAt }),
+    });
+  } catch (e) { /* non-fatal — worst case two orders overlap slightly */ }
+
+  return Math.max(1, Math.round((readyAt - now) / 60000));
+}
+
+async function handleOrder(request, env) {
+  let order;
+  try { order = await request.json(); } catch (e) { return new Response("bad request", { status: 400 }); }
+
+  const API = `https://api.telegram.org/bot${env.BOT_TOKEN}`;
+  const shopChatMap = { 1: env.SHOP1_CHAT_ID, 2: env.SHOP2_CHAT_ID };
+  const targetChatId = shopChatMap[order.shopId] || env.OWNER_CHAT_ID;
+
+  const prepMinutes = prepMinutesForItems(order.items);
+  const etaMinutes = env.DB_URL ? await reserveQueueSlot(env, order.shopId, prepMinutes) : prepMinutes;
+
+  const text =
+    `🆕 <b>Новый заказ №${order.number}</b>\n` +
+    `📍 ${order.shopName}\n\n` +
+    `${order.itemsText}\n\n` +
+    `Итого: <b>${order.total} ₽</b>\n` +
+    `Оплата: ${order.payMethod}\n` +
+    `Забрать: ${order.pickup}\n` +
+    `Готовность: ~${etaMinutes} мин\n` +
+    `Имя: ${order.guestName}\n` +
+    `ID гостя: ${order.clientId}`;
+
+  const ok = await sendMessage(API, targetChatId, text);
+  if (env.OWNER_CHAT_ID && targetChatId !== env.OWNER_CHAT_ID) {
+    await sendMessage(API, env.OWNER_CHAT_ID, `(копия) ${text}`);
   }
-  async function setGuest(id, data){
-    try{
-      await fetch(DB_URL + "/guests/" + id + ".json", {
-        method: "PUT",
+
+  // Persist the order so the staff/admin screens in the pre-order app can list it.
+  if (env.DB_URL) {
+    try {
+      await fetch(`${env.DB_URL}/orders.json`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
+        body: JSON.stringify({
+          number: order.number,
+          shopId: order.shopId,
+          shopName: order.shopName,
+          shopAddr: order.shopAddr,
+          itemsText: order.itemsText,
+          itemsCount: order.itemsCount,
+          total: order.total,
+          guestName: order.guestName,
+          payMethod: order.payMethod,
+          pickup: order.pickup,
+          clientId: order.clientId,
+          status: "new",
+          createdAt: Date.now(),
+          etaMinutes: etaMinutes,
+        }),
       });
-    }catch(e){ console.error("Firebase set failed", e); }
+    } catch (e) { console.error("order persist failed", e); }
   }
 
-  let qrDrawn = false;
-  async function renderGuest(){
-    const data = await getGuest(guestId);
-    const raw = data.stamps || 0;
-    const shown = raw % GOAL === 0 && raw > 0 ? GOAL : raw % GOAL;
-
-    document.getElementById("guestIdVal").textContent = guestId;
-    document.getElementById("ringN").textContent = shown + "/" + GOAL;
-    const offset = CIRC - (shown / GOAL) * CIRC;
-    requestAnimationFrame(()=>{ ringfg.style.strokeDashoffset = offset; });
-
-    document.getElementById("greetLine").textContent =
-      shown === 0 ? "Начни копить чашки уже сегодня" :
-      shown === GOAL ? "Твой подарок готов!" :
-      "Ещё " + (GOAL - shown) + " " + cupWord(GOAL - shown) + " до бесплатного кофе";
-
-    document.getElementById("rewardBanner").classList.toggle("show", data.justRewarded === true);
-    if(data.justRewarded){ setGuest(guestId, Object.assign({}, data, { stamps: shown, justRewarded: false })); }
-
-    if(!qrDrawn && window.QRCode){
-      try{
-        new QRCode(document.getElementById("qrCanvas"), {
-          text: guestId, width:260, height:260,
-          colorDark:"#000000", colorLight:"#ffffff",
-          correctLevel: QRCode.CorrectLevel.H
-        });
-        qrDrawn = true;
-      }catch(e){ console.error("QR draw failed", e); }
-    }
-  }
-  function cupWord(n){
-    if(n % 10 === 1 && n % 100 !== 11) return "чашка";
-    if([2,3,4].includes(n % 10) && ![12,13,14].includes(n % 100)) return "чашки";
-    return "чашек";
-  }
-
-  document.getElementById("copyBtn").addEventListener("click", function(){
-    navigator.clipboard && navigator.clipboard.writeText(guestId);
-    const t = this.textContent;
-    this.textContent = "Скопировано ✓";
-    setTimeout(()=> this.textContent = t, 1400);
+  return new Response(JSON.stringify({ ok, etaMinutes }), {
+    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
   });
+}
 
-  document.getElementById("toStaff").addEventListener("click", function(e){
-    e.preventDefault();
-    document.getElementById("mainTabs").style.display = "none";
-    guestView.style.display = "none";
-    menuView.style.display = "none";
-    locationsView.style.display = "none";
-    adminView.style.display = "none";
-    staffView.style.display = "block";
-    modeLabel.textContent = "Режим персонала";
-  });
-  document.getElementById("toGuest").addEventListener("click", backToGuest);
-  document.getElementById("toGuestFromAdmin").addEventListener("click", backToGuest);
-  document.getElementById("toAdmin").addEventListener("click", function(e){
-    e.preventDefault();
-    stopScan();
-    staffView.style.display = "none";
-    adminView.style.display = "block";
-    modeLabel.textContent = "Администратор";
-  });
-
-  function backToGuest(e){
-    e.preventDefault();
-    stopScan();
-    document.getElementById("mainTabs").style.display = "flex";
-    staffView.style.display = "none";
-    adminView.style.display = "none";
-    locationsView.style.display = "none";
-    guestView.style.display = "block";
-    menuView.style.display = "none";
-    document.querySelectorAll("#mainTabs .tab[data-tab]").forEach(b => b.classList.remove("active"));
-    document.querySelector('#mainTabs .tab[data-tab="card"]').classList.add("active");
-    modeLabel.textContent = "Карта гостя";
-    renderGuest();
-  }
-
-  document.getElementById("pinBtn").addEventListener("click", function(){
-    const val = document.getElementById("pinInput").value.trim();
-    const msg = document.getElementById("pinMsg");
-    if(val === STAFF_CODE){
-      document.getElementById("pinStep").style.display = "none";
-      document.getElementById("scanStep").style.display = "block";
-      msg.className = "msg"; msg.textContent = "";
-    } else {
-      msg.className = "msg err";
-      msg.textContent = "Неверный код доступа.";
-    }
-  });
-
-  async function chargeGuest(id){
-    const msg = document.getElementById("chargeMsg");
-    const data = await getGuest(id);
-    let stamps = (data.stamps || 0) + 1;
-    let justRewarded = false;
-    if(stamps >= GOAL){ stamps = 0; justRewarded = true; }
-    await setGuest(id, { stamps, justRewarded, tg: data.tg || null, lastStampAt: Date.now(), reminded: false });
-    if(justRewarded){
-      msg.className = "msg gift";
-      msg.textContent = "🎉 Гость получает бесплатный кофе — классика, М! Счётчик сброшен.";
-    } else {
-      msg.className = "msg ok";
-      msg.textContent = "Готово! У гостя " + id + " теперь " + stamps + " из " + GOAL + " чашек.";
-    }
-  }
-
-  document.getElementById("chargeBtn").addEventListener("click", function(){
-    const id = document.getElementById("guestIdInput").value.trim();
-    const msg = document.getElementById("chargeMsg");
-    if(!id){ msg.className = "msg err"; msg.textContent = "Введите ID гостя."; return; }
-    chargeGuest(id);
-    document.getElementById("guestIdInput").value = "";
-  });
-
-  /* ===== camera QR scan ===== */
-  let scanStream = null, scanRAF = null, scanLock = false;
-  const scanBox = document.getElementById("scanBox");
-  const scanVideo = document.getElementById("scanVideo");
-  const scanCanvas = document.getElementById("scanCanvas");
-  const scanStatus = document.getElementById("scanStatus");
-
-  document.getElementById("startScanBtn").addEventListener("click", async function(){
-    const tgWebApp = window.Telegram && window.Telegram.WebApp;
-
-    // Preferred: Telegram's own native QR scanner — reliable, no browser camera permission issues.
-    if(tgWebApp && typeof tgWebApp.showScanQrPopup === "function"){
-      scanStatus.textContent = "Открываем сканер Telegram…";
-      try{
-        tgWebApp.showScanQrPopup({ text: "Наведите на QR-код гостя" }, function(text){
-          if(text && !scanLock){
-            scanLock = true;
-            scanStatus.textContent = "Найден: " + text;
-            chargeGuest(text.trim()).then(()=>{
-              setTimeout(()=>{ scanLock = false; scanStatus.textContent = "Наведите камеру на QR-код гостя"; }, 1200);
-            });
-          }
-          tgWebApp.closeScanQrPopup();
-          return true;
-        });
-      }catch(e){
-        scanStatus.textContent = "Сканер Telegram недоступен — введите ID вручную.";
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const test = url.searchParams.get("test");
+    if (test) {
+      const API = `https://api.telegram.org/bot${env.BOT_TOKEN}`;
+      if (test === "post") {
+        await sendTodaysPost(API, env.DB_URL, env.CHANNEL_ID);
+        return new Response("Тестовый запуск: рассылка поста выполнена (если пост на сегодня существует и ещё не отправлен).");
       }
+      if (test === "remind") {
+        await sendReminders(API, env.DB_URL);
+        return new Response("Тестовый запуск: напоминания разосланы (если есть подходящие гости).");
+      }
+    }
+
+    if (request.method === "OPTIONS" && url.pathname === "/order") {
+      return new Response(null, {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      });
+    }
+
+    if (request.method === "POST" && url.pathname === "/order") {
+      return handleOrder(request, env);
+    }
+
+    if (request.method !== "POST") {
+      return new Response("Солнцекофе бот работает ☀️", { status: 200 });
+    }
+
+    let update;
+    try { update = await request.json(); } catch (e) { return new Response("bad request", { status: 400 }); }
+
+    const BOT_TOKEN = env.BOT_TOKEN;
+    const OWNER_CHAT_ID = env.OWNER_CHAT_ID;
+    const WEBAPP_URL = env.WEBAPP_URL;
+    const API = `https://api.telegram.org/bot${BOT_TOKEN}`;
+
+    if (update.callback_query) {
+      const cq = update.callback_query;
+      const chatId = cq.message.chat.id;
+      if (cq.data === "promo") {
+        await sendMessage(API, chatId,
+          "🔥 <b>Текущие акции</b>\n\nСфотографируйся с героем недели в зале, пришли фото и короткий отзыв через приложение — получи скидку 15% на следующий кофе.");
+      }
+      await answerCallback(API, cq.id);
+      return new Response("ok");
+    }
+
+    if (update.message) {
+      const msg = update.message;
+      const chatId = msg.chat.id;
+      const text = (msg.text || "").trim();
+
+      if (text === "/start") {
+        await sendMessage(API, chatId,
+          "Привет! Добро пожаловать в «Солнцекофе» — тепло, вкусно, по-соседски.\n\nЗдесь ты можешь копить чашки на бесплатный кофе, следить за акциями и узнавать новости нашего «Офиса цветов» 🌸",
+          { inline_keyboard: [
+              [{ text: "☕ Открыть мою карту", web_app: { url: WEBAPP_URL } }],
+              [{ text: "🔥 Текущие акции", callback_data: "promo" }],
+              [{ text: "📢 Наш канал", url: "https://t.me/solncecoffee" }],
+            ] }
+        );
+      } else if (text.startsWith("/")) {
+        await sendMessage(API, chatId, "Не знаю такой команды — но всегда можно нажать /start 🙂");
+      } else {
+        if (OWNER_CHAT_ID) {
+          const from = msg.from ? (msg.from.username ? "@"+msg.from.username : msg.from.first_name) : "гость";
+          await sendMessage(API, OWNER_CHAT_ID, `✉️ Сообщение от ${from} (id ${chatId}):\n${text}`);
+        }
+        await sendMessage(API, chatId, "Спасибо! Мы получили ваше сообщение и скоро ответим 🙂");
+      }
+      return new Response("ok");
+    }
+    return new Response("ok");
+  },
+
+  // Runs automatically on the schedules set in Cloudflare (Triggers tab).
+  // Two different jobs live here, told apart by which cron fired (event.cron):
+  //   "0 7 * * mon-fri"  -> 10:00 MSK weekdays: send today's "Офис цветов" post
+  //   "0 16 * * *"       -> 19:00 MSK every day: remind guests who are close to a free coffee
+  async scheduled(event, env, ctx) {
+    const BOT_TOKEN = env.BOT_TOKEN;
+    const DB_URL = env.DB_URL; // e.g. https://solncekofe-fdcad-default-rtdb.firebaseio.com
+    const API = `https://api.telegram.org/bot${BOT_TOKEN}`;
+
+    if (event.cron === "0 7 * * mon-fri") {
+      await sendTodaysPost(API, DB_URL, env.CHANNEL_ID);
       return;
     }
 
-    // Fallback: plain browser camera (works when testing outside Telegram, e.g. on desktop)
-    if(scanStream){ stopScan(); this.textContent = "📷 Включить камеру"; return; }
-    try{
-      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      scanVideo.srcObject = scanStream;
-      await scanVideo.play();
-      scanBox.classList.add("live");
-      scanStatus.textContent = "Ищем QR-код…";
-      this.textContent = "⏹ Остановить камеру";
-      scanLoop();
-    }catch(e){
-      scanStatus.textContent = "Не удалось открыть камеру — введите ID вручную.";
-    }
+    await sendReminders(API, DB_URL);
+  },
+};
+
+async function sendTodaysPost(API, DB_URL, CHANNEL_ID) {
+  const date = moscowDateString();
+  const res = await fetch(`${DB_URL}/posts/${date}.json`);
+  const post = await res.json();
+  if (!post || !post.text || post.sent === true) return;
+
+  await sendMessage(API, CHANNEL_ID, `🌸 <b>Офис цветов</b>\n\n${post.text}`);
+
+  await fetch(`${DB_URL}/posts/${date}.json`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sent: true }),
   });
+}
 
-  function scanLoop(){
-    if(!scanStream) return;
-    const ctx = scanCanvas.getContext("2d");
-    if(scanVideo.videoWidth){
-      scanCanvas.width = scanVideo.videoWidth;
-      scanCanvas.height = scanVideo.videoHeight;
-      ctx.drawImage(scanVideo, 0, 0, scanCanvas.width, scanCanvas.height);
-      const img = ctx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
-      const code = window.jsQR && jsQR(img.data, img.width, img.height);
-      if(code && code.data && !scanLock){
-        scanLock = true;
-        scanStatus.textContent = "Найден: " + code.data;
-        chargeGuest(code.data.trim()).then(()=>{
-          setTimeout(()=>{ scanLock = false; scanStatus.textContent = "Ищем QR-код…"; }, 1600);
-        });
-      }
+async function sendReminders(API, DB_URL) {
+  const GOAL = 7;
+  const INACTIVE_MS = 5 * 24 * 60 * 60 * 1000; // 5 days
+
+  const res = await fetch(`${DB_URL}/guests.json`);
+  const guests = await res.json();
+  if (!guests) return;
+
+  const now = Date.now();
+  for (const shortId in guests) {
+    const g = guests[shortId];
+    if (!g || !g.tg) continue;
+    const stamps = g.stamps || 0;
+    const lastStampAt = g.lastStampAt || 0;
+    const alreadyReminded = g.reminded === true;
+
+    const almostThere = stamps >= GOAL - 2 && stamps < GOAL; // 5 or 6 out of 7
+    const inactiveEnough = (now - lastStampAt) > INACTIVE_MS;
+
+    if (almostThere && inactiveEnough && !alreadyReminded) {
+      const left = GOAL - stamps;
+      const word = left === 1 ? "чашка" : "чашки";
+      await sendMessage(API, g.tg,
+        `Привет! ☀️ У тебя осталось всего ${left} ${word} до бесплатного кофе в «Солнцекофе». Загляни на этой неделе — не будем ждать вечно 😉`,
+        { inline_keyboard: [[{ text: "📢 Наш канал", url: "https://t.me/solncecoffee" }]] });
+
+      await fetch(`${DB_URL}/guests/${shortId}.json`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reminded: true }),
+      });
     }
-    scanRAF = requestAnimationFrame(scanLoop);
   }
-
-  function stopScan(){
-    if(scanRAF) cancelAnimationFrame(scanRAF);
-    if(scanStream){ scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
-    scanBox.classList.remove("live");
-    const btn = document.getElementById("startScanBtn");
-    if(btn) btn.textContent = "📷 Включить камеру";
-  }
-
-  /* ===== admin panel ===== */
-  document.getElementById("adminPinBtn").addEventListener("click", function(){
-    const val = document.getElementById("adminPinInput").value.trim();
-    const msg = document.getElementById("adminPinMsg");
-    if(val === ADMIN_CODE){
-      document.getElementById("adminPinStep").style.display = "none";
-      document.getElementById("adminPanel").style.display = "block";
-      document.getElementById("adminSub").textContent = "Все гости и их прогресс.";
-      loadAdminData();
-    } else {
-      msg.className = "msg err";
-      msg.textContent = "Неверный код администратора.";
-    }
-  });
-
-  let allGuests = [];
-  async function loadAdminData(){
-    const listEl = document.getElementById("guestList");
-    listEl.innerHTML = '<p class="hint">Загружаем…</p>';
-    try{
-      const res = await fetch(DB_URL + "/guests.json");
-      const obj = await res.json();
-      allGuests = [];
-      if(obj){
-        for(const id in obj){
-          allGuests.push({ id: id, stamps: (obj[id] && obj[id].stamps) || 0 });
-        }
-      }
-    }catch(e){ allGuests = []; }
-    renderStats();
-    renderGuestList(allGuests);
-  }
-  function renderStats(){
-    const total = allGuests.length;
-    const active = allGuests.filter(g => g.stamps > 0).length;
-    const almost = allGuests.filter(g => g.stamps >= GOAL - 1 && g.stamps < GOAL).length;
-    document.getElementById("statsRow").innerHTML =
-      '<div class="statbox"><div class="num">'+total+'</div><div class="lab">Всего гостей</div></div>' +
-      '<div class="statbox"><div class="num">'+active+'</div><div class="lab">С визитами</div></div>' +
-      '<div class="statbox"><div class="num">'+almost+'</div><div class="lab">Почти у цели</div></div>';
-  }
-  function renderGuestList(list){
-    const listEl = document.getElementById("guestList");
-    if(!list.length){ listEl.innerHTML = '<p class="hint">Гостей пока нет.</p>'; return; }
-    listEl.innerHTML = "";
-    list.forEach(function(g){
-      const row = document.createElement("div");
-      row.className = "guestrow";
-      row.innerHTML =
-        '<div><div class="gid">'+g.id+'</div><div class="gstamps">'+g.stamps+' из '+GOAL+' чашек</div></div>' +
-        '<div class="gbtns">' +
-          '<button class="minibtn" data-act="minus">−</button>' +
-          '<button class="minibtn" data-act="plus">+</button>' +
-          '<button class="minibtn" data-act="reset">↺</button>' +
-        '</div>';
-      row.querySelector('[data-act="minus"]').addEventListener("click", () => adjustGuest(g.id, -1));
-      row.querySelector('[data-act="plus"]').addEventListener("click", () => adjustGuest(g.id, 1));
-      row.querySelector('[data-act="reset"]').addEventListener("click", () => adjustGuest(g.id, 0, true));
-      listEl.appendChild(row);
-    });
-  }
-  async function adjustGuest(id, delta, reset){
-    const data = await getGuest(id);
-    let stamps = reset ? 0 : Math.max(0, (data.stamps||0) + delta);
-    await setGuest(id, Object.assign({}, data, { stamps, justRewarded: false }));
-    loadAdminData();
-  }
-  document.getElementById("adminSearch").addEventListener("input", function(){
-    const q = this.value.trim().toLowerCase();
-    renderGuestList(allGuests.filter(g => g.id.toLowerCase().includes(q)));
-  });
-
-  (async function init(){
-    guestId = await resolveGuestId();
-    renderGuest();
-  })();
-})();
-</script>
-</body>
-</html>
+}
