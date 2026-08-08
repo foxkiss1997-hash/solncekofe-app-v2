@@ -232,6 +232,18 @@
   .section{padding:12px 18px;}
   .section-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);font-weight:700;margin-bottom:9px;}
 
+  .name-field-card{
+    display:flex;align-items:flex-start;gap:12px;padding:14px;border-radius:var(--radius-md);
+    background:linear-gradient(120deg, rgba(240,169,62,0.14), rgba(240,87,122,0.10));
+    border:1px solid rgba(240,169,62,0.35);
+  }
+  .name-field-icon{
+    width:38px;height:38px;border-radius:11px;flex:none;
+    background:linear-gradient(135deg, var(--amber), var(--coral));
+    display:flex;align-items:center;justify-content:center;font-size:18px;
+  }
+  .name-field-label{font-size:14px;font-weight:700;color:var(--ink);}
+
   .segmented{display:flex;gap:8px;}
   .segmented .seg{
     flex:1;border:1px solid var(--border);background:var(--card);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius-md);
@@ -730,6 +742,7 @@ let state = {
   pickupASAP:true,
   scheduledTime:'',
   guestName:'',
+  receiptContact:'',
   tipPercent:0, tipCustom:'',
   order:null,
   staffAuthed:false, staffPinValue:'', staffPinError:'', staffShop:null, staffOrders:[], staffLoading:false,
@@ -737,6 +750,7 @@ let state = {
   staffList:[], staffListLoading:false, staffName:null,
   adminAuthed:false, adminPinValue:'', adminPinError:'', adminOrders:[], adminStats:{count:0, revenue:0, tips:[], tipsTotal:0}, adminLoading:false,
   adminTab:'orders', adminStaffShop:1, adminStaff:[], adminStaffLoading:false, newStaffName:'',
+  newStaffPassword:'', editingStaffId:null,
   adminMenuLoading:false, newMenuName:'', newMenuCat:'coffee', newMenuPrice:'', newMenuIcon:'🍽️', adminStopCat:'coffee',
   newPostDate:'', newPostText:'', postMsg:'', postMsgOk:false, adminPosts:[], adminPostsLoading:false,
 };
@@ -1002,6 +1016,7 @@ async function submitOrderToStaff(order){
         total: order.total,
         tip: order.tip || 0,
         guestName: state.guestName || 'без имени',
+        receiptContact: state.receiptContact || '',
         payMethod: (PAYMENTS.find(p=>p.id===state.payMethod)||{}).label || state.payMethod,
         pickup: state.pickupASAP ? 'как можно скорее' : ('к ' + (state.scheduledTime || '—')),
         clientId: LOYALTY_ID || TELEGRAM_ID || CLIENT_ID,
@@ -1014,6 +1029,12 @@ async function submitOrderToStaff(order){
 
 async function placeOrder(){
   if(!shopStatus(state.shopId).open) return;
+  if(!(state.receiptContact||'').trim()){
+    state.checkoutError = 'Укажите email или телефон — без этого не сможем прислать чек.';
+    render();
+    return;
+  }
+  state.checkoutError = '';
   const shop = SHOPS.find(s=>s.id===state.shopId);
   const localEta = prepMinutesForCart();
   const pickupLabel = state.pickupASAP ? 'Скоро' : (state.scheduledTime || '—');
@@ -1038,6 +1059,8 @@ async function placeOrder(){
   const result = await submitOrderToStaff(order);
   if(result && result.etaMinutes){
     state.order.eta = result.etaMinutes;
+    state.order.demoDuration = Math.max(12000, Math.min(90000, result.etaMinutes*3000));
+    state.order.placedAt = Date.now();
     if(state.screen==='status') initStatusTicker();
   }
 }
@@ -1361,23 +1384,6 @@ function renderCard(){
 
 /* ---------- RENDER: STAFF ---------- */
 function renderStaff(){
-  if(!state.staffAuthed){
-    return `
-      <div class="screen">
-        <div class="topbar"><button class="iconbtn rippleable" data-action="back-to-menu">←</button><h2>Для персонала</h2></div>
-        <div class="section">
-          <div class="pin-gate">
-            <div class="section-label">Код доступа</div>
-            <input class="text-input" type="password" inputmode="numeric" placeholder="••••" data-action="set-staff-pin" value="${esc(state.staffPinValue)}">
-            ${state.staffPinError ? `<div class="pin-error">${state.staffPinError}</div>` : ''}
-          </div>
-        </div>
-        <div class="stickybar">
-          <button class="btn-primary rippleable" data-action="staff-pin-submit"><span>Войти</span><span class="sub">→</span></button>
-        </div>
-      </div>
-    `;
-  }
   if(!state.staffShop){
     return `
       <div class="screen">
@@ -1395,15 +1401,16 @@ function renderStaff(){
     const shop = SHOPS.find(s=>s.id===state.staffShop);
     return `
       <div class="screen">
-        <div class="topbar"><button class="iconbtn rippleable" data-action="staff-change-shop">←</button><h2>Кто вы?</h2></div>
+        <div class="topbar"><button class="iconbtn rippleable" data-action="staff-change-shop">←</button><h2>${shop.name}</h2></div>
         <div class="section">
-          <div class="section-label">${shop.name}</div>
-          ${state.staffListLoading ? `<p class="empty-note">Загружаем…</p>` :
-            (state.staffList.length ? state.staffList.map(m=>`
-              <div class="shop-row rippleable" data-action="staff-pick-name" data-name="${esc(m.name)}">
-                <div><div class="nm">${esc(m.name)}</div></div>
-              </div>`).join('') : `<p class="empty-note">Список сотрудников пуст. Попросите администратора добавить вас в разделе «Сотрудники».</p>`)
-          }
+          <div class="pin-gate">
+            <div class="section-label">Ваш личный пароль</div>
+            <input class="text-input" type="password" placeholder="••••" data-action="set-staff-pin" value="${esc(state.staffPinValue)}">
+            ${state.staffPinError ? `<div class="pin-error">${state.staffPinError}</div>` : ''}
+          </div>
+        </div>
+        <div class="stickybar">
+          <button class="btn-primary rippleable" data-action="staff-pin-submit"><span>Войти</span><span class="sub">→</span></button>
         </div>
       </div>
     `;
@@ -1419,6 +1426,8 @@ function renderStaff(){
       </div>
       <div class="section">
         <div class="section-label">Начислить визит по карте лояльности</div>
+        <button class="btn-primary rippleable" data-action="staff-scan-qr" style="margin-bottom:10px;"><span>📷 Отсканировать QR</span><span class="sub">→</span></button>
+        <div class="hint" style="text-align:center;margin:0 0 10px;">или введите ID вручную</div>
         <input class="text-input" type="text" placeholder="ID гостя с его карты" value="${esc(state.chargeIdValue||'')}" data-action="set-charge-id">
         <button class="btn-ghost rippleable" data-action="staff-charge-loyalty" style="margin-top:8px;">Начислить штамп</button>
         ${state.chargeMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.chargeMsgOk?'var(--mint)':'var(--coral)'};font-weight:700;">${state.chargeMsg}</div>` : ''}
@@ -1503,18 +1512,36 @@ function renderAdminStaffTab(){
       </div>
     </div>
     <div class="section">
-      <div class="section-label">Добавить сотрудника</div>
+      <div class="section-label">${state.editingStaffId ? 'Изменить сотрудника' : 'Добавить сотрудника'}</div>
       <input class="text-input" type="text" placeholder="Имя сотрудника" value="${esc(state.newStaffName)}" data-action="set-new-staff-name">
-      <button class="btn-ghost rippleable" data-action="admin-add-staff" style="margin-top:8px;">Добавить</button>
+      <input class="text-input" style="margin-top:8px;" type="text" placeholder="Личный пароль" value="${esc(state.newStaffPassword)}" data-action="set-new-staff-password">
+      <button class="btn-ghost rippleable" data-action="admin-add-staff" style="margin-top:8px;">${state.editingStaffId ? 'Сохранить' : 'Добавить'}</button>
+      ${state.editingStaffId ? `<button class="btn-ghost rippleable" data-action="admin-cancel-edit-staff" style="margin-top:8px;">Отменить изменение</button>` : ''}
     </div>
     <div class="section">
       <div class="section-label">Список</div>
       ${state.adminStaffLoading ? `<p class="empty-note">Загружаем…</p>` :
-        (state.adminStaff.length ? state.adminStaff.map(m=>`
-          <div class="order-card" style="display:flex;align-items:center;justify-content:space-between;">
-            <div><b>${esc(m.name)}</b></div>
-            <button class="iconbtn rippleable" data-action="admin-remove-staff" data-id="${m.id}">✕</button>
-          </div>`).join('') : `<p class="empty-note">Пока никого нет.</p>`)
+        (state.adminStaff.length ? state.adminStaff.map(m=>{
+          const isActive = m.active !== false;
+          return `
+          <div class="order-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div style="${isActive?'':'opacity:0.5;'}">
+                <b>${esc(m.name)}</b>
+                <div class="order-meta">пароль: ${esc(m.password||'—')}</div>
+                <div class="order-meta">Telegram: ${m.tg ? 'привязан ✓' : 'ещё не входил'}</div>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <button class="iconbtn rippleable" data-action="admin-edit-staff" data-id="${m.id}">✎</button>
+                <button class="iconbtn rippleable" data-action="admin-remove-staff" data-id="${m.id}">✕</button>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+              <span style="font-size:12.5px;color:${isActive?'var(--mint)':'var(--coral)'};font-weight:700;">${isActive ? 'На смене — получает уведомления' : 'Не на смене / уволен(а) — уведомления выключены'}</span>
+              <div class="switch ${isActive?'on':''} rippleable" data-action="admin-toggle-staff-active" data-id="${m.id}"></div>
+            </div>
+          </div>`;
+        }).join('') : `<p class="empty-note">Пока никого нет.</p>`)
       }
     </div>
   `;
@@ -1626,6 +1653,31 @@ async function loadStaffList(){
   state.staffListLoading = false; render();
 }
 
+async function staffPasswordLogin(){
+  const pass = (state.staffPinValue||'').trim();
+  if(!pass){ state.staffPinError='Введите пароль.'; render(); return; }
+  if(state.staffListLoading){ return; }
+  if(!state.staffList.length){ await loadStaffList(); }
+  const match = state.staffList.find(m => (m.password||'') === pass);
+  if(!match){
+    state.staffPinError = 'Неверный пароль. Если вы новый сотрудник — попросите администратора добавить вас.';
+    render();
+    return;
+  }
+  state.staffName = match.name;
+  state.staffPinError = '';
+  state.staffPinValue = '';
+  // Auto-link this device's Telegram id to the employee, so order alerts reach them personally.
+  if(TELEGRAM_ID && match.tg !== TELEGRAM_ID){
+    try{
+      await fetch(DB_URL + '/staff/' + state.staffShop + '/' + match.id + '.json', {
+        method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ tg: TELEGRAM_ID })
+      });
+    }catch(e){}
+  }
+  loadStaffOrders();
+}
+
 async function loadStaffOrders(){
   state.staffLoading = true; render();
   try{
@@ -1673,19 +1725,43 @@ async function loadAdminStaff(){
 
 async function addAdminStaff(){
   const name = state.newStaffName.trim();
-  if(!name) return;
+  const password = state.newStaffPassword.trim();
+  if(!name || !password){
+    state.chargeMsg = null; // no-op, just guard
+    return;
+  }
   try{
-    await fetch(DB_URL + '/staff/' + state.adminStaffShop + '.json', {
-      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name })
-    });
+    if(state.editingStaffId){
+      await fetch(DB_URL + '/staff/' + state.adminStaffShop + '/' + state.editingStaffId + '.json', {
+        method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, password })
+      });
+    } else {
+      await fetch(DB_URL + '/staff/' + state.adminStaffShop + '.json', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, password })
+      });
+    }
   }catch(e){}
   state.newStaffName = '';
+  state.newStaffPassword = '';
+  state.editingStaffId = null;
   loadAdminStaff();
 }
 
 async function removeAdminStaff(id){
   try{
     await fetch(DB_URL + '/staff/' + state.adminStaffShop + '/' + id + '.json', { method:'DELETE' });
+  }catch(e){}
+  loadAdminStaff();
+}
+
+async function toggleStaffActive(id){
+  const m = state.adminStaff.find(x=>x.id===id);
+  if(!m) return;
+  const nextActive = !(m.active !== false);
+  try{
+    await fetch(DB_URL + '/staff/' + state.adminStaffShop + '/' + id + '.json', {
+      method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ active: nextActive })
+    });
   }catch(e){}
   loadAdminStaff();
 }
@@ -1745,6 +1821,32 @@ async function saveAdminPost(){
   await loadAdminPosts();
 }
 
+function scanLoyaltyQr(){
+  const tgWebApp = window.Telegram && window.Telegram.WebApp;
+  if(!tgWebApp || typeof tgWebApp.showScanQrPopup !== 'function'){
+    state.chargeMsg = 'Сканер доступен только в мобильном Telegram — на этом устройстве введите ID вручную.';
+    state.chargeMsgOk = false;
+    render();
+    return;
+  }
+  try{
+    tgWebApp.showScanQrPopup({ text: 'Наведите на QR-код гостя' }, function(text){
+      if(text){
+        let id = text.trim();
+        if(id.toLowerCase().startsWith('solncekofe:')) id = id.slice('solncekofe:'.length);
+        state.chargeIdValue = id.toUpperCase();
+        chargeLoyaltyById();
+      }
+      tgWebApp.closeScanQrPopup();
+      return true;
+    });
+  }catch(e){
+    state.chargeMsg = 'Не удалось открыть сканер — введите ID вручную.';
+    state.chargeMsgOk = false;
+    render();
+  }
+}
+
 const LOYALTY_GOAL = 7;
 async function chargeLoyaltyById(){
   const id = (state.chargeIdValue||'').trim().toUpperCase();
@@ -1788,8 +1890,20 @@ function renderCheckout(){
       <div class="topbar"><button class="iconbtn rippleable" data-action="go-cart">←</button><h2>Оплата</h2></div>
 
       <div class="section">
-        <div class="section-label">Имя для заказа</div>
-        <input class="text-input" type="text" placeholder="Необязательно — позовём по имени" value="${esc(state.guestName)}" data-action="set-guest-name">
+        <div class="name-field-card">
+          <div class="name-field-icon">👤</div>
+          <div style="flex:1;min-width:0;">
+            <div class="name-field-label">Как вас позвать?</div>
+            <input class="text-input" type="text" placeholder="Ваше имя" value="${esc(state.guestName)}" data-action="set-guest-name" style="margin-top:6px;">
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Email или телефон для чека</div>
+        <input class="text-input" type="text" inputmode="email" placeholder="Куда прислать электронный чек" value="${esc(state.receiptContact||'')}" data-action="set-receipt-contact">
+        <div class="hint" style="margin-top:6px;">Нужно по закону — чек за покупку придёт сюда автоматически.</div>
+        ${state.checkoutError ? `<div class="pin-error" style="margin-top:6px;">${state.checkoutError}</div>` : ''}
       </div>
 
       <div class="section">
@@ -2000,21 +2114,17 @@ document.addEventListener('click', (e)=>{
   else if(action==='new-order'){ newOrder(); }
   else if(action==='go-staff'){ state.screen='staff'; render(); }
   else if(action==='go-admin'){ state.screen='admin'; render(); }
-  else if(action==='staff-pin-submit'){
-    if(state.staffPinValue===STAFF_PIN){ state.staffAuthed=true; state.staffPinError=''; }
-    else{ state.staffPinError='Неверный код доступа.'; }
-    render();
-  }
+  else if(action==='staff-pin-submit'){ staffPasswordLogin(); }
   else if(action==='admin-pin-submit'){
     if(state.adminPinValue===ADMIN_PIN){ state.adminAuthed=true; state.adminPinError=''; loadAdminOrders(); }
     else{ state.adminPinError='Неверный код доступа.'; render(); }
   }
   else if(action==='staff-pick-shop'){ state.staffShop=parseInt(el.dataset.shop,10); loadStaffList(); }
-  else if(action==='staff-change-shop'){ state.staffShop=null; state.staffName=null; state.staffOrders=[]; render(); }
-  else if(action==='staff-pick-name'){ state.staffName=el.dataset.name; loadStaffOrders(); }
-  else if(action==='staff-change-name'){ state.staffName=null; render(); }
+  else if(action==='staff-change-shop'){ state.staffShop=null; state.staffName=null; state.staffOrders=[]; state.staffPinValue=''; state.staffPinError=''; render(); }
+  else if(action==='staff-change-name'){ state.staffName=null; state.staffPinValue=''; render(); }
   else if(action==='staff-refresh'){ loadStaffOrders(); }
   else if(action==='staff-charge-loyalty'){ chargeLoyaltyById(); }
+  else if(action==='staff-scan-qr'){ scanLoyaltyQr(); }
   else if(action==='admin-refresh'){ loadAdminOrders(); }
   else if(action==='admin-set-tab'){
     state.adminTab = el.dataset.tab;
@@ -2025,6 +2135,12 @@ document.addEventListener('click', (e)=>{
   else if(action==='admin-set-staff-shop'){ state.adminStaffShop = parseInt(el.dataset.shop,10); loadAdminStaff(); }
   else if(action==='admin-add-staff'){ addAdminStaff(); }
   else if(action==='admin-remove-staff'){ removeAdminStaff(el.dataset.id); }
+  else if(action==='admin-edit-staff'){
+    const m = state.adminStaff.find(x=>x.id===el.dataset.id);
+    if(m){ state.editingStaffId = m.id; state.newStaffName = m.name; state.newStaffPassword = m.password||''; render(); }
+  }
+  else if(action==='admin-cancel-edit-staff'){ state.editingStaffId=null; state.newStaffName=''; state.newStaffPassword=''; render(); }
+  else if(action==='admin-toggle-staff-active'){ toggleStaffActive(el.dataset.id); }
   else if(action==='admin-add-menu-item'){ addAdminMenuItem(); }
   else if(action==='admin-remove-menu-item'){ removeAdminMenuItem(el.dataset.id); }
   else if(action==='admin-save-post'){ saveAdminPost(); }
@@ -2039,8 +2155,10 @@ document.addEventListener('input', (e)=>{
   const action = el.dataset.action;
   if(action==='set-time'){ state.scheduledTime = el.value; }
   else if(action==='set-guest-name'){ state.guestName = el.value; }
+  else if(action==='set-receipt-contact'){ state.receiptContact = el.value; }
   else if(action==='set-tip-custom'){ state.tipCustom = el.value; }
   else if(action==='set-new-staff-name'){ state.newStaffName = el.value; }
+  else if(action==='set-new-staff-password'){ state.newStaffPassword = el.value; }
   else if(action==='set-charge-id'){ state.chargeIdValue = el.value; }
   else if(action==='set-new-menu-name'){ state.newMenuName = el.value; }
   else if(action==='set-new-menu-cat'){ state.newMenuCat = el.value; }
