@@ -1136,6 +1136,13 @@ async function placeOrder(){
     state.order.placedAt = Date.now();
     if(state.screen==='status') initStatusTicker();
   }
+
+  // Credit the loyalty card right away — one classic-coffee purchase, one stamp.
+  const coffeeQty = cartSnapshot.filter(l=>l.category==='coffee').reduce((s,l)=>s+l.qty,0);
+  if(coffeeQty>0 && LOYALTY_ID){
+    try{ await awardStamps(LOYALTY_ID, coffeeQty); }catch(e){}
+    initLoyalty();
+  }
 }
 function newOrder(){
   clearInterval(statusTimer);
@@ -1966,28 +1973,35 @@ async function rewardReferrer(referrerId, friendId){
     if(LOYALTY_ID && referrerId===LOYALTY_ID){ initLoyalty(); loadReferrals(); }
   }catch(e){}
 }
+// Adds `count` stamps to a guest's card (handles the 7-stamp reward wrap-around,
+// and — if this is their very first-ever stamp and they were referred by someone —
+// also credits the referrer). Used both by staff manual charging and by automatic
+// crediting when a guest completes a self-service order in the app.
+async function awardStamps(id, count){
+  const data = await getLoyaltyGuest(id);
+  const isFirstEverStamp = !data.stamps || data.stamps===0;
+  const total = (data.stamps||0) + count;
+  const justRewarded = total >= LOYALTY_GOAL;
+  const stamps = total % LOYALTY_GOAL;
+  await fetch(DB_URL + '/guests/' + id + '.json', {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(Object.assign({}, data, { stamps, justRewarded, lastStampAt: Date.now(), reminded:false }))
+  });
+  if(isFirstEverStamp && data.referredBy && !data.referralRewarded){
+    await rewardReferrer(data.referredBy, id);
+  }
+  return { stamps, justRewarded };
+}
+
 async function chargeLoyaltyById(){
   const id = (state.chargeIdValue||'').trim().toUpperCase();
   if(!id){ state.chargeMsg='Введите ID гостя.'; state.chargeMsgOk=false; render(); return; }
-  const data = await getLoyaltyGuest(id);
-  const isFirstEverStamp = !data.stamps || data.stamps===0;
-  let stamps = (data.stamps||0) + 1;
-  let justRewarded = false;
-  if(stamps >= LOYALTY_GOAL){ stamps = 0; justRewarded = true; }
   try{
-    await fetch(DB_URL + '/guests/' + id + '.json', {
-      method:'PUT', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(Object.assign({}, data, { stamps, justRewarded, lastStampAt: Date.now(), reminded:false }))
-    });
-    state.chargeMsg = justRewarded
+    const result = await awardStamps(id, 1);
+    state.chargeMsg = result.justRewarded
       ? `🎉 Гость получает бесплатный кофе — классика, М! Счётчик сброшен.`
-      : `Готово! У гостя ${id} теперь ${stamps} из ${LOYALTY_GOAL} чашек.`;
+      : `Готово! У гостя ${id} теперь ${result.stamps} из ${LOYALTY_GOAL} чашек.`;
     state.chargeMsgOk = true;
-
-    if(isFirstEverStamp && data.referredBy && !data.referralRewarded){
-      await rewardReferrer(data.referredBy, id);
-      state.chargeMsg += ` Пригласившему его другу тоже начислен бонус-штамп.`;
-    }
   }catch(e){
     state.chargeMsg = 'Не удалось начислить — проверьте связь.';
     state.chargeMsgOk = false;
