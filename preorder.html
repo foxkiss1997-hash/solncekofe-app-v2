@@ -733,10 +733,12 @@ let state = {
   tipPercent:0, tipCustom:'',
   order:null,
   staffAuthed:false, staffPinValue:'', staffPinError:'', staffShop:null, staffOrders:[], staffLoading:false,
+  chargeIdValue:'', chargeMsg:'', chargeMsgOk:false,
   staffList:[], staffListLoading:false, staffName:null,
   adminAuthed:false, adminPinValue:'', adminPinError:'', adminOrders:[], adminStats:{count:0, revenue:0, tips:[], tipsTotal:0}, adminLoading:false,
   adminTab:'orders', adminStaffShop:1, adminStaff:[], adminStaffLoading:false, newStaffName:'',
   adminMenuLoading:false, newMenuName:'', newMenuCat:'coffee', newMenuPrice:'', newMenuIcon:'🍽️', adminStopCat:'coffee',
+  newPostDate:'', newPostText:'', postMsg:'', postMsgOk:false, adminPosts:[], adminPostsLoading:false,
 };
 let statusTimer = null;
 let uidCounter = 1;
@@ -753,6 +755,59 @@ try{
     if(u && u.id) TELEGRAM_ID = String(u.id);
   }
 }catch(e){}
+
+let LOYALTY_ID = null;
+const LOYALTY_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+function randomLoyaltyId(){
+  let s = "";
+  for(let i=0;i<4;i++){ s += LOYALTY_ALPHABET[Math.floor(Math.random()*LOYALTY_ALPHABET.length)]; }
+  return s;
+}
+async function linkTelegramLoyalty(shortId, tgId){
+  try{
+    await fetch(DB_URL + '/guests/' + shortId + '.json', {
+      method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ tg: tgId })
+    });
+  }catch(e){}
+}
+async function resolveLoyaltyId(){
+  const params = new URLSearchParams(window.location.search);
+  if(TELEGRAM_ID){
+    try{
+      const res = await fetch(DB_URL + '/pid_map/' + TELEGRAM_ID + '.json');
+      const mapped = res.ok ? await res.json() : null;
+      if(mapped && typeof mapped==='string'){ linkTelegramLoyalty(mapped, TELEGRAM_ID); return mapped; }
+      const newId = randomLoyaltyId();
+      await fetch(DB_URL + '/pid_map/' + TELEGRAM_ID + '.json', {
+        method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(newId)
+      });
+      linkTelegramLoyalty(newId, TELEGRAM_ID);
+      return newId;
+    }catch(e){ return randomLoyaltyId(); }
+  }
+  const existing = params.get('lid');
+  if(existing) return existing;
+  const id = randomLoyaltyId();
+  try{
+    const url = new URL(window.location.href);
+    url.searchParams.set('lid', id);
+    window.history.replaceState({}, '', url);
+  }catch(e){}
+  return id;
+}
+async function getLoyaltyGuest(id){
+  try{
+    const res = await fetch(DB_URL + '/guests/' + id + '.json');
+    const data = res.ok ? await res.json() : null;
+    return (data && typeof data==='object') ? data : { stamps:0 };
+  }catch(e){ return { stamps:0 }; }
+}
+async function initLoyalty(){
+  LOYALTY_ID = await resolveLoyaltyId();
+  const g = await getLoyaltyGuest(LOYALTY_ID);
+  state.loyalty = Math.min(7, g.stamps || 0);
+  render();
+}
 
 /* ---------- HELPERS ---------- */
 function money(n){ return n.toLocaleString('ru-RU') + ' ₽'; }
@@ -902,7 +957,6 @@ function addCustomizedToCart(){
     syrup: isCust ? SYRUPS.find(s=>s.id===opts.syrup) : null,
     shot: isCust ? opts.shot : false,
   });
-  if(item.category==='coffee'){ state.loyalty = Math.min(7, state.loyalty + opts.qty); }
   state.screen = 'menu';
   render();
   showToast(`Добавлено: ${item.name} × ${opts.qty}`);
@@ -950,7 +1004,7 @@ async function submitOrderToStaff(order){
         guestName: state.guestName || 'без имени',
         payMethod: (PAYMENTS.find(p=>p.id===state.payMethod)||{}).label || state.payMethod,
         pickup: state.pickupASAP ? 'как можно скорее' : ('к ' + (state.scheduledTime || '—')),
-        clientId: TELEGRAM_ID || CLIENT_ID,
+        clientId: LOYALTY_ID || TELEGRAM_ID || CLIENT_ID,
       })
     });
     const data = await res.json();
@@ -1243,7 +1297,8 @@ function cartLineOpts(l){
 
 /* ---------- RENDER: CARD ---------- */
 function renderCard(){
-  const qrData = `solncekofe:client:${CLIENT_ID}`;
+  const displayId = LOYALTY_ID || 'Загрузка…';
+  const qrData = `solncekofe:${displayId}`;
   const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&qzone=1&color=1B140F&bgcolor=FCFAF3&data=${encodeURIComponent(qrData)}`;
   return `
     <div class="screen">
@@ -1256,7 +1311,7 @@ function renderCard(){
             <div class="member-card-tag">Клуб гостей</div>
           </div>
           <div class="qr-wrap"><img src="${qrSrc}" alt="QR-код карты гостя" width="180" height="180"></div>
-          <div class="member-card-id">ID ${CLIENT_ID}</div>
+          <div class="member-card-id">ID ${displayId}</div>
           <div class="member-card-hint">Покажи QR-код или назови ID баристе на кассе — начислим штамп за покупку</div>
           <div class="member-card-divider"></div>
           <div style="padding-top:16px;">
@@ -1361,6 +1416,15 @@ function renderStaff(){
       </div>
       <div class="section">
         <div class="section-label">Вы: ${esc(state.staffName)}</div>
+      </div>
+      <div class="section">
+        <div class="section-label">Начислить визит по карте лояльности</div>
+        <input class="text-input" type="text" placeholder="ID гостя с его карты" value="${esc(state.chargeIdValue||'')}" data-action="set-charge-id">
+        <button class="btn-ghost rippleable" data-action="staff-charge-loyalty" style="margin-top:8px;">Начислить штамп</button>
+        ${state.chargeMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.chargeMsgOk?'var(--mint)':'var(--coral)'};font-weight:700;">${state.chargeMsg}</div>` : ''}
+      </div>
+      <div class="section">
+        <div class="section-label">Заказы точки</div>
         ${state.staffLoading ? `<p class="empty-note">Загружаем…</p>` : renderOrderList(state.staffOrders, true)}
       </div>
       <div class="stickybar">
@@ -1399,9 +1463,10 @@ function renderAdmin(){
           <div class="tab ${state.adminTab==='orders'?'active':''} rippleable" data-action="admin-set-tab" data-tab="orders">Заказы</div>
           <div class="tab ${state.adminTab==='staff'?'active':''} rippleable" data-action="admin-set-tab" data-tab="staff">Сотрудники</div>
           <div class="tab ${state.adminTab==='menu'?'active':''} rippleable" data-action="admin-set-tab" data-tab="menu">Меню</div>
+          <div class="tab ${state.adminTab==='posts'?'active':''} rippleable" data-action="admin-set-tab" data-tab="posts">Посты</div>
         </div>
       </div>
-      ${state.adminTab==='orders' ? renderAdminOrdersTab() : state.adminTab==='staff' ? renderAdminStaffTab() : renderAdminMenuTab()}
+      ${state.adminTab==='orders' ? renderAdminOrdersTab() : state.adminTab==='staff' ? renderAdminStaffTab() : state.adminTab==='menu' ? renderAdminMenuTab() : renderAdminPostsTab()}
     </div>
   `;
 }
@@ -1502,6 +1567,33 @@ function renderAdminMenuTab(){
           </div>`;
         }).join('') || `<p class="empty-note">В этой категории пока нет позиций.</p>`}
       </div>
+    </div>
+  `;
+}
+
+function renderAdminPostsTab(){
+  return `
+    <div class="section">
+      <div class="field">
+        <label style="display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);font-weight:600;margin-bottom:7px;">Дата публикации (по будням, 10:00 МСК)</label>
+        <input class="text-input" type="date" value="${esc(state.newPostDate||'')}" data-action="set-post-date">
+      </div>
+      <div class="field" style="margin-top:8px;">
+        <label style="display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);font-weight:600;margin-bottom:7px;">Текст истории «Офис цветов»</label>
+        <textarea class="text-input" rows="6" style="width:100%;resize:vertical;font-family:inherit;" placeholder="Сегодня Орхидея снова недовольна, что её никто не сфотографировал..." data-action="set-post-text">${esc(state.newPostText||'')}</textarea>
+      </div>
+      <button class="btn-ghost rippleable" data-action="admin-save-post" style="margin-top:8px;">Сохранить пост на эту дату</button>
+      ${state.postMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.postMsgOk?'var(--mint)':'var(--coral)'};font-weight:700;">${state.postMsg}</div>` : ''}
+    </div>
+    <div class="section">
+      <div class="section-label">Ближайшие посты</div>
+      ${state.adminPostsLoading ? `<p class="empty-note">Загружаем…</p>` :
+        (state.adminPosts.length ? state.adminPosts.map(p=>`
+          <div class="order-card">
+            <div class="order-head"><b>${p.date}</b><div class="order-status ${p.sent?'done':''}">${p.sent?'Отправлен':'Ждёт'}</div></div>
+            <div class="order-items">${esc((p.text||'').slice(0,90))}${(p.text||'').length>90?'…':''}</div>
+          </div>`).join('') : `<p class="empty-note">Постов пока нет.</p>`)
+      }
     </div>
   `;
 }
@@ -1621,6 +1713,62 @@ async function removeAdminMenuItem(dbId){
   }catch(e){}
   await loadExtraMenu();
   state.adminMenuLoading = false; render();
+}
+
+async function loadAdminPosts(){
+  state.adminPostsLoading = true; render();
+  try{
+    const res = await fetch(DB_URL + '/posts.json');
+    const obj = res.ok ? await res.json() : null;
+    const dates = obj ? Object.keys(obj).sort() : [];
+    state.adminPosts = dates.map(date => Object.assign({ date }, obj[date]));
+  }catch(e){ state.adminPosts = []; }
+  state.adminPostsLoading = false; render();
+}
+
+async function saveAdminPost(){
+  const date = state.newPostDate;
+  const text = (state.newPostText||'').trim();
+  if(!date || !text){
+    state.postMsg = 'Заполните дату и текст поста.'; state.postMsgOk = false; render(); return;
+  }
+  try{
+    await fetch(DB_URL + '/posts/' + date + '.json', {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text, sent:false })
+    });
+    state.postMsg = 'Пост сохранён на ' + date + '. Разошлётся автоматически в 10:00 (если это будний день).';
+    state.postMsgOk = true;
+    state.newPostText = '';
+  }catch(e){
+    state.postMsg = 'Не удалось сохранить — проверьте связь.'; state.postMsgOk = false;
+  }
+  await loadAdminPosts();
+}
+
+const LOYALTY_GOAL = 7;
+async function chargeLoyaltyById(){
+  const id = (state.chargeIdValue||'').trim().toUpperCase();
+  if(!id){ state.chargeMsg='Введите ID гостя.'; state.chargeMsgOk=false; render(); return; }
+  const data = await getLoyaltyGuest(id);
+  let stamps = (data.stamps||0) + 1;
+  let justRewarded = false;
+  if(stamps >= LOYALTY_GOAL){ stamps = 0; justRewarded = true; }
+  try{
+    await fetch(DB_URL + '/guests/' + id + '.json', {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(Object.assign({}, data, { stamps, justRewarded, lastStampAt: Date.now(), reminded:false }))
+    });
+    state.chargeMsg = justRewarded
+      ? `🎉 Гость получает бесплатный кофе — классика, М! Счётчик сброшен.`
+      : `Готово! У гостя ${id} теперь ${stamps} из ${LOYALTY_GOAL} чашек.`;
+    state.chargeMsgOk = true;
+  }catch(e){
+    state.chargeMsg = 'Не удалось начислить — проверьте связь.';
+    state.chargeMsgOk = false;
+  }
+  state.chargeIdValue = '';
+  if(LOYALTY_ID && id===LOYALTY_ID){ initLoyalty(); }
+  render();
 }
 
 async function markOrderDone(id){
@@ -1866,16 +2014,20 @@ document.addEventListener('click', (e)=>{
   else if(action==='staff-pick-name'){ state.staffName=el.dataset.name; loadStaffOrders(); }
   else if(action==='staff-change-name'){ state.staffName=null; render(); }
   else if(action==='staff-refresh'){ loadStaffOrders(); }
+  else if(action==='staff-charge-loyalty'){ chargeLoyaltyById(); }
   else if(action==='admin-refresh'){ loadAdminOrders(); }
   else if(action==='admin-set-tab'){
     state.adminTab = el.dataset.tab;
-    if(state.adminTab==='staff') loadAdminStaff(); else render();
+    if(state.adminTab==='staff') loadAdminStaff();
+    else if(state.adminTab==='posts') loadAdminPosts();
+    else render();
   }
   else if(action==='admin-set-staff-shop'){ state.adminStaffShop = parseInt(el.dataset.shop,10); loadAdminStaff(); }
   else if(action==='admin-add-staff'){ addAdminStaff(); }
   else if(action==='admin-remove-staff'){ removeAdminStaff(el.dataset.id); }
   else if(action==='admin-add-menu-item'){ addAdminMenuItem(); }
   else if(action==='admin-remove-menu-item'){ removeAdminMenuItem(el.dataset.id); }
+  else if(action==='admin-save-post'){ saveAdminPost(); }
   else if(action==='admin-set-stop-cat'){ state.adminStopCat = el.dataset.cat; render(); }
   else if(action==='admin-toggle-stop'){ toggleStopItem(el.dataset.id); }
   else if(action==='order-done'){ markOrderDone(el.dataset.id); }
@@ -1889,10 +2041,13 @@ document.addEventListener('input', (e)=>{
   else if(action==='set-guest-name'){ state.guestName = el.value; }
   else if(action==='set-tip-custom'){ state.tipCustom = el.value; }
   else if(action==='set-new-staff-name'){ state.newStaffName = el.value; }
+  else if(action==='set-charge-id'){ state.chargeIdValue = el.value; }
   else if(action==='set-new-menu-name'){ state.newMenuName = el.value; }
   else if(action==='set-new-menu-cat'){ state.newMenuCat = el.value; }
   else if(action==='set-new-menu-price'){ state.newMenuPrice = el.value; }
   else if(action==='set-new-menu-icon'){ state.newMenuIcon = el.value; }
+  else if(action==='set-post-date'){ state.newPostDate = el.value; }
+  else if(action==='set-post-text'){ state.newPostText = el.value; }
   else if(action==='set-staff-pin'){ state.staffPinValue = el.value; }
   else if(action==='set-admin-pin'){ state.adminPinValue = el.value; }
 });
@@ -1937,6 +2092,7 @@ async function toggleStopItem(itemId){
 
 /* ---------- INIT ---------- */
 loadExtraMenu();
+initLoyalty();
 render();
 </script>
 </body>
