@@ -522,6 +522,19 @@
   .friend-info div{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
   .friend-badge{ margin-left:auto; font-size:10.5px; font-weight:700; color:var(--mint); background:rgba(94,230,192,0.14); padding:4px 9px; border-radius:999px; white-space:nowrap; }
 
+  .active-order-banner{
+    display:flex; align-items:center; gap:12px; cursor:pointer;
+    background:linear-gradient(120deg, rgba(94,230,192,0.16), rgba(240,169,62,0.10));
+    border:1px solid rgba(94,230,192,0.35); border-radius:var(--radius-md); padding:13px 14px;
+  }
+  .active-order-banner:active{ transform:scale(0.98); }
+  .active-order-icon{
+    width:36px;height:36px;border-radius:11px;flex:none;
+    background:linear-gradient(135deg, var(--mint), var(--amber));
+    display:flex;align-items:center;justify-content:center; font-size:16px;
+  }
+  .active-order-banner .arrow{ color:var(--ink-soft); font-size:16px; }
+
   .order-card{
     background:var(--card);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
     border:1px solid var(--border);border-radius:var(--radius-md);padding:14px;margin-bottom:10px;
@@ -774,6 +787,7 @@ let state = {
   receiptContact:'',
   tipPercent:0, tipCustom:'',
   referralList:[], referralLoading:false,
+  myOrders:[], myOrdersLoading:false,
   order:null,
   staffAuthed:false, staffPinValue:'', staffPinError:'', staffShop:null, staffOrders:[], staffLoading:false,
   chargeIdValue:'', chargeMsg:'', chargeMsgOk:false,
@@ -873,6 +887,21 @@ async function loadReferrals(){
     state.referralList = obj ? Object.keys(obj).map(fid=>({id:fid, at:(obj[fid]&&obj[fid].at)||0})).sort((a,b)=>b.at-a.at) : [];
   }catch(e){ state.referralList = []; }
   state.referralLoading = false; render();
+}
+
+async function loadMyOrders(){
+  if(!LOYALTY_ID) return;
+  state.myOrdersLoading = true; render();
+  try{
+    const res = await fetch(DB_URL + '/orders.json');
+    const obj = res.ok ? await res.json() : null;
+    const all = obj ? Object.keys(obj).map(id=>Object.assign({id}, obj[id])) : [];
+    state.myOrders = all
+      .filter(o => o.clientId === LOYALTY_ID)
+      .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))
+      .slice(0, 8);
+  }catch(e){ state.myOrders = []; }
+  state.myOrdersLoading = false; render();
 }
 
 function shareReferralLink(){
@@ -1127,6 +1156,7 @@ async function placeOrder(){
   state.tipPercent = 0; state.tipCustom = '';
   state.screen = 'status';
   state.order = order;
+  saveOrderToStorage();
   render();
 
   const result = await submitOrderToStaff(order);
@@ -1134,6 +1164,7 @@ async function placeOrder(){
     state.order.eta = result.etaMinutes;
     state.order.demoDuration = result.etaMinutes*60000;
     state.order.placedAt = Date.now();
+    saveOrderToStorage();
     if(state.screen==='status') initStatusTicker();
   }
 
@@ -1149,12 +1180,28 @@ function newOrder(){
   statusTimer = null;
   state.order = null;
   state.screen = 'menu';
+  clearStoredOrder();
   render();
+}
+
+function saveOrderToStorage(){
+  try{ localStorage.setItem('sk_active_order', JSON.stringify(state.order)); }catch(e){}
+}
+function loadOrderFromStorage(){
+  try{
+    const raw = localStorage.getItem('sk_active_order');
+    if(!raw) return null;
+    return JSON.parse(raw);
+  }catch(e){ return null; }
+}
+function clearStoredOrder(){
+  try{ localStorage.removeItem('sk_active_order'); }catch(e){}
 }
 
 /* ---------- RENDER: MENU ---------- */
 function renderMenu(){
   const items = allItems().filter(i=>i.category===state.category);
+  const orderReady = state.order && (Date.now()-state.order.placedAt) >= state.order.demoDuration;
   return `
     <div class="screen">
       <div class="brand">
@@ -1171,8 +1218,20 @@ function renderMenu(){
           </div>
         </div>
         <div class="greeting">${getGreeting()}. <span class="mark">Закажи по пути</span></div>
-        <p class="subgreeting">Настрой напиток заранее — заберёшь готовый без очереди.</p>
+        <p class="subgreeting">Собери заказ за минуту — заберёшь его сразу, минуя очередь.</p>
       </div>
+      ${state.order ? `
+        <div class="section" style="padding-top:0;">
+          <div class="active-order-banner rippleable" data-action="back-to-status">
+            <div class="active-order-icon">${orderReady ? '✅' : '☕'}</div>
+            <div style="flex:1;min-width:0;">
+              <b>${orderReady ? `Заказ №${state.order.number} готов!` : `Заказ №${state.order.number} готовится`}</b>
+              <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">${state.order.shop.name} · нажмите, чтобы посмотреть статус</div>
+            </div>
+            <div class="arrow">→</div>
+          </div>
+        </div>
+      ` : ''}
       <div class="tabs">
         ${CATEGORIES.map(c=>`<div class="tab rippleable ${c.id===state.category?'active':''}" data-action="set-category" data-cat="${c.id}">${c.label}</div>`).join('')}
       </div>
@@ -1450,6 +1509,22 @@ function renderCard(){
               <div class="friend-badge">+1 штамп</div>
             </div>`).join('')}
         ` : state.referralLoading ? `<p class="empty-note">Загружаем…</p>` : ''}
+      </div>
+
+      <div class="section">
+        <div class="section-label">Мои заказы</div>
+        ${state.myOrdersLoading ? `<p class="empty-note">Загружаем…</p>` :
+          (state.myOrders.length ? state.myOrders.map(o=>`
+            <div class="order-card">
+              <div class="order-head">
+                <div><b>№${o.number||'—'}</b> ${o.shopName ? '· ' + o.shopName.replace('Солнцекофе — ','') : ''}</div>
+                <div style="font-size:12px;color:var(--ink-soft);">${o.createdAt ? new Date(o.createdAt).toLocaleDateString('ru-RU', {day:'numeric', month:'short'}) : ''}</div>
+              </div>
+              <div class="order-items">${esc((o.itemsText||'').split('\n')[0])}${(o.itemsText||'').split('\n').length>1 ? ` и ещё ${(o.itemsText||'').split('\n').length-1}…` : ''}</div>
+              <div class="order-meta">Итого: <b>${money(o.total||0)}</b></div>
+            </div>`).join('')
+          : `<p class="empty-note">Здесь появится история ваших заказов.</p>`)
+        }
       </div>
 
       <div class="section">
@@ -2091,6 +2166,7 @@ function renderStatus(){
   return `
     <div class="screen">
       <div class="status-top">
+        <button class="iconbtn rippleable" data-action="status-to-menu" style="margin-bottom:10px;">← К меню</button>
         <div class="status-eyebrow" id="statusEyebrow">Заказ принят</div>
       </div>
 
@@ -2230,7 +2306,7 @@ document.addEventListener('click', (e)=>{
   const action = el.dataset.action;
 
   if(action==='go-cart'){ state.screen='cart'; render(); }
-  else if(action==='go-card'){ state.screen='card'; render(); loadReferrals(); }
+  else if(action==='go-card'){ state.screen='card'; render(); loadReferrals(); loadMyOrders(); }
   else if(action==='share-referral'){ shareReferralLink(); }
   else if(action==='back-to-menu'){ state.screen='menu'; render(); }
   else if(action==='set-category'){ state.category = el.dataset.cat; render(); }
@@ -2251,6 +2327,8 @@ document.addEventListener('click', (e)=>{
   else if(action==='set-tip'){ state.tipPercent = el.dataset.val==='custom' ? 'custom' : parseInt(el.dataset.val,10); render(); }
   else if(action==='pay'){ placeOrder(); }
   else if(action==='new-order'){ newOrder(); }
+  else if(action==='status-to-menu'){ state.screen='menu'; render(); }
+  else if(action==='back-to-status'){ state.screen='status'; render(); }
   else if(action==='go-staff'){ state.screen='staff'; render(); }
   else if(action==='go-admin'){ state.screen='admin'; render(); }
   else if(action==='staff-pin-submit'){ staffPasswordLogin(); }
@@ -2348,6 +2426,19 @@ async function toggleStopItem(itemId){
 }
 
 /* ---------- INIT ---------- */
+(function restoreActiveOrder(){
+  const saved = loadOrderFromStorage();
+  if(!saved) return;
+  const elapsed = Date.now() - saved.placedAt;
+  if(elapsed < saved.demoDuration + 20*60000){
+    // Order is still cooking (or was ready recently) — jump straight back to it.
+    state.order = saved;
+    state.screen = 'status';
+  } else {
+    // Long finished / stale — clean up so it stops showing as "active".
+    clearStoredOrder();
+  }
+})();
 loadExtraMenu();
 initLoyalty();
 render();
