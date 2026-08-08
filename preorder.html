@@ -1049,8 +1049,8 @@ function changeQty(uid, delta){
 }
 
 /* ---------- ORDER ---------- */
-function describeCartForStaff(){
-  return state.cart.map(l=>{
+function describeCartForStaff(cart){
+  return (cart||state.cart).map(l=>{
     let extra = [];
     if(l.milk && l.milk.id!=='regular') extra.push(l.milk.label.toLowerCase());
     if(l.syrup && l.syrup.id!=='none') extra.push('сироп ' + l.syrup.label.toLowerCase());
@@ -1074,16 +1074,16 @@ async function submitOrderToStaff(order){
         shopName: order.shop.name,
         shopAddr: order.shop.addr,
         number: order.number,
-        itemsText: describeCartForStaff(),
-        items: state.cart.map(l=>({ category:l.category, qty:l.qty })),
+        itemsText: describeCartForStaff(order.cartSnapshot),
+        items: order.cartSnapshot.map(l=>({ category:l.category, qty:l.qty })),
         itemsCount: order.itemsCount,
         total: order.total,
         tip: order.tip || 0,
-        guestName: state.guestName || 'без имени',
-        receiptContact: state.receiptContact || '',
-        payMethod: (PAYMENTS.find(p=>p.id===state.payMethod)||{}).label || state.payMethod,
-        pickup: state.pickupASAP ? 'как можно скорее' : ('к ' + (state.scheduledTime || '—')),
-        clientId: LOYALTY_ID || TELEGRAM_ID || CLIENT_ID,
+        guestName: order.guestName || 'без имени',
+        receiptContact: order.receiptContact || '',
+        payMethod: order.payMethodLabel,
+        pickup: order.pickupText,
+        clientId: order.clientId,
       })
     });
     const data = await res.json();
@@ -1102,10 +1102,13 @@ async function placeOrder(){
   const shop = SHOPS.find(s=>s.id===state.shopId);
   const localEta = prepMinutesForCart();
   const pickupLabel = state.pickupASAP ? 'Скоро' : (state.scheduledTime || '—');
+  const pickupText = state.pickupASAP ? 'как можно скорее' : ('к ' + (state.scheduledTime || '—'));
   const number = String(Math.floor(Math.random()*900)+100);
   const flower = FLOWER_STAFF[Math.floor(Math.random()*FLOWER_STAFF.length)];
   const tip = tipAmount();
-  const cartSnapshot = state.cart;
+  // Snapshot everything the server call needs *before* we clear the cart/form below —
+  // otherwise the background request would send an already-emptied cart.
+  const cartSnapshot = state.cart.slice();
   const order = {
     number, pickupLabel, shop, eta: localEta, flower,
     total: cartTotal() + tip,
@@ -1113,6 +1116,12 @@ async function placeOrder(){
     itemsCount: cartCount(),
     placedAt: Date.now(),
     demoDuration: localEta*60000,
+    cartSnapshot,
+    guestName: state.guestName,
+    receiptContact: state.receiptContact,
+    payMethodLabel: (PAYMENTS.find(p=>p.id===state.payMethod)||{}).label || state.payMethod,
+    pickupText,
+    clientId: LOYALTY_ID || TELEGRAM_ID || CLIENT_ID,
   };
   state.cart = [];
   state.tipPercent = 0; state.tipCustom = '';
