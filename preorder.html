@@ -493,6 +493,35 @@
   .stat-num{font-family:var(--font-hero);font-size:26px;font-weight:600;color:var(--amber);}
   .stat-lab{font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;margin-top:4px;}
 
+  .ref-hero{
+    background:linear-gradient(135deg, rgba(240,169,62,0.18), rgba(240,87,122,0.14));
+    border:1px solid rgba(240,169,62,0.35); border-radius:var(--radius-lg); padding:20px;
+    text-align:center;
+  }
+  .ref-icon{ font-size:32px; margin-bottom:8px; }
+  .ref-title{ font-family:var(--font-hero); font-size:20px; font-weight:700; margin:0 0 6px; }
+  .ref-sub{ font-size:12.5px; color:var(--ink-soft); line-height:1.5; margin:0 0 15px; }
+  .ref-btn{
+    display:block; width:100%; padding:13px; border:none; border-radius:13px; cursor:pointer;
+    background:linear-gradient(90deg, var(--amber), var(--coral), var(--mint), var(--amber));
+    background-size:300% 100%; animation:chameleon 10s linear infinite;
+    color:#140800; font-weight:800; font-size:14px; text-align:center; font-family:var(--font-display);
+  }
+  .ref-btn:active{ transform:scale(0.98); }
+  .ref-link{
+    margin-top:12px; font-family:var(--font-mono); font-size:11px; color:var(--ink-soft);
+    background:rgba(0,0,0,0.28); border-radius:10px; padding:8px 12px; word-break:break-all;
+  }
+  .friend-row{
+    display:flex; align-items:center; gap:12px; background:var(--card); border:1px solid var(--border);
+    border-radius:var(--radius-sm); padding:11px 13px; margin-bottom:8px;
+  }
+  .friend-icon{ width:34px;height:34px;border-radius:10px; background:linear-gradient(135deg,var(--amber),var(--coral));
+    display:flex;align-items:center;justify-content:center; font-size:15px; flex:none; }
+  .friend-info b{ font-size:13px; }
+  .friend-info div{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
+  .friend-badge{ margin-left:auto; font-size:10.5px; font-weight:700; color:var(--mint); background:rgba(94,230,192,0.14); padding:4px 9px; border-radius:999px; white-space:nowrap; }
+
   .order-card{
     background:var(--card);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
     border:1px solid var(--border);border-radius:var(--radius-md);padding:14px;margin-bottom:10px;
@@ -744,6 +773,7 @@ let state = {
   guestName:'',
   receiptContact:'',
   tipPercent:0, tipCustom:'',
+  referralList:[], referralLoading:false,
   order:null,
   staffAuthed:false, staffPinValue:'', staffPinError:'', staffShop:null, staffOrders:[], staffLoading:false,
   chargeIdValue:'', chargeMsg:'', chargeMsgOk:false,
@@ -762,11 +792,14 @@ const STAFF_PIN = '4444';
 const ADMIN_PIN = '55555';
 let CLIENT_ID = 'SK-' + (1000 + Math.floor(Math.random()*9000));
 let TELEGRAM_ID = null;
+let REFERRED_BY = null;
 try{
   if(window.Telegram && window.Telegram.WebApp){
     window.Telegram.WebApp.ready();
     const u = window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user;
     if(u && u.id) TELEGRAM_ID = String(u.id);
+    const startParam = window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.start_param;
+    if(startParam && startParam.indexOf('ref_')===0) REFERRED_BY = startParam.slice(4).toUpperCase();
   }
 }catch(e){}
 
@@ -796,6 +829,14 @@ async function resolveLoyaltyId(){
         method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(newId)
       });
       linkTelegramLoyalty(newId, TELEGRAM_ID);
+      if(REFERRED_BY && REFERRED_BY !== newId){
+        try{
+          await fetch(DB_URL + '/guests/' + newId + '.json', {
+            method:'PATCH', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ referredBy: REFERRED_BY, referralRewarded: false })
+          });
+        }catch(e){}
+      }
       return newId;
     }catch(e){ return randomLoyaltyId(); }
   }
@@ -821,6 +862,29 @@ async function initLoyalty(){
   const g = await getLoyaltyGuest(LOYALTY_ID);
   state.loyalty = Math.min(7, g.stamps || 0);
   render();
+}
+
+async function loadReferrals(){
+  if(!LOYALTY_ID) return;
+  state.referralLoading = true; render();
+  try{
+    const res = await fetch(DB_URL + '/guests/' + LOYALTY_ID + '/referrals.json');
+    const obj = res.ok ? await res.json() : null;
+    state.referralList = obj ? Object.keys(obj).map(fid=>({id:fid, at:(obj[fid]&&obj[fid].at)||0})).sort((a,b)=>b.at-a.at) : [];
+  }catch(e){ state.referralList = []; }
+  state.referralLoading = false; render();
+}
+
+function shareReferralLink(){
+  const link = 'https://t.me/SolntseCard_bot?start=ref_' + (LOYALTY_ID||'');
+  const text = 'Заходи в «Солнцекофе» — по этой ссылке нам обоим начислят бонусный штамп на карту лояльности ☀️';
+  try{
+    if(window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openTelegramLink){
+      window.Telegram.WebApp.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text));
+    } else {
+      window.open('https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text), '_blank');
+    }
+  }catch(e){}
 }
 
 /* ---------- HELPERS ---------- */
@@ -1048,7 +1112,7 @@ async function placeOrder(){
     tip,
     itemsCount: cartCount(),
     placedAt: Date.now(),
-    demoDuration: Math.max(12000, Math.min(45000, localEta*3000)),
+    demoDuration: localEta*60000,
   };
   state.cart = [];
   state.tipPercent = 0; state.tipCustom = '';
@@ -1059,7 +1123,7 @@ async function placeOrder(){
   const result = await submitOrderToStaff(order);
   if(result && result.etaMinutes){
     state.order.eta = result.etaMinutes;
-    state.order.demoDuration = Math.max(12000, Math.min(90000, result.etaMinutes*3000));
+    state.order.demoDuration = result.etaMinutes*60000;
     state.order.placedAt = Date.now();
     if(state.screen==='status') initStatusTicker();
   }
@@ -1345,6 +1409,31 @@ function renderCard(){
             <div class="punch-note">${state.loyalty>=7 ? 'Следующий классический кофе (M) — подарок от нас ☀️' : `Ещё ${7-state.loyalty} классических кофе — и седьмой бесплатно`}</div>
           </div>
         </div>
+      </div>
+
+      <div class="section">
+        <div class="ref-hero">
+          <div class="ref-icon">🎁</div>
+          <div class="ref-title">Пригласи друга</div>
+          <p class="ref-sub">Друг перейдёт по ссылке и закажет впервые — вам обоим достанется по бонусному штампу</p>
+          <button class="ref-btn rippleable" data-action="share-referral">Поделиться приглашением</button>
+          <div class="ref-link">t.me/SolntseCard_bot?start=ref_${displayId}</div>
+        </div>
+
+        <div class="stat-row" style="margin-top:14px;">
+          <div class="stat-chip"><div class="stat-num">${state.referralList.length}</div><div class="stat-lab">Приглашено</div></div>
+          <div class="stat-chip"><div class="stat-num">+${state.referralList.length}</div><div class="stat-lab">Бонус. штампов</div></div>
+        </div>
+
+        ${state.referralList.length ? `
+          <div class="section-label" style="margin-top:14px;">Кого вы пригласили</div>
+          ${state.referralList.map(f=>`
+            <div class="friend-row">
+              <div class="friend-icon">👤</div>
+              <div class="friend-info"><b>Гость ${esc(f.id)}</b><div>${f.at ? new Date(f.at).toLocaleDateString('ru-RU', {day:'numeric', month:'long'}) : ''}</div></div>
+              <div class="friend-badge">+1 штамп</div>
+            </div>`).join('')}
+        ` : state.referralLoading ? `<p class="empty-note">Загружаем…</p>` : ''}
       </div>
 
       <div class="section">
@@ -1848,10 +1937,31 @@ function scanLoyaltyQr(){
 }
 
 const LOYALTY_GOAL = 7;
+
+async function rewardReferrer(referrerId, friendId){
+  try{
+    const refData = await getLoyaltyGuest(referrerId);
+    let stamps = (refData.stamps||0) + 1;
+    let justRewarded = false;
+    if(stamps >= LOYALTY_GOAL){ stamps = 0; justRewarded = true; }
+    await fetch(DB_URL + '/guests/' + referrerId + '.json', {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(Object.assign({}, refData, { stamps, justRewarded, lastStampAt: Date.now(), reminded:false }))
+    });
+    await fetch(DB_URL + '/guests/' + friendId + '.json', {
+      method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ referralRewarded: true })
+    });
+    await fetch(DB_URL + '/guests/' + referrerId + '/referrals/' + friendId + '.json', {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ at: Date.now() })
+    });
+    if(LOYALTY_ID && referrerId===LOYALTY_ID){ initLoyalty(); loadReferrals(); }
+  }catch(e){}
+}
 async function chargeLoyaltyById(){
   const id = (state.chargeIdValue||'').trim().toUpperCase();
   if(!id){ state.chargeMsg='Введите ID гостя.'; state.chargeMsgOk=false; render(); return; }
   const data = await getLoyaltyGuest(id);
+  const isFirstEverStamp = !data.stamps || data.stamps===0;
   let stamps = (data.stamps||0) + 1;
   let justRewarded = false;
   if(stamps >= LOYALTY_GOAL){ stamps = 0; justRewarded = true; }
@@ -1864,6 +1974,11 @@ async function chargeLoyaltyById(){
       ? `🎉 Гость получает бесплатный кофе — классика, М! Счётчик сброшен.`
       : `Готово! У гостя ${id} теперь ${stamps} из ${LOYALTY_GOAL} чашек.`;
     state.chargeMsgOk = true;
+
+    if(isFirstEverStamp && data.referredBy && !data.referralRewarded){
+      await rewardReferrer(data.referredBy, id);
+      state.chargeMsg += ` Пригласившему его другу тоже начислен бонус-штамп.`;
+    }
   }catch(e){
     state.chargeMsg = 'Не удалось начислить — проверьте связь.';
     state.chargeMsgOk = false;
@@ -1981,7 +2096,7 @@ function renderStatus(){
         <div><b>${o.flower}</b> передаёт: заказ готов, ждём тебя на кассе!</div>
       </div>
 
-      <div class="demo-note">Это прототип: статусы заказа обновляются в ускоренном демо-режиме, чтобы можно было увидеть весь путь за полминуты.</div>
+      <div class="demo-note">Готовим по-настоящему — обновление статуса идёт в реальном времени.</div>
 
       <div class="stickybar">
         <button class="btn-primary rippleable" data-action="new-order"><span>Оформить новый заказ</span><span class="sub">→</span></button>
@@ -2092,7 +2207,8 @@ document.addEventListener('click', (e)=>{
   const action = el.dataset.action;
 
   if(action==='go-cart'){ state.screen='cart'; render(); }
-  else if(action==='go-card'){ state.screen='card'; render(); }
+  else if(action==='go-card'){ state.screen='card'; render(); loadReferrals(); }
+  else if(action==='share-referral'){ shareReferralLink(); }
   else if(action==='back-to-menu'){ state.screen='menu'; render(); }
   else if(action==='set-category'){ state.category = el.dataset.cat; render(); }
   else if(action==='open-customize'){ openCustomize(el.dataset.item); }
