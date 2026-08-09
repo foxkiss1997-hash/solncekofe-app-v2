@@ -544,6 +544,12 @@
   .order-status.done{color:var(--mint);}
   .order-items{font-family:var(--font-mono);font-size:12px;color:var(--ink-soft);line-height:1.6;margin-bottom:8px;}
   .order-meta{font-size:11.5px;color:var(--ink-soft);margin-bottom:2px;}
+  .order-timer{
+    font-family:var(--font-mono);font-size:15px;font-weight:700;margin:6px 0;padding:7px 11px;
+    border-radius:10px;display:inline-block;background:var(--card-strong);color:var(--ink);
+  }
+  .order-timer.warn{ color:var(--amber); background:rgba(240,169,62,0.14); }
+  .order-timer.over{ color:var(--coral); background:rgba(240,87,122,0.16); }
   .order-meta b{color:var(--ink);}
   .btn-ghost{
     width:100%;margin-top:10px;padding:11px;border-radius:12px;border:1px solid var(--border);
@@ -796,7 +802,8 @@ let state = {
   adminTab:'orders', adminStaffShop:1, adminStaff:[], adminStaffLoading:false, newStaffName:'',
   newStaffPassword:'', editingStaffId:null,
   adminMenuLoading:false, newMenuName:'', newMenuCat:'coffee', newMenuPrice:'', newMenuIcon:'🍽️', adminStopCat:'coffee',
-  newPostDate:'', newPostText:'', postMsg:'', postMsgOk:false, adminPosts:[], adminPostsLoading:false,
+  editingMenuItemId:null, editItemName:'', editItemIcon:'', editItemPrices:{},
+  newPostDate:'', newPostText:'', newPostPhoto:'', postMsg:'', postMsgOk:false, adminPosts:[], adminPostsLoading:false,
 };
 let statusTimer = null;
 let uidCounter = 1;
@@ -920,7 +927,14 @@ function shareReferralLink(){
 function money(n){ return n.toLocaleString('ru-RU') + ' ₽'; }
 let EXTRA_ITEMS = [];
 let STOP_LIST = new Set();
-function allItems(){ return ITEMS.concat(EXTRA_ITEMS); }
+let MENU_OVERRIDES = {}; // itemId -> {name?, icon?, hit?, sizes?}
+function allItems(){
+  return ITEMS.concat(EXTRA_ITEMS).map(i=>{
+    const ov = MENU_OVERRIDES[i.id];
+    if(!ov) return i;
+    return Object.assign({}, i, ov, { sizes: Object.assign({}, i.sizes, ov.sizes||{}) });
+  });
+}
 function itemById(id){ return allItems().find(i=>i.id===id); }
 function esc(s){ return (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function checkSVG(color){
@@ -1757,7 +1771,7 @@ function renderAdminMenuTab(){
     </div>
 
     <div class="section">
-      <div class="section-label">Стоп-лист — нет в наличии</div>
+      <div class="section-label">Весь ассортимент — цены и наличие</div>
       <div class="segmented" style="flex-wrap:wrap;">
         ${CATEGORIES.map(c=>`
           <div class="seg rippleable ${state.adminStopCat===c.id?'active':''}" data-action="admin-set-stop-cat" data-cat="${c.id}" style="flex:none;padding:8px 12px;">
@@ -1767,10 +1781,33 @@ function renderAdminMenuTab(){
       <div style="margin-top:10px;">
         ${allItems().filter(i=>i.category===state.adminStopCat).map(i=>{
           const stopped = STOP_LIST.has(i.id);
+          const priceLabel = Object.entries(i.sizes).map(([sz,p])=>`${sz.toUpperCase()} ${money(p)}`).join(' · ');
+          if(state.editingMenuItemId === i.id){
+            return `
+            <div class="order-card">
+              <div class="field"><input class="text-input" type="text" placeholder="Название" value="${esc(state.editItemName)}" data-action="set-edit-item-name"></div>
+              <div class="field" style="margin-top:8px;"><input class="text-input" type="text" placeholder="Эмодзи" value="${esc(state.editItemIcon)}" data-action="set-edit-item-icon" style="width:76px;text-align:center;"></div>
+              <div class="field" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+                ${Object.keys(i.sizes).map(sz=>`
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <span style="font-size:12px;color:var(--ink-soft);">${sz.toUpperCase()}</span>
+                    <input class="text-input" type="number" inputmode="numeric" value="${esc(String(state.editItemPrices[sz] ?? i.sizes[sz]))}" data-action="set-edit-item-price" data-size="${sz}" style="width:90px;">
+                  </div>`).join('')}
+              </div>
+              <div style="display:flex;gap:8px;margin-top:10px;">
+                <button class="btn-ghost rippleable" data-action="admin-save-item-edit" data-id="${i.id}" style="flex:1;">Сохранить</button>
+                <button class="btn-ghost rippleable" data-action="admin-cancel-item-edit" style="flex:1;">Отмена</button>
+              </div>
+            </div>`;
+          }
           return `
-          <div class="order-card rippleable" data-action="admin-toggle-stop" data-id="${i.id}" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
-            <div style="${stopped?'opacity:0.5;text-decoration:line-through;':''}">${i.icon} <b>${esc(i.name)}</b></div>
-            <div class="switch ${!stopped?'on':''}"></div>
+          <div class="order-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <div class="rippleable" data-action="admin-toggle-stop" data-id="${i.id}" style="flex:1;cursor:pointer;${stopped?'opacity:0.5;':''}">
+              <div style="${stopped?'text-decoration:line-through;':''}">${i.icon} <b>${esc(i.name)}</b></div>
+              <div class="order-meta">${priceLabel}</div>
+            </div>
+            <button class="iconbtn rippleable" data-action="admin-edit-item" data-id="${i.id}">✎</button>
+            <div class="switch ${!stopped?'on':''} rippleable" data-action="admin-toggle-stop" data-id="${i.id}"></div>
           </div>`;
         }).join('') || `<p class="empty-note">В этой категории пока нет позиций.</p>`}
       </div>
@@ -1788,6 +1825,10 @@ function renderAdminPostsTab(){
       <div class="field" style="margin-top:8px;">
         <label style="display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);font-weight:600;margin-bottom:7px;">Текст истории «Офис цветов»</label>
         <textarea class="text-input" rows="6" style="width:100%;resize:vertical;font-family:inherit;" placeholder="Сегодня Орхидея снова недовольна, что её никто не сфотографировал..." data-action="set-post-text">${esc(state.newPostText||'')}</textarea>
+      </div>
+      <div class="field" style="margin-top:8px;">
+        <label style="display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);font-weight:600;margin-bottom:7px;">Ссылка на фото (необязательно)</label>
+        <input class="text-input" type="text" placeholder="https://...jpg" value="${esc(state.newPostPhoto||'')}" data-action="set-post-photo">
       </div>
       <button class="btn-ghost rippleable" data-action="admin-save-post" style="margin-top:8px;">Сохранить пост на эту дату</button>
       ${state.postMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.postMsgOk?'var(--mint)':'var(--coral)'};font-weight:700;">${state.postMsg}</div>` : ''}
@@ -1815,7 +1856,10 @@ function renderOrderList(orders, withActions){
       </div>
       <div class="order-items">${(o.itemsText||'').replace(/\n/g,'<br>')}</div>
       <div class="order-meta">Итого: <b>${money(o.total||0)}</b>${o.tip ? ` (из них чаевые ${money(o.tip)})` : ''} · ${o.payMethod||''} · ${o.pickup||''}</div>
-      ${o.etaMinutes ? `<div class="order-meta">Готовность: <b>~${o.etaMinutes} мин</b> от момента заказа</div>` : ''}
+      ${withActions && o.status!=='done' && o.createdAt ?
+        `<div class="order-timer" id="timer-${o.id}">…</div>`
+        : (o.etaMinutes ? `<div class="order-meta">Готовность: <b>~${o.etaMinutes} мин</b> от момента заказа</div>` : '')
+      }
       <div class="order-meta">Имя: ${o.guestName||'—'} · ID: ${o.clientId||'—'}</div>
       ${o.status==='done' && o.completedBy ? `<div class="order-meta">Закрыл: <b>${esc(o.completedBy)}</b></div>` : ''}
       ${withActions && o.status!=='done' ? `<button class="btn-ghost rippleable" data-action="order-done" data-id="${o.id}">Отметить готовым</button>` : ''}
@@ -1858,14 +1902,14 @@ async function staffPasswordLogin(){
   loadStaffOrders();
 }
 
-async function loadStaffOrders(){
-  state.staffLoading = true; render();
+async function loadStaffOrders(silent){
+  if(!silent){ state.staffLoading = true; render(); }
   try{
     const res = await fetch(DB_URL + '/orders.json');
     const obj = res.ok ? await res.json() : null;
     const all = obj ? Object.keys(obj).map(id=>Object.assign({id}, obj[id])) : [];
     state.staffOrders = all.filter(o=>o.shopId===state.staffShop && o.status!=='done').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-  }catch(e){ state.staffOrders = []; }
+  }catch(e){ if(!silent) state.staffOrders = []; }
   state.staffLoading = false; render();
 }
 
@@ -1985,16 +2029,18 @@ async function loadAdminPosts(){
 async function saveAdminPost(){
   const date = state.newPostDate;
   const text = (state.newPostText||'').trim();
+  const photo = (state.newPostPhoto||'').trim();
   if(!date || !text){
     state.postMsg = 'Заполните дату и текст поста.'; state.postMsgOk = false; render(); return;
   }
   try{
     await fetch(DB_URL + '/posts/' + date + '.json', {
-      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text, sent:false })
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text, photo, sent:false })
     });
     state.postMsg = 'Пост сохранён на ' + date + '. Разошлётся автоматически в 10:00 (если это будний день).';
     state.postMsgOk = true;
     state.newPostText = '';
+    state.newPostPhoto = '';
   }catch(e){
     state.postMsg = 'Не удалось сохранить — проверьте связь.'; state.postMsgOk = false;
   }
@@ -2238,7 +2284,55 @@ function render(){
   if(state.screen==='status'){
     initStatusTicker();
   }
+
+  const showingStaffOrders = state.screen==='staff' && state.staffShop && state.staffName;
+  if(showingStaffOrders){
+    startStaffLiveUpdates();
+  } else {
+    stopStaffLiveUpdates();
+  }
 }
+
+let staffTickTimer = null;
+let staffPollTimer = null;
+function startStaffLiveUpdates(){
+  if(!staffTickTimer){
+    staffTickTimer = setInterval(tickStaffOrderTimers, 1000);
+  }
+  if(!staffPollTimer){
+    staffPollTimer = setInterval(()=>{
+      if(state.screen==='staff' && state.staffShop && state.staffName) loadStaffOrders(true);
+    }, 20000);
+  }
+}
+function stopStaffLiveUpdates(){
+  clearInterval(staffTickTimer); staffTickTimer = null;
+  clearInterval(staffPollTimer); staffPollTimer = null;
+}
+function tickStaffOrderTimers(){
+  if(!state.staffOrders || !state.staffOrders.length) return;
+  const now = Date.now();
+  state.staffOrders.forEach(o=>{
+    if(o.status==='done' || !o.createdAt) return;
+    const el = document.getElementById('timer-'+o.id);
+    if(!el) return;
+    const etaMs = (o.etaMinutes||6)*60000;
+    const remainMs = etaMs - (now - o.createdAt);
+    el.classList.remove('warn','over');
+    if(remainMs <= 0){
+      const overMin = Math.floor(-remainMs/60000);
+      const overSec = String(Math.floor((-remainMs%60000)/1000)).padStart(2,'0');
+      el.textContent = `⏰ Просрочен на ${overMin}:${overSec}`;
+      el.classList.add('over');
+    } else {
+      const min = Math.floor(remainMs/60000);
+      const sec = String(Math.floor((remainMs%60000)/1000)).padStart(2,'0');
+      el.textContent = `⏳ Осталось ${min}:${sec}`;
+      if(remainMs <= 120000) el.classList.add('warn');
+    }
+  });
+}
+
 
 /* ---------- STATUS ANIMATION ---------- */
 function initStatusTicker(){
@@ -2363,6 +2457,18 @@ document.addEventListener('click', (e)=>{
   else if(action==='admin-save-post'){ saveAdminPost(); }
   else if(action==='admin-set-stop-cat'){ state.adminStopCat = el.dataset.cat; render(); }
   else if(action==='admin-toggle-stop'){ toggleStopItem(el.dataset.id); }
+  else if(action==='admin-edit-item'){
+    const i = itemById(el.dataset.id);
+    if(i){
+      state.editingMenuItemId = i.id;
+      state.editItemName = i.name;
+      state.editItemIcon = i.icon;
+      state.editItemPrices = Object.assign({}, i.sizes);
+      render();
+    }
+  }
+  else if(action==='admin-cancel-item-edit'){ state.editingMenuItemId=null; render(); }
+  else if(action==='admin-save-item-edit'){ saveMenuItemEdit(el.dataset.id); }
   else if(action==='order-done'){ markOrderDone(el.dataset.id); }
 });
 
@@ -2381,8 +2487,12 @@ document.addEventListener('input', (e)=>{
   else if(action==='set-new-menu-cat'){ state.newMenuCat = el.value; }
   else if(action==='set-new-menu-price'){ state.newMenuPrice = el.value; }
   else if(action==='set-new-menu-icon'){ state.newMenuIcon = el.value; }
+  else if(action==='set-edit-item-name'){ state.editItemName = el.value; }
+  else if(action==='set-edit-item-icon'){ state.editItemIcon = el.value; }
+  else if(action==='set-edit-item-price'){ state.editItemPrices[el.dataset.size] = el.value; }
   else if(action==='set-post-date'){ state.newPostDate = el.value; }
   else if(action==='set-post-text'){ state.newPostText = el.value; }
+  else if(action==='set-post-photo'){ state.newPostPhoto = el.value; }
   else if(action==='set-staff-pin'){ state.staffPinValue = el.value; }
   else if(action==='set-admin-pin'){ state.adminPinValue = el.value; }
 });
@@ -2398,8 +2508,17 @@ async function loadExtraMenu(){
       });
     }
   }catch(e){ /* ignore, menu just stays with built-in items */ }
+  await loadMenuOverrides();
   await loadStopList();
   render();
+}
+
+async function loadMenuOverrides(){
+  try{
+    const res = await fetch(DB_URL + '/menu_overrides.json');
+    const obj = res.ok ? await res.json() : null;
+    MENU_OVERRIDES = obj || {};
+  }catch(e){ /* keep whatever we had */ }
 }
 
 async function loadStopList(){
@@ -2408,6 +2527,25 @@ async function loadStopList(){
     const obj = res.ok ? await res.json() : null;
     STOP_LIST = new Set(obj ? Object.keys(obj).filter(k=>obj[k]) : []);
   }catch(e){ /* keep whatever we had */ }
+}
+
+async function saveMenuItemEdit(id){
+  const name = state.editItemName.trim();
+  const icon = state.editItemIcon.trim() || '🍽️';
+  const sizes = {};
+  Object.keys(state.editItemPrices).forEach(sz=>{
+    const p = parseInt(state.editItemPrices[sz], 10);
+    if(!isNaN(p) && p>0) sizes[sz] = p;
+  });
+  if(!name || !Object.keys(sizes).length) return;
+  try{
+    await fetch(DB_URL + '/menu_overrides/' + id + '.json', {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name, icon, sizes })
+    });
+  }catch(e){}
+  state.editingMenuItemId = null;
+  await loadExtraMenu();
 }
 
 async function toggleStopItem(itemId){
