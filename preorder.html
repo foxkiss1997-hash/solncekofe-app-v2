@@ -421,6 +421,15 @@
     padding:5px 11px;border-radius:999px;
   }
   .eta-hero{padding:20px 22px 4px;}
+
+  .waiting-accept{ padding:34px 26px 10px; text-align:center; }
+  .waiting-spinner{
+    width:54px;height:54px;margin:0 auto 18px;border-radius:50%;
+    border:4px solid var(--border); border-top-color:var(--amber);
+    animation:waitspin 0.9s linear infinite;
+  }
+  @keyframes waitspin{ to{ transform:rotate(360deg); } }
+  .waiting-text{ font-size:13.5px; color:var(--ink-soft); line-height:1.5; max-width:320px; margin:0 auto; }
   .eta-hero-num{font-family:var(--font-hero);font-optical-sizing:auto;font-size:58px;font-weight:600;letter-spacing:-.02em;line-height:1;color:var(--ink);}
   .eta-hero-num span{font-size:20px;font-weight:600;color:var(--ink-soft);margin-left:4px;}
   .eta-hero-label{font-size:13px;color:var(--ink-soft);margin-top:4px;font-weight:500;}
@@ -1143,7 +1152,7 @@ async function placeOrder(){
   }
   state.checkoutError = '';
   const shop = SHOPS.find(s=>s.id===state.shopId);
-  const localEta = prepMinutesForCart();
+  const localPrep = prepMinutesForCart();
   const pickupLabel = state.pickupASAP ? 'Скоро' : (state.scheduledTime || '—');
   const pickupText = state.pickupASAP ? 'как можно скорее' : ('к ' + (state.scheduledTime || '—'));
   const number = String(Math.floor(Math.random()*900)+100);
@@ -1153,12 +1162,14 @@ async function placeOrder(){
   // otherwise the background request would send an already-emptied cart.
   const cartSnapshot = state.cart.slice();
   const order = {
-    number, pickupLabel, shop, eta: localEta, flower,
+    number, pickupLabel, shop, prepMinutes: localPrep, flower,
     total: cartTotal() + tip,
     tip,
     itemsCount: cartCount(),
     placedAt: Date.now(),
-    demoDuration: localEta*60000,
+    status: 'new',
+    firebaseId: null,
+    acceptedAt: null,
     cartSnapshot,
     guestName: state.guestName,
     receiptContact: state.receiptContact,
@@ -1174,12 +1185,11 @@ async function placeOrder(){
   render();
 
   const result = await submitOrderToStaff(order);
-  if(result && result.etaMinutes){
-    state.order.eta = result.etaMinutes;
-    state.order.demoDuration = result.etaMinutes*60000;
-    state.order.placedAt = Date.now();
+  if(result){
+    if(result.prepMinutes) state.order.prepMinutes = result.prepMinutes;
+    if(result.orderId) state.order.firebaseId = result.orderId;
     saveOrderToStorage();
-    if(state.screen==='status') initStatusTicker();
+    render();
   }
 
   // Credit the loyalty card right away — one classic-coffee purchase, one stamp.
@@ -1215,7 +1225,9 @@ function clearStoredOrder(){
 /* ---------- RENDER: MENU ---------- */
 function renderMenu(){
   const items = allItems().filter(i=>i.category===state.category);
-  const orderReady = state.order && (Date.now()-state.order.placedAt) >= state.order.demoDuration;
+  const orderReady = state.order && state.order.status==='accepted' && state.order.acceptedAt &&
+    (Date.now()-state.order.acceptedAt) >= state.order.prepMinutes*60000;
+  const orderWaitingAccept = state.order && state.order.status==='new';
   return `
     <div class="screen">
       <div class="brand">
@@ -1237,9 +1249,9 @@ function renderMenu(){
       ${state.order ? `
         <div class="section" style="padding-top:0;">
           <div class="active-order-banner rippleable" data-action="back-to-status">
-            <div class="active-order-icon">${orderReady ? '✅' : '☕'}</div>
+            <div class="active-order-icon">${orderReady ? '✅' : (orderWaitingAccept ? '🔔' : '☕')}</div>
             <div style="flex:1;min-width:0;">
-              <b>${orderReady ? `Заказ №${state.order.number} готов!` : `Заказ №${state.order.number} готовится`}</b>
+              <b>${orderReady ? `Заказ №${state.order.number} готов!` : (orderWaitingAccept ? `Заказ №${state.order.number} ждёт, когда его примут` : `Заказ №${state.order.number} готовится`)}</b>
               <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">${state.order.shop.name} · нажмите, чтобы посмотреть статус</div>
             </div>
             <div class="arrow">→</div>
@@ -1852,17 +1864,18 @@ function renderOrderList(orders, withActions){
     <div class="order-card">
       <div class="order-head">
         <div><b>№${o.number || '—'}</b> ${o.shopName ? `· ${o.shopName}` : ''}</div>
-        <div class="order-status ${o.status==='done'?'done':''}">${o.status==='done' ? 'Готов' : 'Новый'}</div>
+        <div class="order-status ${o.status==='done'?'done':(o.status==='accepted'?'':'new')}">${o.status==='done' ? 'Готов' : (o.status==='accepted' ? 'В работе' : 'Новый — не принят')}</div>
       </div>
       <div class="order-items">${(o.itemsText||'').replace(/\n/g,'<br>')}</div>
       <div class="order-meta">Итого: <b>${money(o.total||0)}</b>${o.tip ? ` (из них чаевые ${money(o.tip)})` : ''} · ${o.payMethod||''} · ${o.pickup||''}</div>
-      ${withActions && o.status!=='done' && o.createdAt ?
+      ${withActions && o.status==='accepted' && o.acceptedAt ?
         `<div class="order-timer" id="timer-${o.id}">…</div>`
-        : (o.etaMinutes ? `<div class="order-meta">Готовность: <b>~${o.etaMinutes} мин</b> от момента заказа</div>` : '')
+        : (o.status==='accepted' && o.prepMinutes ? `<div class="order-meta">Готовность: <b>~${o.prepMinutes} мин</b> с момента принятия</div>` : '')
       }
       <div class="order-meta">Имя: ${o.guestName||'—'} · ID: ${o.clientId||'—'}</div>
       ${o.status==='done' && o.completedBy ? `<div class="order-meta">Закрыл: <b>${esc(o.completedBy)}</b></div>` : ''}
-      ${withActions && o.status!=='done' ? `<button class="btn-ghost rippleable" data-action="order-done" data-id="${o.id}">Отметить готовым</button>` : ''}
+      ${withActions && o.status==='new' ? `<button class="btn-primary rippleable" data-action="order-accept" data-id="${o.id}" style="margin-top:8px;"><span>Принять заказ</span><span class="sub">→</span></button>` : ''}
+      ${withActions && o.status==='accepted' ? `<button class="btn-ghost rippleable" data-action="order-done" data-id="${o.id}">Отметить готовым</button>` : ''}
     </div>
   `).join('');
 }
@@ -2132,6 +2145,16 @@ async function chargeLoyaltyById(){
   render();
 }
 
+async function acceptOrder(id){
+  try{
+    await fetch(DB_URL + '/orders/' + id + '.json', {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({status:'accepted', acceptedAt: Date.now(), acceptedBy: state.staffName || null})
+    });
+  }catch(e){}
+  loadStaffOrders();
+}
+
 async function markOrderDone(id){
   try{
     await fetch(DB_URL + '/orders/' + id + '.json', {
@@ -2209,23 +2232,31 @@ function renderCheckout(){
 /* ---------- RENDER: STATUS ---------- */
 function renderStatus(){
   const o = state.order;
+  const waitingAccept = o.status === 'new';
   return `
     <div class="screen">
       <div class="status-top">
         <button class="iconbtn rippleable" data-action="status-to-menu" style="margin-bottom:10px;">← К меню</button>
-        <div class="status-eyebrow" id="statusEyebrow">Заказ принят</div>
+        <div class="status-eyebrow" id="statusEyebrow">${waitingAccept ? 'Ждём, когда точка примет заказ' : 'Заказ принят'}</div>
       </div>
 
-      <div class="eta-hero">
-        <div class="eta-hero-num" id="etaNum">~${o.eta}<span>мин</span></div>
-        <div class="eta-hero-label" id="etaLabel">До готовности</div>
-      </div>
-      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      ${waitingAccept ? `
+        <div class="waiting-accept" id="waitingAccept">
+          <div class="waiting-spinner"></div>
+          <div class="waiting-text">Обычно это занимает не больше минуты-двух — как только точка возьмёт заказ в работу, здесь появится время готовности.</div>
+        </div>
+      ` : `
+        <div class="eta-hero">
+          <div class="eta-hero-num" id="etaNum">~${o.prepMinutes}<span>мин</span></div>
+          <div class="eta-hero-label" id="etaLabel">До готовности</div>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      `}
       <div class="dial-order">Заказ <b>№${o.number}</b> · Заберёшь: <b>${o.pickupLabel}</b></div>
       <div class="status-shop">${o.shop.name} · ${o.shop.addr}</div>
 
       <div class="stations">
-        <div class="station-wrap"><div class="station" id="st0"></div><div class="station-label">Принят</div></div>
+        <div class="station-wrap"><div class="station" id="st0"></div><div class="station-label">Принят точкой</div></div>
         <div class="station-line" id="line0"></div>
         <div class="station-wrap"><div class="station" id="st1"></div><div class="station-label">Готовим</div></div>
         <div class="station-line" id="line1"></div>
@@ -2285,12 +2316,46 @@ function render(){
     initStatusTicker();
   }
 
+  const shouldPollOrder = state.screen==='status' && state.order && state.order.firebaseId && state.order.status!=='done';
+  if(shouldPollOrder){
+    ensureOrderStatusPolling();
+  } else {
+    stopOrderStatusPolling();
+  }
+
   const showingStaffOrders = state.screen==='staff' && state.staffShop && state.staffName;
   if(showingStaffOrders){
     startStaffLiveUpdates();
   } else {
     stopStaffLiveUpdates();
   }
+}
+
+let orderStatusPollTimer = null;
+function ensureOrderStatusPolling(){
+  if(!orderStatusPollTimer){
+    orderStatusPollTimer = setInterval(pollOrderStatus, 4000);
+  }
+}
+function stopOrderStatusPolling(){
+  clearInterval(orderStatusPollTimer);
+  orderStatusPollTimer = null;
+}
+async function pollOrderStatus(){
+  if(!state.order || !state.order.firebaseId || state.screen!=='status'){ stopOrderStatusPolling(); return; }
+  try{
+    const res = await fetch(DB_URL + '/orders/' + state.order.firebaseId + '.json');
+    const o = await res.json();
+    if(!o) return;
+    const wasStatus = state.order.status;
+    if(o.status) state.order.status = o.status;
+    if(o.acceptedAt) state.order.acceptedAt = o.acceptedAt;
+    if(o.prepMinutes) state.order.prepMinutes = o.prepMinutes;
+    saveOrderToStorage();
+    if(wasStatus !== state.order.status){
+      render();
+    }
+  }catch(e){}
 }
 
 let staffTickTimer = null;
@@ -2313,11 +2378,11 @@ function tickStaffOrderTimers(){
   if(!state.staffOrders || !state.staffOrders.length) return;
   const now = Date.now();
   state.staffOrders.forEach(o=>{
-    if(o.status==='done' || !o.createdAt) return;
+    if(o.status!=='accepted' || !o.acceptedAt) return;
     const el = document.getElementById('timer-'+o.id);
     if(!el) return;
-    const etaMs = (o.etaMinutes||6)*60000;
-    const remainMs = etaMs - (now - o.createdAt);
+    const etaMs = (o.prepMinutes||6)*60000;
+    const remainMs = etaMs - (now - o.acceptedAt);
     el.classList.remove('warn','over');
     if(remainMs <= 0){
       const overMin = Math.floor(-remainMs/60000);
@@ -2337,7 +2402,7 @@ function tickStaffOrderTimers(){
 /* ---------- STATUS ANIMATION ---------- */
 function initStatusTicker(){
   clearInterval(statusTimer);
-  if(!state.order) return;
+  if(!state.order || state.order.status !== 'accepted' || !state.order.acceptedAt) return;
   const eyebrow = document.getElementById('statusEyebrow');
   const etaNum = document.getElementById('etaNum');
   const etaLabel = document.getElementById('etaLabel');
@@ -2360,9 +2425,10 @@ function initStatusTicker(){
     if(idx>0) lines[idx-1].classList.add('filled');
   }
 
+  const demoDuration = state.order.prepMinutes*60000;
   function tick(){
-    const elapsed = Date.now() - state.order.placedAt;
-    const t = Math.min(1, elapsed / state.order.demoDuration);
+    const elapsed = Date.now() - state.order.acceptedAt;
+    const t = Math.min(1, elapsed / demoDuration);
 
     if(progressFill) progressFill.style.width = (t*100) + '%';
 
@@ -2375,7 +2441,7 @@ function initStatusTicker(){
     else if(t<0.92){ eyebrow.textContent='Готовим ваш заказ'; }
     else { eyebrow.textContent='Готово к выдаче'; }
 
-    const remaining = Math.max(0, Math.round(state.order.eta*(1-t)));
+    const remaining = Math.max(0, Math.round(state.order.prepMinutes*(1-t)));
     if(t<0.92){
       etaNum.innerHTML = (remaining<=0 ? '&lt;1' : `~${remaining}`) + '<span>мин</span>';
       etaLabel.textContent = 'До готовности';
@@ -2469,6 +2535,7 @@ document.addEventListener('click', (e)=>{
   }
   else if(action==='admin-cancel-item-edit'){ state.editingMenuItemId=null; render(); }
   else if(action==='admin-save-item-edit'){ saveMenuItemEdit(el.dataset.id); }
+  else if(action==='order-accept'){ acceptOrder(el.dataset.id); }
   else if(action==='order-done'){ markOrderDone(el.dataset.id); }
 });
 
@@ -2567,9 +2634,10 @@ async function toggleStopItem(itemId){
 (function restoreActiveOrder(){
   const saved = loadOrderFromStorage();
   if(!saved) return;
-  const elapsed = Date.now() - saved.placedAt;
-  if(elapsed < saved.demoDuration + 20*60000){
-    // Order is still cooking (or was ready recently) — jump straight back to it.
+  const elapsedSincePlaced = Date.now() - saved.placedAt;
+  const staleAfterMs = (saved.status==='accepted' && saved.prepMinutes) ? saved.prepMinutes*60000 + 20*60000 : 30*60000;
+  if(elapsedSincePlaced < staleAfterMs){
+    // Order is still pending/cooking (or was ready recently) — jump straight back to it.
     state.order = saved;
     state.screen = 'status';
   } else {
