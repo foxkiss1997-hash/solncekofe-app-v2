@@ -790,6 +790,7 @@ const FLOWER_STAFF = ['Ромашка','Лаванда','Пион','Мята','�
 let state = {
   screen:'menu',
   category:'coffee',
+  payingNow:false,
   cart:[],
   customizeItemId:null,
   customizeOpts:{size:'m', milk:'regular', syrup:'none', shot:false, qty:1},
@@ -1150,54 +1151,63 @@ async function placeOrder(){
     render();
     return;
   }
+  if(state.payingNow) return; // guard against double-tap
   state.checkoutError = '';
   const shop = SHOPS.find(s=>s.id===state.shopId);
   const localPrep = prepMinutesForCart();
   const pickupLabel = state.pickupASAP ? 'Скоро' : (state.scheduledTime || '—');
   const pickupText = state.pickupASAP ? 'как можно скорее' : ('к ' + (state.scheduledTime || '—'));
   const number = String(Math.floor(Math.random()*900)+100);
-  const flower = FLOWER_STAFF[Math.floor(Math.random()*FLOWER_STAFF.length)];
   const tip = tipAmount();
-  // Snapshot everything the server call needs *before* we clear the cart/form below —
-  // otherwise the background request would send an already-emptied cart.
   const cartSnapshot = state.cart.slice();
-  const order = {
-    number, pickupLabel, shop, prepMinutes: localPrep, flower,
-    total: cartTotal() + tip,
-    tip,
+  const total = cartTotal() + tip;
+
+  const paymentPayload = {
+    number,
+    shopId: shop.id,
+    shopName: shop.name,
+    shopAddr: shop.addr,
+    itemsText: describeCartForStaff(cartSnapshot),
+    items: cartSnapshot.map(l=>({ name:l.name, category:l.category, price:l.unitPrice, qty:l.qty })),
     itemsCount: cartCount(),
-    placedAt: Date.now(),
-    status: 'new',
-    firebaseId: null,
-    acceptedAt: null,
-    cartSnapshot,
-    guestName: state.guestName,
+    total,
+    tip,
+    guestName: state.guestName || 'без имени',
     receiptContact: state.receiptContact,
-    payMethodLabel: (PAYMENTS.find(p=>p.id===state.payMethod)||{}).label || state.payMethod,
-    pickupText,
+    pickup: pickupText,
     clientId: LOYALTY_ID || TELEGRAM_ID || CLIENT_ID,
   };
-  state.cart = [];
-  state.tipPercent = 0; state.tipCustom = '';
-  state.screen = 'status';
-  state.order = order;
-  saveOrderToStorage();
+
+  state.payingNow = true;
   render();
 
-  const result = await submitOrderToStaff(order);
-  if(result){
-    if(result.prepMinutes) state.order.prepMinutes = result.prepMinutes;
-    if(result.orderId) state.order.firebaseId = result.orderId;
-    saveOrderToStorage();
-    render();
+  let result;
+  try{
+    const res = await fetch(WORKER_URL + '/create-payment', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(paymentPayload)
+    });
+    result = await res.json();
+  }catch(e){
+    result = { ok:false, error:'Не удалось связаться с сервером оплаты.' };
   }
 
-  // Credit the loyalty card right away — one classic-coffee purchase, one stamp.
-  const coffeeQty = cartSnapshot.filter(l=>l.category==='coffee').reduce((s,l)=>s+l.qty,0);
-  if(coffeeQty>0 && LOYALTY_ID){
-    try{ await awardStamps(LOYALTY_ID, coffeeQty); }catch(e){}
-    initLoyalty();
+  state.payingNow = false;
+
+  if(!result || !result.ok){
+    state.checkoutError = (result && result.error) || 'Не получилось начать оплату — попробуйте ещё раз.';
+    render();
+    return;
   }
+
+  // Stash enough to resume once we're bounced back from the bank's payment page.
+  try{
+    localStorage.setItem('sk_pending_payment', JSON.stringify({
+      orderId: result.orderId, number, shop, pickupLabel, cartSnapshot, total, startedAt: Date.now()
+    }));
+  }catch(e){}
+
+  window.location.href = result.paymentUrl;
+  return;
 }
 function newOrder(){
   clearInterval(statusTimer);
@@ -2221,8 +2231,8 @@ function renderCheckout(){
       </div>
 
       <div class="stickybar">
-        <button class="btn-primary rippleable" data-action="pay" ${!shopStatus(state.shopId).open ? 'disabled' : ''}>
-          <span>${shopStatus(state.shopId).open ? 'Оплатить' : 'Точка закрыта'}</span><span class="sub price-pop">${money(cartTotal()+tipAmount())}</span>
+        <button class="btn-primary rippleable" data-action="pay" ${(!shopStatus(state.shopId).open || state.payingNow) ? 'disabled' : ''}>
+          <span>${state.payingNow ? 'Открываем оплату…' : (shopStatus(state.shopId).open ? 'Оплатить' : 'Точка закрыта')}</span><span class="sub price-pop">${money(cartTotal()+tipAmount())}</span>
         </button>
       </div>
     </div>
@@ -2232,15 +2242,21 @@ function renderCheckout(){
 /* ---------- RENDER: STATUS ---------- */
 function renderStatus(){
   const o = state.order;
+  const confirming = o.status === 'confirming';
   const waitingAccept = o.status === 'new';
   return `
     <div class="screen">
       <div class="status-top">
         <button class="iconbtn rippleable" data-action="status-to-menu" style="margin-bottom:10px;">← К меню</button>
-        <div class="status-eyebrow" id="statusEyebrow">${waitingAccept ? 'Ждём, когда точка примет заказ' : 'Заказ принят'}</div>
+        <div class="status-eyebrow" id="statusEyebrow">${confirming ? 'Проверяем оплату' : (waitingAccept ? 'Ждём, когда точка примет заказ' : 'Заказ принят')}</div>
       </div>
 
-      ${waitingAccept ? `
+      ${confirming ? `
+        <div class="waiting-accept" id="waitingAccept">
+          <div class="waiting-spinner"></div>
+          <div class="waiting-text">Банк подтверждает платёж — обычно занимает пару секунд. Не закрывайте эту страницу.</div>
+        </div>
+      ` : waitingAccept ? `
         <div class="waiting-accept" id="waitingAccept">
           <div class="waiting-spinner"></div>
           <div class="waiting-text">Обычно это занимает не больше минуты-двух — как только точка возьмёт заказ в работу, здесь появится время готовности.</div>
@@ -2630,21 +2646,92 @@ async function toggleStopItem(itemId){
   render();
 }
 
-/* ---------- INIT ---------- */
-(function restoreActiveOrder(){
-  const saved = loadOrderFromStorage();
-  if(!saved) return;
-  const elapsedSincePlaced = Date.now() - saved.placedAt;
-  const staleAfterMs = (saved.status==='accepted' && saved.prepMinutes) ? saved.prepMinutes*60000 + 20*60000 : 30*60000;
-  if(elapsedSincePlaced < staleAfterMs){
-    // Order is still pending/cooking (or was ready recently) — jump straight back to it.
-    state.order = saved;
-    state.screen = 'status';
-  } else {
-    // Long finished / stale — clean up so it stops showing as "active".
-    clearStoredOrder();
+/* ---------- PAYMENT RETURN ---------- */
+let paymentConfirmTimer = null;
+async function pollPaymentConfirmation(orderId, deadline){
+  if(Date.now() > deadline){
+    clearInterval(paymentConfirmTimer);
+    state.checkoutError = 'Банк долго не подтверждает оплату. Если деньги списались, напишите нам в чат — мы всё проверим.';
+    state.screen = 'menu';
+    localStorage.removeItem('sk_pending_payment');
+    render();
+    return;
   }
-})();
+  try{
+    const res = await fetch(DB_URL + '/order_lookup/' + orderId + '.json');
+    const realId = await res.json();
+    if(realId){
+      clearInterval(paymentConfirmTimer);
+      const oRes = await fetch(DB_URL + '/orders/' + realId + '.json');
+      const o = await oRes.json();
+      if(o){
+        state.order = Object.assign({}, o, {
+          firebaseId: realId,
+          shop: SHOPS.find(s=>s.id===o.shopId) || { name:o.shopName, addr:o.shopAddr },
+          pickupLabel: o.pickup,
+          placedAt: o.createdAt,
+        });
+        saveOrderToStorage();
+        localStorage.removeItem('sk_pending_payment');
+        render();
+      }
+    }
+  }catch(e){}
+}
+function checkPaymentReturn(){
+  const params = new URLSearchParams(window.location.search);
+  const paidOrderId = params.get('paid');
+  const failed = params.get('failed');
+  if(!paidOrderId && !failed) return false;
+
+  // Clean the URL so a refresh doesn't repeat this.
+  try{
+    const url = new URL(window.location.href);
+    url.searchParams.delete('paid'); url.searchParams.delete('failed');
+    window.history.replaceState({}, '', url);
+  }catch(e){}
+
+  if(failed){
+    state.checkoutError = 'Оплата не прошла — попробуйте ещё раз.';
+    state.screen = 'menu';
+    localStorage.removeItem('sk_pending_payment');
+    return true;
+  }
+
+  let pending = null;
+  try{ pending = JSON.parse(localStorage.getItem('sk_pending_payment') || 'null'); }catch(e){}
+  state.order = {
+    number: pending ? pending.number : '—',
+    shop: pending ? pending.shop : SHOPS[0],
+    pickupLabel: pending ? pending.pickupLabel : 'Скоро',
+    status: 'confirming',
+    firebaseId: null,
+  };
+  state.screen = 'status';
+  const deadline = Date.now() + 90000;
+  paymentConfirmTimer = setInterval(()=>pollPaymentConfirmation(paidOrderId, deadline), 3000);
+  pollPaymentConfirmation(paidOrderId, deadline);
+  return true;
+}
+
+/* ---------- INIT ---------- */
+const cameFromPayment = checkPaymentReturn();
+if(!cameFromPayment){
+  (function restoreActiveOrder(){
+    const saved = loadOrderFromStorage();
+    if(!saved) return;
+    const elapsedSincePlaced = Date.now() - saved.placedAt;
+    const staleAfterMs = (saved.status==='accepted' && saved.prepMinutes) ? saved.prepMinutes*60000 + 20*60000 : 30*60000;
+    if(elapsedSincePlaced < staleAfterMs){
+      // Order is still pending/cooking (or was ready recently) — jump straight back to it.
+      state.order = saved;
+      state.screen = 'status';
+    } else {
+      // Long finished / stale — clean up so it stops showing as "active".
+      clearStoredOrder();
+    }
+  })();
+}
 loadExtraMenu();
 initLoyalty();
 render();
