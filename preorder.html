@@ -531,6 +531,38 @@
   .friend-info div{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
   .friend-badge{ margin-left:auto; font-size:10.5px; font-weight:700; color:var(--mint); background:rgba(94,230,192,0.14); padding:4px 9px; border-radius:999px; white-space:nowrap; }
 
+  .wheel-card{
+    background:linear-gradient(160deg, rgba(240,169,62,0.12), rgba(240,87,122,0.08));
+    border:1px solid rgba(240,169,62,0.3); border-radius:var(--radius-lg); padding:22px 18px;
+    text-align:center;
+  }
+  .wheel-bonus-badge{
+    margin:10px auto 0; max-width:280px; font-size:12.5px; font-weight:700; text-align:center;
+    color:#140800; background:linear-gradient(120deg, var(--amber), var(--mint)); padding:8px 14px; border-radius:999px;
+  }
+  .wheel-wrap{ position:relative; width:240px; height:240px; margin:16px auto; }
+  .wheel-pointer{ position:absolute; top:-6px; left:50%; transform:translateX(-50%); font-size:22px; color:var(--amber); z-index:2; filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5)); }
+  .wheel-disc{ width:240px; height:240px; border-radius:50%; box-shadow:0 0 0 4px rgba(255,255,255,0.08), 0 10px 30px rgba(0,0,0,0.4); }
+  .wheel-disc svg text{ fill:#140800; font-weight:700; }
+
+  .wheel-overlay{
+    position:fixed; inset:0; background:rgba(6,4,8,0.82); backdrop-filter:blur(6px);
+    display:flex; align-items:center; justify-content:center; z-index:60; padding:24px;
+    animation:wheelFadeIn 0.25s ease;
+  }
+  @keyframes wheelFadeIn{ from{ opacity:0; } to{ opacity:1; } }
+  .wheel-overlay-card{
+    background:linear-gradient(160deg, rgba(240,169,62,0.18), rgba(240,87,122,0.12)), var(--paper);
+    border:1px solid rgba(240,169,62,0.4); border-radius:26px; padding:34px 26px; text-align:center;
+    max-width:340px; width:100%; animation:wheelPopIn 0.4s cubic-bezier(0.2,0.9,0.3,1.3);
+  }
+  @keyframes wheelPopIn{ from{ transform:scale(0.7); opacity:0; } to{ transform:scale(1); opacity:1; } }
+  .wheel-overlay-emoji{ font-size:64px; line-height:1; margin-bottom:10px; }
+  .wheel-overlay-title{ font-family:var(--font-hero); font-size:24px; font-weight:700; color:var(--amber); }
+  .wheel-overlay-prize{ font-size:19px; font-weight:700; color:var(--ink); margin-top:6px; }
+  .wheel-overlay-code{ font-size:13.5px; color:var(--ink-soft); margin-top:14px; line-height:1.5; }
+  .wheel-overlay-code b{ color:var(--mint); font-size:17px; letter-spacing:0.04em; }
+
   .active-order-banner{
     display:flex; align-items:center; gap:12px; cursor:pointer;
     background:linear-gradient(120deg, rgba(94,230,192,0.16), rgba(240,169,62,0.10));
@@ -803,6 +835,8 @@ let state = {
   receiptContact:'',
   tipPercent:0, tipCustom:'',
   referralList:[], referralLoading:false,
+  wheelCanSpin:true, wheelSpinning:false, wheelResult:null, myVouchers:[], wheelBonusSpins:0, wheelDailyAvailable:true, wheelRotation:0, wheelJustWon:false,
+  redeemGuestId:'', redeemVoucherId:'', redeemMsg:'', redeemMsgOk:false,
   myOrders:[], myOrdersLoading:false,
   order:null,
   staffAuthed:false, staffPinValue:'', staffPinError:'', staffShop:null, staffOrders:[], staffLoading:false,
@@ -814,6 +848,7 @@ let state = {
   adminMenuLoading:false, newMenuName:'', newMenuCat:'coffee', newMenuPrice:'', newMenuIcon:'🍽️', adminStopCat:'coffee',
   editingMenuItemId:null, editItemName:'', editItemIcon:'', editItemPrices:{},
   newPostDate:'', newPostText:'', newPostPhoto:'', postMsg:'', postMsgOk:false, adminPosts:[], adminPostsLoading:false,
+  editingPrizeId:null, newPrizeLabel:'', newPrizeEmoji:'', newPrizeType:'stamp', newPrizeValue:'', newPrizeWeight:'', prizeMsg:'', prizeMsgOk:false,
 };
 let statusTimer = null;
 let uidCounter = 1;
@@ -1525,6 +1560,48 @@ function renderCard(){
       </div>
 
       <div class="section">
+        <div class="wheel-card">
+          <div class="ref-title" style="text-align:center;">🎡 Колесо удачи</div>
+          <p class="ref-sub" style="text-align:center;">${state.wheelDailyAvailable ? 'Один бесплатный шанс в день' : 'Дневной шанс уже использован — заходи завтра'}</p>
+          ${state.wheelBonusSpins>0 ? `
+            <div class="wheel-bonus-badge">🎁 +${state.wheelBonusSpins} бонусн${state.wheelBonusSpins===1?'ая прокрутка':'ые прокрутки'} за заполненную карту!</div>
+          ` : ''}
+          <div class="wheel-wrap">
+            <div class="wheel-pointer">▼</div>
+            <div class="wheel-disc" id="wheelDisc" style="transform:rotate(${state.wheelRotation||0}deg);">${buildWheelSVG()}</div>
+          </div>
+          <button class="ref-btn rippleable" data-action="spin-wheel" ${(!state.wheelCanSpin || state.wheelSpinning) ? 'disabled style="opacity:0.5;"' : ''}>
+            ${state.wheelSpinning ? 'Крутим…' : (state.wheelCanSpin ? (state.wheelDailyAvailable ? 'Крутить колесо' : 'Крутить бонусную прокрутку') : 'Уже использовано сегодня')}
+          </button>
+        </div>
+      </div>
+
+      ${state.wheelResult && state.wheelJustWon ? `
+        <div class="wheel-overlay rippleable" data-action="dismiss-wheel-result">
+          <div class="wheel-overlay-card">
+            <div class="wheel-overlay-emoji">${state.wheelResult.emoji}</div>
+            <div class="wheel-overlay-title">Поздравляем!</div>
+            <div class="wheel-overlay-prize">${state.wheelResult.label}</div>
+            ${state.wheelResult.voucherId
+              ? `<div class="wheel-overlay-code">Покажи баристе, код приза:<br><b>${state.wheelResult.voucherId}</b></div>`
+              : `<div class="wheel-overlay-code">Уже начислено на карту ✓</div>`}
+            <button class="ref-btn rippleable" data-action="dismiss-wheel-result" style="margin-top:16px;">Отлично!</button>
+          </div>
+        </div>
+      ` : ''}
+
+      ${state.myVouchers && state.myVouchers.filter(v=>!v.redeemed).length ? `
+        <div class="section">
+          <div class="section-label">Невостребованные призы</div>
+          ${state.myVouchers.filter(v=>!v.redeemed).map(v=>`
+            <div class="friend-row">
+              <div class="friend-icon">🎁</div>
+              <div class="friend-info"><b>${esc(v.label)}</b><div>Код: ${esc(v.id)}</div></div>
+            </div>`).join('')}
+        </div>
+      ` : ''}
+
+      <div class="section">
         <div class="ref-hero">
           <div class="ref-icon">🎁</div>
           <div class="ref-title">Пригласи друга</div>
@@ -1651,6 +1728,13 @@ function renderStaff(){
         ${state.chargeMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.chargeMsgOk?'var(--mint)':'var(--coral)'};font-weight:700;">${state.chargeMsg}</div>` : ''}
       </div>
       <div class="section">
+        <div class="section-label">Погасить приз с колеса удачи</div>
+        <input class="text-input" type="text" placeholder="ID гостя" value="${esc(state.redeemGuestId||'')}" data-action="set-redeem-guest-id">
+        <input class="text-input" style="margin-top:8px;" type="text" placeholder="Код приза (например W3F9K)" value="${esc(state.redeemVoucherId||'')}" data-action="set-redeem-voucher-id">
+        <button class="btn-ghost rippleable" data-action="staff-redeem-voucher" style="margin-top:8px;">Погасить приз</button>
+        ${state.redeemMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.redeemMsgOk?'var(--mint)':'var(--coral)'};font-weight:700;">${state.redeemMsg}</div>` : ''}
+      </div>
+      <div class="section">
         <div class="section-label">Заказы точки</div>
         ${state.staffLoading ? `<p class="empty-note">Загружаем…</p>` : renderOrderList(state.staffOrders, true)}
       </div>
@@ -1691,9 +1775,10 @@ function renderAdmin(){
           <div class="tab ${state.adminTab==='staff'?'active':''} rippleable" data-action="admin-set-tab" data-tab="staff">Сотрудники</div>
           <div class="tab ${state.adminTab==='menu'?'active':''} rippleable" data-action="admin-set-tab" data-tab="menu">Меню</div>
           <div class="tab ${state.adminTab==='posts'?'active':''} rippleable" data-action="admin-set-tab" data-tab="posts">Посты</div>
+          <div class="tab ${state.adminTab==='wheel'?'active':''} rippleable" data-action="admin-set-tab" data-tab="wheel">Колесо</div>
         </div>
       </div>
-      ${state.adminTab==='orders' ? renderAdminOrdersTab() : state.adminTab==='staff' ? renderAdminStaffTab() : state.adminTab==='menu' ? renderAdminMenuTab() : renderAdminPostsTab()}
+      ${state.adminTab==='orders' ? renderAdminOrdersTab() : state.adminTab==='staff' ? renderAdminStaffTab() : state.adminTab==='menu' ? renderAdminMenuTab() : state.adminTab==='posts' ? renderAdminPostsTab() : renderAdminWheelTab()}
     </div>
   `;
 }
@@ -1866,6 +1951,48 @@ function renderAdminPostsTab(){
             <div class="order-items">${esc((p.text||'').slice(0,90))}${(p.text||'').length>90?'…':''}</div>
           </div>`).join('') : `<p class="empty-note">Постов пока нет.</p>`)
       }
+    </div>
+  `;
+}
+
+function renderAdminWheelTab(){
+  const totalWeight = WHEEL_PRIZES.reduce((s,p)=>s+(Number(p.weight)||0),0);
+  return `
+    <div class="section">
+      <div class="section-label">${state.editingPrizeId ? 'Изменить приз' : 'Добавить приз'}</div>
+      <input class="text-input" type="text" placeholder="Название (например «Скидка 15%»)" value="${esc(state.newPrizeLabel||'')}" data-action="set-prize-label">
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <input class="text-input" type="text" placeholder="Эмодзи" value="${esc(state.newPrizeEmoji||'')}" data-action="set-prize-emoji" style="width:80px;text-align:center;">
+        <select class="text-input" data-action="set-prize-type" style="flex:1;">
+          <option value="stamp" ${state.newPrizeType==='stamp'?'selected':''}>Штампы на карту</option>
+          <option value="free_item" ${state.newPrizeType==='free_item'?'selected':''}>Бесплатная позиция</option>
+          <option value="discount" ${state.newPrizeType==='discount'?'selected':''}>Скидка, %</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <input class="text-input" type="text" placeholder="${state.newPrizeType==='stamp' ? 'Кол-во штампов' : (state.newPrizeType==='discount' ? 'Процент скидки' : 'Что именно (например «Сироп»)')}" value="${esc(state.newPrizeValue||'')}" data-action="set-prize-value" style="flex:1;">
+        <input class="text-input" type="number" inputmode="numeric" placeholder="Вес (частота)" value="${esc(state.newPrizeWeight||'')}" data-action="set-prize-weight" style="width:130px;">
+      </div>
+      <div class="hint" style="margin-top:6px;">«Вес» — насколько часто выпадает приз относительно других. Больше число — чаще выигрыш.</div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn-ghost rippleable" data-action="admin-save-prize" style="flex:1;">${state.editingPrizeId ? 'Сохранить' : 'Добавить'}</button>
+        ${state.editingPrizeId ? `<button class="btn-ghost rippleable" data-action="admin-cancel-prize-edit" style="flex:1;">Отмена</button>` : ''}
+      </div>
+      ${state.prizeMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.prizeMsgOk?'var(--mint)':'var(--coral)'};font-weight:700;">${state.prizeMsg}</div>` : ''}
+    </div>
+    <div class="section">
+      <div class="section-label">Текущие призы (шанс выпадения)</div>
+      ${WHEEL_PRIZES.map(p=>{
+        const chance = totalWeight ? Math.round((Number(p.weight)||0)/totalWeight*100) : 0;
+        return `
+        <div class="order-card" style="display:flex;align-items:center;justify-content:space-between;">
+          <div>${p.emoji} <b>${esc(p.label)}</b><div class="order-meta">Шанс: ~${chance}% · вес ${p.weight}</div></div>
+          <div style="display:flex;gap:6px;">
+            <button class="iconbtn rippleable" data-action="admin-edit-prize" data-id="${p.id}">✎</button>
+            <button class="iconbtn rippleable" data-action="admin-remove-prize" data-id="${p.id}">✕</button>
+          </div>
+        </div>`;
+      }).join('') || `<p class="empty-note">Список призов пуст.</p>`}
     </div>
   `;
 }
@@ -2074,6 +2201,44 @@ async function saveAdminPost(){
   await loadAdminPosts();
 }
 
+async function saveAdminPrize(){
+  const label = (state.newPrizeLabel||'').trim();
+  const emoji = (state.newPrizeEmoji||'').trim() || '🎁';
+  const type = state.newPrizeType || 'stamp';
+  const value = (state.newPrizeValue||'').trim();
+  const weight = parseInt(state.newPrizeWeight, 10);
+  if(!label || !value || !weight || weight<=0){
+    state.prizeMsg = 'Заполните название, значение и вес (больше нуля).'; state.prizeMsgOk = false; render(); return;
+  }
+  const colorPool = ['#F0A93E','#5EE6C0','#F0577A'];
+  const id = state.editingPrizeId || ('p' + Date.now());
+  const existing = WHEEL_PRIZES.find(p=>p.id===id);
+  const color = existing ? existing.color : colorPool[WHEEL_PRIZES.length % colorPool.length];
+  const prizeData = { label, emoji, type, value: (type==='free_item' ? value : Number(value)), weight, color };
+  try{
+    await fetch(DB_URL + '/wheel_prizes/' + id + '.json', {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(prizeData)
+    });
+    state.prizeMsg = 'Приз сохранён.'; state.prizeMsgOk = true;
+    state.editingPrizeId = null; state.newPrizeLabel=''; state.newPrizeEmoji=''; state.newPrizeValue=''; state.newPrizeWeight='';
+  }catch(e){
+    state.prizeMsg = 'Не удалось сохранить — проверьте связь.'; state.prizeMsgOk = false;
+  }
+  await loadWheelPrizes();
+  render();
+}
+
+async function removeAdminPrize(id){
+  if(WHEEL_PRIZES.length<=1){
+    state.prizeMsg = 'Нельзя удалить последний приз — в колесе должен остаться хотя бы один.'; state.prizeMsgOk = false; render(); return;
+  }
+  try{
+    await fetch(DB_URL + '/wheel_prizes/' + id + '.json', { method:'DELETE' });
+  }catch(e){}
+  await loadWheelPrizes();
+  render();
+}
+
 function scanLoyaltyQr(){
   const tgWebApp = window.Telegram && window.Telegram.WebApp;
   if(!tgWebApp || typeof tgWebApp.showScanQrPopup !== 'function'){
@@ -2102,6 +2267,145 @@ function scanLoyaltyQr(){
 
 const LOYALTY_GOAL = 7;
 
+// ---------- Колесо удачи ----------
+// `type` is deliberately generic so a future "partner offer" prize (with a
+// url/partner name) can slot in later without changing the spin/voucher logic.
+// These are just the *defaults* — admin can edit/add/remove prizes; whatever's
+// saved in Firebase (/wheel_prizes) always wins once loaded.
+const DEFAULT_WHEEL_PRIZES = [
+  { id:'stamp1',   label:'+1 штамп',            emoji:'⭐', weight:28, type:'stamp',     value:1,  color:'#F0A93E' },
+  { id:'syrup',    label:'Сироп в подарок',     emoji:'🍯', weight:24, type:'free_item', value:'Сироп на выбор',      color:'#5EE6C0' },
+  { id:'disc5',    label:'Скидка 5%',           emoji:'🎫', weight:20, type:'discount',  value:5,  color:'#F0577A' },
+  { id:'dessert',  label:'ПП-десерт в подарок', emoji:'🍰', weight:14, type:'free_item', value:'ПП-десерт',           color:'#F0A93E' },
+  { id:'disc10',   label:'Скидка 10%',          emoji:'🎉', weight:10, type:'discount',  value:10, color:'#5EE6C0' },
+  { id:'coffee',   label:'Бесплатный кофе!',    emoji:'☕', weight:4,  type:'free_item', value:'Классический кофе (M)', color:'#F0577A' },
+];
+let WHEEL_PRIZES = DEFAULT_WHEEL_PRIZES.slice();
+
+async function loadWheelPrizes(){
+  try{
+    const res = await fetch(DB_URL + '/wheel_prizes.json');
+    const obj = await res.json();
+    if(obj && Object.keys(obj).length){
+      WHEEL_PRIZES = Object.keys(obj).map(id=>Object.assign({id}, obj[id]));
+    }
+  }catch(e){ /* keep defaults */ }
+}
+
+function buildWheelSVG(){
+  const n = WHEEL_PRIZES.length;
+  const seg = 360/n;
+  const r = 110, cx = 120, cy = 120;
+  let paths = '';
+  WHEEL_PRIZES.forEach((p,i)=>{
+    const a0 = (i*seg - 90) * Math.PI/180;
+    const a1 = ((i+1)*seg - 90) * Math.PI/180;
+    const x0 = cx + r*Math.cos(a0), y0 = cy + r*Math.sin(a0);
+    const x1 = cx + r*Math.cos(a1), y1 = cy + r*Math.sin(a1);
+    paths += `<path d="M${cx},${cy} L${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 0,1 ${x1.toFixed(2)},${y1.toFixed(2)} Z" fill="${p.color}" stroke="#0C0A10" stroke-width="2"/>`;
+    const mid = (a0+a1)/2;
+    const tx = cx + (r*0.62)*Math.cos(mid), ty = cy + (r*0.62)*Math.sin(mid);
+    const rotDeg = (i*seg + seg/2);
+    paths += `<text x="${tx.toFixed(2)}" y="${ty.toFixed(2)}" font-size="20" text-anchor="middle" dominant-baseline="middle" transform="rotate(${rotDeg.toFixed(1)} ${tx.toFixed(2)} ${ty.toFixed(2)})">${p.emoji}</text>`;
+  });
+  return `<svg viewBox="0 0 240 240" width="240" height="240">${paths}<circle cx="120" cy="120" r="16" fill="#0C0A10" stroke="#F0A93E" stroke-width="2"/></svg>`;
+}
+
+function pickWeightedPrize(){
+  const total = WHEEL_PRIZES.reduce((s,p)=>s+p.weight,0);
+  let r = Math.random()*total;
+  for(const p of WHEEL_PRIZES){ if(r<p.weight) return p; r -= p.weight; }
+  return WHEEL_PRIZES[0];
+}
+
+function todayDateStrMoscow(){
+  const utcMs = Date.now() + (new Date()).getTimezoneOffset()*60000;
+  const msk = new Date(utcMs + 3*60*60*1000);
+  return msk.toISOString().slice(0,10);
+}
+
+async function checkWheelAvailability(){
+  if(!LOYALTY_ID) return;
+  let dailyAvailable = true;
+  try{
+    const res = await fetch(DB_URL + '/guests/' + LOYALTY_ID + '/wheelLastSpin.json');
+    const lastSpin = await res.json();
+    dailyAvailable = lastSpin !== todayDateStrMoscow();
+  }catch(e){ dailyAvailable = true; }
+  try{
+    const bRes = await fetch(DB_URL + '/guests/' + LOYALTY_ID + '/bonusSpins.json');
+    state.wheelBonusSpins = (await bRes.json()) || 0;
+  }catch(e){ state.wheelBonusSpins = 0; }
+  state.wheelDailyAvailable = dailyAvailable;
+  state.wheelCanSpin = dailyAvailable || state.wheelBonusSpins > 0;
+  try{
+    const vRes = await fetch(DB_URL + '/guests/' + LOYALTY_ID + '/vouchers.json');
+    const vObj = await vRes.json();
+    state.myVouchers = vObj ? Object.keys(vObj).map(id=>Object.assign({id}, vObj[id])) : [];
+  }catch(e){ state.myVouchers = []; }
+  render();
+}
+
+async function spinWheel(){
+  if(!state.wheelCanSpin || state.wheelSpinning || !LOYALTY_ID) return;
+  state.wheelSpinning = true;
+  state.wheelResult = null;
+  render();
+
+  const prize = pickWeightedPrize();
+  const idx = WHEEL_PRIZES.indexOf(prize);
+  const n = WHEEL_PRIZES.length;
+  const seg = 360/n;
+  const normalize = a => ((a % 360) + 360) % 360;
+
+  // Where the winning segment's centre needs to sit (in degrees) for the
+  // fixed pointer at the top to be pointing at it.
+  const baseTarget = normalize(-(idx*seg + seg/2) - 90 + (Math.random()*seg*0.5 - seg*0.25));
+  const currentMod = normalize(state.wheelRotation || 0);
+  let forwardDelta = baseTarget - currentMod;
+  if(forwardDelta <= 0) forwardDelta += 360;
+  // Always spin forward (never snap backward) by several full turns plus the precise remainder.
+  const targetRotation = (state.wheelRotation || 0) + 360*4 + forwardDelta;
+
+  const disc = document.getElementById('wheelDisc');
+  if(disc){
+    disc.style.transition = 'transform 3.4s cubic-bezier(0.12,0.72,0.15,1)';
+    disc.style.transform = `rotate(${targetRotation}deg)`;
+  }
+
+  setTimeout(async ()=>{
+    // Lock in the final angle *before* any re-render, so the wheel stays exactly
+    // where it visually stopped instead of snapping back to 0 on redraw.
+    state.wheelRotation = targetRotation;
+    try{
+      if(state.wheelDailyAvailable){
+        await fetch(DB_URL + '/guests/' + LOYALTY_ID + '/wheelLastSpin.json', {
+          method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(todayDateStrMoscow())
+        });
+      } else if(state.wheelBonusSpins > 0){
+        await fetch(DB_URL + '/guests/' + LOYALTY_ID + '/bonusSpins.json', {
+          method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(state.wheelBonusSpins - 1)
+        });
+      }
+      if(prize.type === 'stamp'){
+        await awardStamps(LOYALTY_ID, prize.value);
+        initLoyalty();
+        state.wheelResult = { emoji: prize.emoji, label: prize.label, voucherId: null };
+      } else {
+        const voucherId = 'W' + Math.random().toString(36).slice(2,7).toUpperCase();
+        await fetch(DB_URL + '/guests/' + LOYALTY_ID + '/vouchers/' + voucherId + '.json', {
+          method:'PUT', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ label: prize.label, type: prize.type, value: prize.value, wonAt: Date.now(), redeemed:false })
+        });
+        state.wheelResult = { emoji: prize.emoji, label: prize.label, voucherId };
+      }
+    }catch(e){}
+    state.wheelSpinning = false;
+    state.wheelJustWon = true;
+    checkWheelAvailability();
+  }, 3400);
+}
+
 async function rewardReferrer(referrerId, friendId){
   try{
     const refData = await getLoyaltyGuest(referrerId);
@@ -2129,16 +2433,48 @@ async function awardStamps(id, count){
   const data = await getLoyaltyGuest(id);
   const isFirstEverStamp = !data.stamps || data.stamps===0;
   const total = (data.stamps||0) + count;
-  const justRewarded = total >= LOYALTY_GOAL;
+  const completions = Math.floor(total / LOYALTY_GOAL); // usually 0 or 1, but handle multi-completion just in case
+  const justRewarded = completions > 0;
   const stamps = total % LOYALTY_GOAL;
   await fetch(DB_URL + '/guests/' + id + '.json', {
     method:'PUT', headers:{'Content-Type':'application/json'},
     body: JSON.stringify(Object.assign({}, data, { stamps, justRewarded, lastStampAt: Date.now(), reminded:false }))
   });
+  if(justRewarded){
+    for(let i=0;i<completions;i++){
+      await grantFreeCoffeeVoucher(id);
+      await addBonusSpin(id);
+    }
+  }
   if(isFirstEverStamp && data.referredBy && !data.referralRewarded){
     await rewardReferrer(data.referredBy, id);
   }
   return { stamps, justRewarded };
+}
+
+// The 7th-stamp reward becomes a redeemable voucher — same shape and same
+// staff "Погасить приз" flow as wheel-of-fortune prizes, so we don't need a
+// second redemption system.
+async function grantFreeCoffeeVoucher(guestId){
+  const voucherId = 'F' + Math.random().toString(36).slice(2,7).toUpperCase();
+  try{
+    await fetch(DB_URL + '/guests/' + guestId + '/vouchers/' + voucherId + '.json', {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ label:'Бесплатный классический кофе (M)', type:'free_item', value:'Классический кофе (M)', wonAt: Date.now(), redeemed:false })
+    });
+  }catch(e){}
+}
+
+// Completing a loyalty card also earns one extra wheel spin, independent of
+// the once-a-day limit — stored as a simple counter on the guest record.
+async function addBonusSpin(guestId){
+  try{
+    const res = await fetch(DB_URL + '/guests/' + guestId + '/bonusSpins.json');
+    const current = (await res.json()) || 0;
+    await fetch(DB_URL + '/guests/' + guestId + '/bonusSpins.json', {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(current + 1)
+    });
+  }catch(e){}
 }
 
 async function chargeLoyaltyById(){
@@ -2147,7 +2483,7 @@ async function chargeLoyaltyById(){
   try{
     const result = await awardStamps(id, 1);
     state.chargeMsg = result.justRewarded
-      ? `🎉 Гость получает бесплатный кофе — классика, М! Счётчик сброшен.`
+      ? `🎉 Карта заполнена! Гостю выдан код на бесплатный кофе — попросите его показать карту (раздел «Мои призы»), там будет код для погашения.`
       : `Готово! У гостя ${id} теперь ${result.stamps} из ${LOYALTY_GOAL} чашек.`;
     state.chargeMsgOk = true;
   }catch(e){
@@ -2156,6 +2492,35 @@ async function chargeLoyaltyById(){
   }
   state.chargeIdValue = '';
   if(LOYALTY_ID && id===LOYALTY_ID){ initLoyalty(); }
+  render();
+}
+
+async function redeemVoucher(){
+  const guestId = (state.redeemGuestId||'').trim().toUpperCase();
+  const voucherId = (state.redeemVoucherId||'').trim().toUpperCase();
+  if(!guestId || !voucherId){ state.redeemMsg='Укажите ID гостя и код приза.'; state.redeemMsgOk=false; render(); return; }
+  try{
+    const res = await fetch(DB_URL + '/guests/' + guestId + '/vouchers/' + voucherId + '.json');
+    const voucher = await res.json();
+    if(!voucher){
+      state.redeemMsg = 'Такой приз не найден — проверьте ID гостя и код.';
+      state.redeemMsgOk = false;
+    } else if(voucher.redeemed){
+      state.redeemMsg = 'Этот приз уже был погашен ранее.';
+      state.redeemMsgOk = false;
+    } else {
+      await fetch(DB_URL + '/guests/' + guestId + '/vouchers/' + voucherId + '.json', {
+        method:'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ redeemed:true, redeemedAt: Date.now(), redeemedBy: state.staffName || null })
+      });
+      state.redeemMsg = `✓ Погашено: «${voucher.label}»`;
+      state.redeemMsgOk = true;
+      state.redeemVoucherId = '';
+    }
+  }catch(e){
+    state.redeemMsg = 'Не удалось проверить — попробуйте ещё раз.';
+    state.redeemMsgOk = false;
+  }
   render();
 }
 
@@ -2527,7 +2892,9 @@ document.addEventListener('click', (e)=>{
   const action = el.dataset.action;
 
   if(action==='go-cart'){ state.screen='cart'; render(); }
-  else if(action==='go-card'){ state.screen='card'; render(); loadReferrals(); loadMyOrders(); }
+  else if(action==='go-card'){ state.screen='card'; render(); loadReferrals(); loadMyOrders(); checkWheelAvailability(); }
+  else if(action==='spin-wheel'){ spinWheel(); }
+  else if(action==='dismiss-wheel-result'){ state.wheelJustWon = false; render(); }
   else if(action==='share-referral'){ shareReferralLink(); }
   else if(action==='back-to-menu'){ state.screen='menu'; render(); }
   else if(action==='set-category'){ state.category = el.dataset.cat; render(); }
@@ -2562,6 +2929,9 @@ document.addEventListener('click', (e)=>{
   else if(action==='staff-change-name'){ state.staffName=null; state.staffPinValue=''; render(); }
   else if(action==='staff-refresh'){ loadStaffOrders(); }
   else if(action==='staff-charge-loyalty'){ chargeLoyaltyById(); }
+  else if(action==='set-redeem-guest-id'){ state.redeemGuestId = el.value; }
+  else if(action==='set-redeem-voucher-id'){ state.redeemVoucherId = el.value; }
+  else if(action==='staff-redeem-voucher'){ redeemVoucher(); }
   else if(action==='staff-scan-qr'){ scanLoyaltyQr(); }
   else if(action==='admin-refresh'){ loadAdminOrders(); }
   else if(action==='admin-set-tab'){
@@ -2582,6 +2952,19 @@ document.addEventListener('click', (e)=>{
   else if(action==='admin-add-menu-item'){ addAdminMenuItem(); }
   else if(action==='admin-remove-menu-item'){ removeAdminMenuItem(el.dataset.id); }
   else if(action==='admin-save-post'){ saveAdminPost(); }
+  else if(action==='admin-save-prize'){ saveAdminPrize(); }
+  else if(action==='admin-edit-prize'){
+    const p = WHEEL_PRIZES.find(x=>x.id===el.dataset.id);
+    if(p){
+      state.editingPrizeId = p.id; state.newPrizeLabel = p.label; state.newPrizeEmoji = p.emoji;
+      state.newPrizeType = p.type; state.newPrizeValue = String(p.value); state.newPrizeWeight = String(p.weight);
+      render();
+    }
+  }
+  else if(action==='admin-cancel-prize-edit'){
+    state.editingPrizeId=null; state.newPrizeLabel=''; state.newPrizeEmoji=''; state.newPrizeValue=''; state.newPrizeWeight=''; render();
+  }
+  else if(action==='admin-remove-prize'){ removeAdminPrize(el.dataset.id); }
   else if(action==='admin-set-stop-cat'){ state.adminStopCat = el.dataset.cat; render(); }
   else if(action==='admin-toggle-stop'){ toggleStopItem(el.dataset.id); }
   else if(action==='admin-edit-item'){
@@ -2622,6 +3005,11 @@ document.addEventListener('input', (e)=>{
   else if(action==='set-post-date'){ state.newPostDate = el.value; }
   else if(action==='set-post-text'){ state.newPostText = el.value; }
   else if(action==='set-post-photo'){ state.newPostPhoto = el.value; }
+  else if(action==='set-prize-label'){ state.newPrizeLabel = el.value; }
+  else if(action==='set-prize-emoji'){ state.newPrizeEmoji = el.value; }
+  else if(action==='set-prize-type'){ state.newPrizeType = el.value; render(); }
+  else if(action==='set-prize-value'){ state.newPrizeValue = el.value; }
+  else if(action==='set-prize-weight'){ state.newPrizeWeight = el.value; }
   else if(action==='set-staff-pin'){ state.staffPinValue = el.value; }
   else if(action==='set-admin-pin'){ state.adminPinValue = el.value; }
 });
@@ -2779,6 +3167,7 @@ if(!cameFromPayment){
   })();
 }
 loadExtraMenu();
+loadWheelPrizes();
 initLoyalty();
 render();
 </script>
