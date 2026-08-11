@@ -818,6 +818,7 @@ let state = {
 let statusTimer = null;
 let uidCounter = 1;
 const WORKER_URL = 'https://solncekofe-bot.foxkiss1997.workers.dev';
+const PAYMENT_RELAY_URL = 'https://solncekofe-payment-relay.onrender.com';
 const DB_URL = 'https://solncekofe-fdcad-default-rtdb.firebaseio.com';
 const STAFF_PIN = '4444';
 const ADMIN_PIN = '55555';
@@ -1183,7 +1184,7 @@ async function placeOrder(){
 
   let result;
   try{
-    const res = await fetch(WORKER_URL + '/create-payment', {
+    const res = await fetch(PAYMENT_RELAY_URL + '/create-payment', {
       method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(paymentPayload)
     });
     result = await res.json();
