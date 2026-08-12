@@ -835,7 +835,7 @@ let state = {
   receiptContact:'',
   tipPercent:0, tipCustom:'',
   referralList:[], referralLoading:false,
-  wheelCanSpin:true, wheelSpinning:false, wheelResult:null, myVouchers:[], wheelBonusSpins:0, wheelDailyAvailable:true, wheelRotation:0, wheelJustWon:false,
+  wheelCanSpin:false, wheelSpinning:false, wheelResult:null, myVouchers:[], wheelBonusSpins:0, wheelRotation:0, wheelJustWon:false,
   redeemGuestId:'', redeemVoucherId:'', redeemMsg:'', redeemMsgOk:false,
   myOrders:[], myOrdersLoading:false,
   order:null,
@@ -1562,16 +1562,16 @@ function renderCard(){
       <div class="section">
         <div class="wheel-card">
           <div class="ref-title" style="text-align:center;">🎡 Колесо удачи</div>
-          <p class="ref-sub" style="text-align:center;">${state.wheelDailyAvailable ? 'Один бесплатный шанс в день' : 'Дневной шанс уже использован — заходи завтра'}</p>
+          <p class="ref-sub" style="text-align:center;">${state.wheelCanSpin ? 'Прокрутка ждёт тебя — заслужена заполненной картой!' : `Заполни все 7 штампов на карте — получишь прокрутку колеса`}</p>
           ${state.wheelBonusSpins>0 ? `
-            <div class="wheel-bonus-badge">🎁 +${state.wheelBonusSpins} бонусн${state.wheelBonusSpins===1?'ая прокрутка':'ые прокрутки'} за заполненную карту!</div>
+            <div class="wheel-bonus-badge">🎁 Доступно прокруток: ${state.wheelBonusSpins}</div>
           ` : ''}
           <div class="wheel-wrap">
             <div class="wheel-pointer">▼</div>
             <div class="wheel-disc" id="wheelDisc" style="transform:rotate(${state.wheelRotation||0}deg);">${buildWheelSVG()}</div>
           </div>
           <button class="ref-btn rippleable" data-action="spin-wheel" ${(!state.wheelCanSpin || state.wheelSpinning) ? 'disabled style="opacity:0.5;"' : ''}>
-            ${state.wheelSpinning ? 'Крутим…' : (state.wheelCanSpin ? (state.wheelDailyAvailable ? 'Крутить колесо' : 'Крутить бонусную прокрутку') : 'Уже использовано сегодня')}
+            ${state.wheelSpinning ? 'Крутим…' : (state.wheelCanSpin ? 'Крутить колесо' : 'Пока нет доступных прокруток')}
           </button>
         </div>
       </div>
@@ -2318,26 +2318,13 @@ function pickWeightedPrize(){
   return WHEEL_PRIZES[0];
 }
 
-function todayDateStrMoscow(){
-  const utcMs = Date.now() + (new Date()).getTimezoneOffset()*60000;
-  const msk = new Date(utcMs + 3*60*60*1000);
-  return msk.toISOString().slice(0,10);
-}
-
 async function checkWheelAvailability(){
   if(!LOYALTY_ID) return;
-  let dailyAvailable = true;
-  try{
-    const res = await fetch(DB_URL + '/guests/' + LOYALTY_ID + '/wheelLastSpin.json');
-    const lastSpin = await res.json();
-    dailyAvailable = lastSpin !== todayDateStrMoscow();
-  }catch(e){ dailyAvailable = true; }
   try{
     const bRes = await fetch(DB_URL + '/guests/' + LOYALTY_ID + '/bonusSpins.json');
     state.wheelBonusSpins = (await bRes.json()) || 0;
   }catch(e){ state.wheelBonusSpins = 0; }
-  state.wheelDailyAvailable = dailyAvailable;
-  state.wheelCanSpin = dailyAvailable || state.wheelBonusSpins > 0;
+  state.wheelCanSpin = state.wheelBonusSpins > 0;
   try{
     const vRes = await fetch(DB_URL + '/guests/' + LOYALTY_ID + '/vouchers.json');
     const vObj = await vRes.json();
@@ -2378,11 +2365,7 @@ async function spinWheel(){
     // where it visually stopped instead of snapping back to 0 on redraw.
     state.wheelRotation = targetRotation;
     try{
-      if(state.wheelDailyAvailable){
-        await fetch(DB_URL + '/guests/' + LOYALTY_ID + '/wheelLastSpin.json', {
-          method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(todayDateStrMoscow())
-        });
-      } else if(state.wheelBonusSpins > 0){
+      if(state.wheelBonusSpins > 0){
         await fetch(DB_URL + '/guests/' + LOYALTY_ID + '/bonusSpins.json', {
           method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(state.wheelBonusSpins - 1)
         });
