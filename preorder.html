@@ -1268,6 +1268,22 @@ function clearStoredOrder(){
   try{ localStorage.removeItem('sk_active_order'); }catch(e){}
 }
 
+// Remembers which shop + which staff member is logged in on this device, so
+// staff don't have to re-enter their password every time the app reopens.
+function saveStaffSession(shopId, name){
+  try{ localStorage.setItem('sk_staff_session', JSON.stringify({ shopId, name })); }catch(e){}
+}
+function loadStaffSession(){
+  try{
+    const raw = localStorage.getItem('sk_staff_session');
+    if(!raw) return null;
+    return JSON.parse(raw);
+  }catch(e){ return null; }
+}
+function clearStaffSession(){
+  try{ localStorage.removeItem('sk_staff_session'); }catch(e){}
+}
+
 /* ---------- RENDER: MENU ---------- */
 function renderMenu(){
   const items = allItems().filter(i=>i.category===state.category);
@@ -1715,6 +1731,7 @@ function renderStaff(){
     <div class="screen">
       <div class="topbar"><button class="iconbtn rippleable" data-action="staff-change-name">←</button><h2>${shop.name}</h2>
         <button class="iconbtn rippleable" data-action="staff-refresh" style="margin-left:auto;">⟳</button>
+        <button class="iconbtn rippleable" data-action="staff-logout" title="Выйти">🚪</button>
       </div>
       <div class="section">
         <div class="section-label">Вы: ${esc(state.staffName)}</div>
@@ -2077,6 +2094,7 @@ async function staffPasswordLogin(){
   state.staffName = match.name;
   state.staffPinError = '';
   state.staffPinValue = '';
+  saveStaffSession(state.staffShop, match.name);
   // Auto-link this device's Telegram id to the employee, so order alerts reach them personally.
   if(TELEGRAM_ID && match.tg !== TELEGRAM_ID){
     try{
@@ -2932,7 +2950,17 @@ document.addEventListener('click', (e)=>{
   else if(action==='new-order'){ newOrder(); }
   else if(action==='status-to-menu'){ state.screen='menu'; render(); }
   else if(action==='back-to-status'){ state.screen='status'; render(); }
-  else if(action==='go-staff'){ state.screen='staff'; render(); }
+  else if(action==='go-staff'){
+    const saved = loadStaffSession();
+    if(saved && saved.shopId && saved.name){
+      state.staffShop = saved.shopId;
+      state.staffName = saved.name;
+      state.screen='staff'; render();
+      loadStaffOrders();
+    } else {
+      state.screen='staff'; render();
+    }
+  }
   else if(action==='go-admin'){ state.screen='admin'; render(); }
   else if(action==='staff-pin-submit'){ staffPasswordLogin(); }
   else if(action==='admin-pin-submit'){
@@ -2940,8 +2968,9 @@ document.addEventListener('click', (e)=>{
     else{ state.adminPinError='Неверный код доступа.'; render(); }
   }
   else if(action==='staff-pick-shop'){ state.staffShop=parseInt(el.dataset.shop,10); loadStaffList(); }
-  else if(action==='staff-change-shop'){ state.staffShop=null; state.staffName=null; state.staffOrders=[]; state.staffPinValue=''; state.staffPinError=''; render(); }
-  else if(action==='staff-change-name'){ state.staffName=null; state.staffPinValue=''; render(); }
+  else if(action==='staff-change-shop'){ state.staffShop=null; state.staffName=null; state.staffOrders=[]; state.staffPinValue=''; state.staffPinError=''; clearStaffSession(); render(); }
+  else if(action==='staff-change-name'){ state.staffName=null; state.staffPinValue=''; clearStaffSession(); render(); }
+  else if(action==='staff-logout'){ state.staffShop=null; state.staffName=null; state.staffOrders=[]; clearStaffSession(); state.screen='menu'; render(); }
   else if(action==='staff-refresh'){ loadStaffOrders(); }
   else if(action==='staff-charge-loyalty'){ chargeLoyaltyById(); }
   else if(action==='set-redeem-guest-id'){ state.redeemGuestId = el.value; }
