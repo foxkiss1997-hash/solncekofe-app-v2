@@ -11,29 +11,30 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root{
-    --paper:#0C0A10;
-    --paper-dim:#050409;
-    --ink:#F7F4EE;
-    --ink-soft:#9A94A6;
-    --amber:#F0A93E;
-    --amber-deep:#E8722E;
-    --mint:#5EE6C0;
-    --mint-soft:rgba(94,230,192,0.14);
-    --coral:#F0577A;
-    --coral-soft:rgba(240,87,122,0.14);
-    --hairline:rgba(247,244,238,0.12);
-    --border:rgba(247,244,238,0.12);
-    --card:rgba(255,255,255,0.055);
-    --card-strong:rgba(255,255,255,0.09);
+    --paper:#F2E6D6;
+    --paper-dim:#E9D9C3;
+    --ink:#4A3B2F;
+    --ink-soft:#8F7E6D;
+    --amber:#B98450;
+    --amber-deep:#8A5D34;
+    --mint:#7C9A78;
+    --mint-deep:#5C7859;
+    --mint-soft:rgba(124,154,120,0.16);
+    --coral:#C98B93;
+    --coral-deep:#A15D66;
+    --coral-soft:rgba(201,139,147,0.16);
+    --hairline:rgba(74,59,47,0.12);
+    --border:rgba(74,59,47,0.12);
+    --card:rgba(255,252,247,0.5);
+    --card-strong:rgba(255,252,247,0.75);
     --glass-blur:20px;
-    --shine:rgba(255,255,255,0.16);
-    --shadow-col:rgba(0,0,0,0.6);
+    --shadow-col:rgba(90,65,40,0.18);
     --radius-lg:26px;
     --radius-md:18px;
     --radius-sm:13px;
-    --sh-sm:0 8px 22px rgba(0,0,0,0.35);
-    --sh-md:0 18px 40px rgba(0,0,0,0.45);
-    --sh-lg:0 30px 64px rgba(0,0,0,0.55);
+    --sh-sm:0 8px 20px rgba(90,65,40,0.12);
+    --sh-md:0 16px 34px rgba(90,65,40,0.16);
+    --sh-lg:0 26px 56px rgba(90,65,40,0.20);
     --font-hero:'Playfair Display', serif;
     --font-display:'Plus Jakarta Sans', system-ui, sans-serif;
     --font-body:'Plus Jakarta Sans', system-ui, sans-serif;
@@ -52,44 +53,6 @@
     position:relative;
     overflow-x:hidden;
   }
-  .deco{position:fixed;z-index:0;pointer-events:none;}
-
-  .aurora{position:fixed;z-index:0;pointer-events:none;inset:0;overflow:hidden;}
-  .aurora-blob{position:absolute;border-radius:50%;filter:blur(60px);opacity:0.55;}
-  .aurora-1{width:340px;height:340px;background:radial-gradient(circle, var(--amber), transparent 70%);top:-120px;left:-90px;animation:auroraFloat1 22s ease-in-out infinite;}
-  .aurora-2{width:380px;height:380px;background:radial-gradient(circle, var(--coral), transparent 70%);bottom:-160px;right:-120px;animation:auroraFloat2 26s ease-in-out infinite;}
-  .aurora-3{width:280px;height:280px;background:radial-gradient(circle, var(--mint), transparent 70%);top:38%;left:50%;opacity:0.28;animation:auroraFloat3 30s ease-in-out infinite;}
-
-  .suntravel{
-    position:fixed; z-index:0; pointer-events:none;
-    left:-70px; top:56px;
-    width:46px; height:46px; border-radius:50%;
-    background:linear-gradient(120deg, var(--amber), var(--coral), var(--mint), var(--amber-deep), var(--amber));
-    background-size:300% 100%;
-    box-shadow: 0 0 32px 8px rgba(240,169,62,0.45);
-    animation: suncross 18s cubic-bezier(.42,0,.58,1) infinite, chameleon 10s linear infinite;
-  }
-  .suntravel::before{
-    content:""; position:absolute; right:100%; top:50%; transform: translateY(-50%);
-    width:90px; height:4px; border-radius:10px; filter: blur(3px);
-    background: linear-gradient(90deg, transparent, rgba(240,169,62,0.45));
-  }
-  @keyframes suncross{
-    0%   { left:-70px; top:120px; opacity:0; }
-    6%   { opacity:0.9; }
-    50%  { top:24px; }
-    94%  { opacity:0.9; }
-    100% { left:100vw; top:120px; opacity:0; }
-  }
-  @media (prefers-reduced-motion: reduce){
-    .suntravel{ animation:none; display:none; }
-  }
-  @keyframes auroraFloat1{ 0%,100%{ transform:translate(0,0) scale(1); } 50%{ transform:translate(40px,50px) scale(1.15); } }
-  @keyframes auroraFloat2{ 0%,100%{ transform:translate(0,0) scale(1); } 50%{ transform:translate(-30px,-40px) scale(1.1); } }
-  @keyframes auroraFloat3{ 0%,100%{ transform:translate(-50%,0) scale(1); } 50%{ transform:translate(-50%,-60px) scale(1.2); } }
-  @media (prefers-reduced-motion: reduce){
-    .aurora-blob{ animation:none; }
-  }
 
   .shell{
     position:relative;z-index:1;
@@ -106,7 +69,7 @@
       border:1px solid var(--border);
       box-shadow:var(--sh-lg);
       overflow:hidden;
-      background:rgba(12,10,16,0.4);
+      background:rgba(255,252,247,0.45);
       backdrop-filter:blur(6px);
     }
   }
@@ -132,8 +95,7 @@
   .brand-mark{display:flex;align-items:center;gap:10px;}
   .badge{
     width:34px;height:34px;border-radius:11px;
-    background:linear-gradient(120deg, var(--amber), var(--coral), var(--mint), var(--amber-deep), var(--amber));
-    background-size:300% 100%; animation:chameleon 10s linear infinite;
+    background:var(--amber);
     display:flex;align-items:center;justify-content:center;flex:none;overflow:hidden;
   }
   .wordmark{font-family:var(--font-display);font-weight:800;font-size:19px;letter-spacing:-.02em;}
@@ -145,18 +107,15 @@
   }
   .cartbtn:active{transform:scale(0.96)!important;}
   .cartbtn .dot{
-    background:var(--amber);color:var(--ink);border-radius:999px;min-width:18px;height:18px;
+    background:var(--amber);color:#fff;border-radius:999px;min-width:18px;height:18px;
     font-size:11px;display:flex;align-items:center;justify-content:center;padding:0 5px;
     font-family:var(--font-mono);font-weight:700;
   }
   .greeting{font-family:var(--font-hero);font-optical-sizing:auto;font-size:26px;font-weight:700;margin:16px 0 4px;line-height:1.2;}
   .mark{
-    background:linear-gradient(90deg, var(--amber), var(--coral), var(--mint), var(--amber-deep), var(--amber));
-    background-size:300% 100%; animation:chameleon 10s linear infinite;
-    color:#140800; padding:1px 6px;border-radius:5px;box-decoration-break:clone;-webkit-box-decoration-break:clone;
+    background:var(--card-strong);
+    color:var(--amber-deep); padding:1px 6px;border-radius:5px;box-decoration-break:clone;-webkit-box-decoration-break:clone;
   }
-  @keyframes chameleon{ 0%{ background-position:0% 50%; } 100%{ background-position:300% 50%; } }
-  @media (prefers-reduced-motion: reduce){ .mark{ animation:none; } }
   .subgreeting{color:var(--ink-soft);font-size:13.5px;margin:0 0 16px;line-height:1.5;}
 
   /* Category tabs */
@@ -168,7 +127,7 @@
     cursor:pointer;white-space:nowrap;position:relative;overflow:hidden;
     transition:background .15s ease, color .15s ease;
   }
-  .tab.active{background:var(--amber);color:#140800;}
+  .tab.active{background:var(--amber);color:#fff;}
 
   /* Menu list */
   .menu-list{padding:2px 18px 12px;display:flex;flex-direction:column;gap:8px;}
@@ -177,24 +136,20 @@
     border:1px solid var(--border);border-radius:var(--radius-md);padding:12px;
     cursor:pointer;position:relative;overflow:hidden;box-shadow:var(--sh-sm);
   }
-  .item-card::before{
-    content:"";position:absolute;top:0;left:0;right:0;height:1px;
-    background:linear-gradient(90deg, transparent, var(--shine), transparent);
-  }
   .item-card:active{transform:scale(0.98)!important;background:var(--card-strong);}
   .item-icon{
     width:46px;height:46px;border-radius:13px;border:none;
-    display:flex;align-items:center;justify-content:center;font-size:20px;flex:none;
+    display:flex;align-items:center;justify-content:center;flex:none;
+    background:var(--card-strong);
   }
-  .swatch-amber{background:var(--amber);}
-  .swatch-coral{background:var(--coral-soft);}
-  .swatch-mint{background:var(--mint-soft);}
+  .item-icon svg{width:22px;height:22px;}
+  .item-icon img{width:100%;height:100%;object-fit:cover;border-radius:inherit;}
   .item-info{flex:1;min-width:0;}
   .item-info h3{margin:0 0 5px;font-family:var(--font-display);font-size:15.5px;font-weight:700;}
   .item-price{font-family:var(--font-mono);font-size:12.5px;font-weight:600;}
   .item-add{
     width:32px;height:32px;border-radius:50%;border:none;background:var(--amber);
-    color:#140800;font-size:18px;font-weight:800;flex:none;cursor:pointer;
+    color:#fff;font-size:18px;font-weight:800;flex:none;cursor:pointer;
     display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;
   }
   .item-add:active{transform:scale(.85)!important;}
@@ -202,31 +157,24 @@
   /* Sticky bottom bar */
   .stickybar{
     position:sticky;bottom:0;left:0;right:0;padding:12px 18px 20px;
-    background:linear-gradient(to top, var(--paper) 75%, rgba(252,250,243,0));
+    background:var(--paper);
     margin-top:auto;
   }
   .btn-primary{
     width:100%;border:none;border-radius:18px;padding:16px 20px;
-    background:linear-gradient(90deg, var(--amber), var(--coral), var(--mint), var(--amber-deep), var(--amber));
-    background-size:300% 100%; animation:chameleon 10s linear infinite;
-    color:#140800;font-family:var(--font-display);
+    background:var(--amber);
+    color:#fff;font-family:var(--font-display);
     font-size:15.5px;font-weight:800;cursor:pointer;display:flex;align-items:center;
-    justify-content:space-between;box-shadow:0 10px 26px rgba(240,169,62,0.35);position:relative;overflow:hidden;letter-spacing:-.01em;
+    justify-content:space-between;box-shadow:0 10px 22px rgba(138,93,52,0.28);position:relative;overflow:hidden;letter-spacing:-.01em;
   }
-  .btn-primary::after{
-    content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;
-    background:linear-gradient(115deg, transparent, rgba(255,255,255,0.4), transparent);
-    animation:shine 3.2s ease-in-out infinite;
-  }
-  @keyframes shine{ 0%{ left:-60%; } 55%,100%{ left:130%; } }
-  @media (prefers-reduced-motion: reduce){ .btn-primary::after{ animation:none; display:none; } }
   .btn-primary:active{transform:scale(0.98)!important;}
   .btn-primary[disabled]{opacity:.4;pointer-events:none;}
   .btn-primary span.sub{font-family:var(--font-mono);font-weight:600;}
 
   /* Customize screen */
   .cust-hero{padding:6px 18px 10px;text-align:center;}
-  .cust-hero .item-icon{width:70px;height:70px;font-size:32px;border-radius:20px;margin:0 auto 12px;background:var(--amber);}
+  .cust-hero .item-icon{width:70px;height:70px;border-radius:20px;margin:0 auto 12px;background:var(--card-strong);box-shadow:var(--sh-sm);}
+  .cust-hero .item-icon svg{width:32px;height:32px;}
   .cust-hero h1{font-family:var(--font-display);font-size:21px;margin:0;}
 
   .section{padding:12px 18px;}
@@ -234,12 +182,12 @@
 
   .name-field-card{
     display:flex;align-items:flex-start;gap:12px;padding:14px;border-radius:var(--radius-md);
-    background:linear-gradient(120deg, rgba(240,169,62,0.14), rgba(240,87,122,0.10));
-    border:1px solid rgba(240,169,62,0.35);
+    background:rgba(185,132,80,0.10);
+    border:1px solid rgba(185,132,80,0.28);
   }
   .name-field-icon{
     width:38px;height:38px;border-radius:11px;flex:none;
-    background:linear-gradient(135deg, var(--amber), var(--coral));
+    background:var(--amber);
     display:flex;align-items:center;justify-content:center;font-size:18px;
   }
   .name-field-label{font-size:14px;font-weight:700;color:var(--ink);}
@@ -252,7 +200,7 @@
   .segmented .seg.active{background:var(--amber);}
   .segmented .seg .lb{font-family:var(--font-display);font-weight:700;font-size:14px;}
   .segmented .seg .sb{font-size:10px;color:var(--ink-soft);margin-top:1px;font-family:var(--font-mono);text-transform:uppercase;}
-  .segmented .seg.active .lb, .segmented .seg.active .sb{color:var(--paper);}
+  .segmented .seg.active .lb, .segmented .seg.active .sb{color:#fff;}
 
   .opt-list{display:flex;flex-direction:column;gap:7px;}
   .opt-row{
@@ -260,14 +208,14 @@
     border:1px solid var(--border);background:var(--card);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius-md);
     padding:11px 13px;cursor:pointer;position:relative;overflow:hidden;
   }
-  .opt-row.active{background:var(--amber);}
+  .opt-row.active{background:var(--mint-soft);border-color:var(--mint);}
   .opt-left{display:flex;align-items:center;gap:10px;}
   .radio{width:17px;height:17px;border-radius:50%;border:1px solid var(--border);flex:none;position:relative;background:var(--card);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));}
-  .opt-row.active .radio{background:var(--ink);}
-  .opt-row.active .radio::after{content:'';position:absolute;inset:3px;border-radius:50%;background:var(--amber);}
+  .opt-row.active .radio{border-color:var(--mint);background:var(--card-strong);}
+  .opt-row.active .radio::after{content:'';position:absolute;inset:3px;border-radius:50%;background:var(--mint);}
   .opt-name{font-size:13.5px;font-weight:600;}
   .opt-delta{font-family:var(--font-mono);font-size:12px;color:var(--ink-soft);}
-  .opt-row.active .opt-delta{color:var(--ink);}
+  .opt-row.active .opt-delta{color:var(--mint-deep);}
 
   .foam-row{
     display:flex;align-items:center;justify-content:space-between;
@@ -280,7 +228,7 @@
   .switch{width:42px;height:24px;border-radius:7px;background:var(--paper-dim);border:1px solid var(--border);position:relative;cursor:pointer;flex:none;overflow:visible;}
   .switch.on{background:var(--mint);}
   .switch::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:4px;background:var(--ink);transition:left .16s cubic-bezier(.3,1.4,.4,1);}
-  .switch.on::after{left:20px;background:var(--paper);}
+  .switch.on::after{left:20px;background:#fff;}
 
   .qty-row{display:flex;align-items:center;justify-content:center;gap:18px;padding:6px 0 2px;}
   .qty-btn{
@@ -296,7 +244,8 @@
     display:flex;gap:11px;background:var(--card);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));border:1px solid var(--border);
     border-radius:var(--radius-lg);padding:11px;align-items:flex-start;
   }
-  .cart-line .item-icon{width:42px;height:42px;font-size:19px;border-radius:11px;}
+  .cart-line .item-icon{width:42px;height:42px;border-radius:11px;}
+  .cart-line .item-icon svg{width:19px;height:19px;}
   .cart-line-info{flex:1;min-width:0;}
   .cart-line-info h4{margin:0 0 3px;font-size:14px;font-family:var(--font-display);}
   .cart-line-info .opts{font-size:10.5px;color:var(--ink-soft);line-height:1.5;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.02em;}
@@ -344,7 +293,7 @@
   .addrcard:active{transform:scale(0.98);}
   .addrcard .aicon{
     width:42px;height:42px;border-radius:12px;flex:none;
-    background:linear-gradient(135deg, var(--amber), var(--coral));
+    background:var(--amber);
     display:flex;align-items:center;justify-content:center;font-size:18px;
   }
   .addrcard .atext{flex:1;min-width:0;}
@@ -361,7 +310,7 @@
   }
   .member-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
   .member-card-brand{display:flex;align-items:center;gap:7px;font-family:var(--font-display);font-weight:700;font-size:14px;}
-  .member-card-tag{font-family:var(--font-mono);font-size:10.5px;background:var(--amber);border:1px solid var(--border);padding:3px 9px;border-radius:999px;font-weight:700;}
+  .member-card-tag{font-family:var(--font-mono);font-size:10.5px;background:var(--amber);color:#fff;border:1px solid var(--border);padding:3px 9px;border-radius:999px;font-weight:700;}
   .qr-wrap{
     display:inline-flex;padding:10px;background:#ffffff;border:1px solid var(--border);
     border-radius:var(--radius-md);margin:0 auto 12px;
@@ -381,17 +330,16 @@
     border:1px solid var(--border);background:var(--card);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius-md);
     padding:11px 13px;cursor:pointer;margin-bottom:8px;position:relative;overflow:hidden;
   }
-  .shop-row.active{background:var(--amber);}
+  .shop-row.active{background:var(--mint-soft);border-color:var(--mint);}
   .shop-row .nm{font-size:13.5px;font-weight:700;}
   .shop-row .ad{font-size:11px;color:var(--ink-soft);margin-top:1px;}
-  .shop-row.active .ad{color:var(--ink);}
 
   .pickup-toggle{display:flex;gap:8px;margin-bottom:10px;}
   .pickup-toggle .pt{
     flex:1;text-align:center;padding:10px;border-radius:var(--radius-md);border:1px solid var(--border);
     background:var(--card);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));font-size:12.5px;font-weight:700;cursor:pointer;position:relative;overflow:hidden;
   }
-  .pickup-toggle .pt.active{background:var(--amber);color:#140800;}
+  .pickup-toggle .pt.active{background:var(--mint-soft);color:var(--mint-deep);border-color:var(--mint);}
   .time-input{
     width:100%;border:1px solid var(--border);background:var(--card);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius-md);
     padding:10px 13px;font-family:var(--font-mono);font-size:13.5px;color:var(--ink);
@@ -405,7 +353,7 @@
     display:flex;align-items:center;gap:11px;border:1px solid var(--border);background:var(--card);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
     border-radius:var(--radius-md);padding:12px 13px;cursor:pointer;margin-bottom:8px;position:relative;overflow:hidden;
   }
-  .pay-row.active{background:var(--amber);}
+  .pay-row.active{background:var(--mint-soft);border-color:var(--mint);}
   .pay-row .pico{width:30px;height:30px;border-radius:9px;border:1px solid var(--border);background:var(--paper);display:flex;align-items:center;justify-content:center;font-size:15px;flex:none;}
   .pay-row .plabel{font-size:13.5px;font-weight:600;flex:1;}
   .text-input{
@@ -417,7 +365,7 @@
   .status-top{padding:20px 18px 2px;}
   .status-eyebrow{
     display:inline-block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;
-    color:var(--mint);font-weight:700;background:var(--mint-soft);border:none;
+    color:var(--mint-deep);font-weight:700;background:var(--mint-soft);border:none;
     padding:5px 11px;border-radius:999px;
   }
   .eta-hero{padding:20px 22px 4px;}
@@ -438,7 +386,7 @@
   }
   .progress-fill{
     height:100%;width:0%;border-radius:999px;
-    background:linear-gradient(90deg, var(--amber), var(--amber-deep));
+    background:var(--amber);
     transition:width 0.35s linear;
   }
   .dial-order{ text-align:left; font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft); margin:12px 18px 0; }
@@ -474,6 +422,7 @@
     display:flex;flex-direction:column;align-items:center;justify-content:center;
     transform:rotate(-7deg);box-shadow:var(--sh-md);
     animation:stampIn .5s cubic-bezier(.2,1.4,.4,1) both;
+    color:#fff;
   }
   .ready-stamp b{font-family:var(--font-display);font-size:15px;line-height:1.1;}
   .ready-stamp span{font-size:9px;text-transform:uppercase;letter-spacing:.06em;margin-top:2px;}
@@ -492,19 +441,19 @@
   .staff-links a:active{color:var(--ink);}
 
   .pin-gate{display:flex;flex-direction:column;gap:10px;}
-  .pin-error{color:var(--coral);font-size:12.5px;font-weight:600;}
+  .pin-error{color:var(--coral-deep);font-size:12.5px;font-weight:600;}
 
   .stat-row{display:flex;gap:10px;}
   .stat-chip{
     flex:1;background:var(--card);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
     border:1px solid var(--border);border-radius:var(--radius-md);padding:14px;text-align:center;
   }
-  .stat-num{font-family:var(--font-hero);font-size:26px;font-weight:600;color:var(--amber);}
+  .stat-num{font-family:var(--font-hero);font-size:26px;font-weight:600;color:var(--amber-deep);}
   .stat-lab{font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;margin-top:4px;}
 
   .ref-hero{
-    background:linear-gradient(135deg, rgba(240,169,62,0.18), rgba(240,87,122,0.14));
-    border:1px solid rgba(240,169,62,0.35); border-radius:var(--radius-lg); padding:20px;
+    background:rgba(185,132,80,0.10);
+    border:1px solid rgba(185,132,80,0.28); border-radius:var(--radius-lg); padding:20px;
     text-align:center;
   }
   .ref-icon{ font-size:32px; margin-bottom:8px; }
@@ -512,66 +461,65 @@
   .ref-sub{ font-size:12.5px; color:var(--ink-soft); line-height:1.5; margin:0 0 15px; }
   .ref-btn{
     display:block; width:100%; padding:13px; border:none; border-radius:13px; cursor:pointer;
-    background:linear-gradient(90deg, var(--amber), var(--coral), var(--mint), var(--amber));
-    background-size:300% 100%; animation:chameleon 10s linear infinite;
-    color:#140800; font-weight:800; font-size:14px; text-align:center; font-family:var(--font-display);
+    background:var(--amber);
+    color:#fff; font-weight:800; font-size:14px; text-align:center; font-family:var(--font-display);
   }
   .ref-btn:active{ transform:scale(0.98); }
   .ref-link{
     margin-top:12px; font-family:var(--font-mono); font-size:11px; color:var(--ink-soft);
-    background:rgba(0,0,0,0.28); border-radius:10px; padding:8px 12px; word-break:break-all;
+    background:rgba(0,0,0,0.06); border-radius:10px; padding:8px 12px; word-break:break-all;
   }
   .friend-row{
     display:flex; align-items:center; gap:12px; background:var(--card); border:1px solid var(--border);
     border-radius:var(--radius-sm); padding:11px 13px; margin-bottom:8px;
   }
-  .friend-icon{ width:34px;height:34px;border-radius:10px; background:linear-gradient(135deg,var(--amber),var(--coral));
+  .friend-icon{ width:34px;height:34px;border-radius:10px; background:var(--amber);
     display:flex;align-items:center;justify-content:center; font-size:15px; flex:none; }
   .friend-info b{ font-size:13px; }
   .friend-info div{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
-  .friend-badge{ margin-left:auto; font-size:10.5px; font-weight:700; color:var(--mint); background:rgba(94,230,192,0.14); padding:4px 9px; border-radius:999px; white-space:nowrap; }
+  .friend-badge{ margin-left:auto; font-size:10.5px; font-weight:700; color:var(--mint-deep); background:var(--mint-soft); padding:4px 9px; border-radius:999px; white-space:nowrap; }
 
   .wheel-card{
-    background:linear-gradient(160deg, rgba(240,169,62,0.12), rgba(240,87,122,0.08));
-    border:1px solid rgba(240,169,62,0.3); border-radius:var(--radius-lg); padding:22px 18px;
+    background:rgba(185,132,80,0.08);
+    border:1px solid rgba(185,132,80,0.24); border-radius:var(--radius-lg); padding:22px 18px;
     text-align:center;
   }
   .wheel-bonus-badge{
     margin:10px auto 0; max-width:280px; font-size:12.5px; font-weight:700; text-align:center;
-    color:#140800; background:linear-gradient(120deg, var(--amber), var(--mint)); padding:8px 14px; border-radius:999px;
+    color:#fff; background:var(--mint); padding:8px 14px; border-radius:999px;
   }
   .wheel-wrap{ position:relative; width:240px; height:240px; margin:16px auto; }
-  .wheel-pointer{ position:absolute; top:-6px; left:50%; transform:translateX(-50%); font-size:22px; color:var(--amber); z-index:2; filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5)); }
-  .wheel-disc{ width:240px; height:240px; border-radius:50%; box-shadow:0 0 0 4px rgba(255,255,255,0.08), 0 10px 30px rgba(0,0,0,0.4); }
-  .wheel-disc svg text{ fill:#140800; font-weight:700; }
+  .wheel-pointer{ position:absolute; top:-6px; left:50%; transform:translateX(-50%); font-size:22px; color:var(--amber-deep); z-index:2; }
+  .wheel-disc{ width:240px; height:240px; border-radius:50%; box-shadow:0 0 0 4px rgba(255,255,255,0.5), 0 10px 24px rgba(90,65,40,0.22); }
+  .wheel-disc svg text{ fill:#fff; font-weight:700; }
 
   .wheel-overlay{
-    position:fixed; inset:0; background:rgba(6,4,8,0.82); backdrop-filter:blur(6px);
+    position:fixed; inset:0; background:rgba(30,22,16,0.6); backdrop-filter:blur(6px);
     display:flex; align-items:center; justify-content:center; z-index:60; padding:24px;
     animation:wheelFadeIn 0.25s ease;
   }
   @keyframes wheelFadeIn{ from{ opacity:0; } to{ opacity:1; } }
   .wheel-overlay-card{
-    background:linear-gradient(160deg, rgba(240,169,62,0.18), rgba(240,87,122,0.12)), var(--paper);
-    border:1px solid rgba(240,169,62,0.4); border-radius:26px; padding:34px 26px; text-align:center;
+    background:var(--paper);
+    border:1px solid rgba(185,132,80,0.35); border-radius:26px; padding:34px 26px; text-align:center;
     max-width:340px; width:100%; animation:wheelPopIn 0.4s cubic-bezier(0.2,0.9,0.3,1.3);
   }
   @keyframes wheelPopIn{ from{ transform:scale(0.7); opacity:0; } to{ transform:scale(1); opacity:1; } }
   .wheel-overlay-emoji{ font-size:64px; line-height:1; margin-bottom:10px; }
-  .wheel-overlay-title{ font-family:var(--font-hero); font-size:24px; font-weight:700; color:var(--amber); }
+  .wheel-overlay-title{ font-family:var(--font-hero); font-size:24px; font-weight:700; color:var(--amber-deep); }
   .wheel-overlay-prize{ font-size:19px; font-weight:700; color:var(--ink); margin-top:6px; }
   .wheel-overlay-code{ font-size:13.5px; color:var(--ink-soft); margin-top:14px; line-height:1.5; }
-  .wheel-overlay-code b{ color:var(--mint); font-size:17px; letter-spacing:0.04em; }
+  .wheel-overlay-code b{ color:var(--mint-deep); font-size:17px; letter-spacing:0.04em; }
 
   .active-order-banner{
     display:flex; align-items:center; gap:12px; cursor:pointer;
-    background:linear-gradient(120deg, rgba(94,230,192,0.16), rgba(240,169,62,0.10));
-    border:1px solid rgba(94,230,192,0.35); border-radius:var(--radius-md); padding:13px 14px;
+    background:var(--mint-soft);
+    border:1px solid var(--mint); border-radius:var(--radius-md); padding:13px 14px;
   }
   .active-order-banner:active{ transform:scale(0.98); }
   .active-order-icon{
     width:36px;height:36px;border-radius:11px;flex:none;
-    background:linear-gradient(135deg, var(--mint), var(--amber));
+    background:var(--mint);
     display:flex;align-items:center;justify-content:center; font-size:16px;
   }
   .active-order-banner .arrow{ color:var(--ink-soft); font-size:16px; }
@@ -581,16 +529,16 @@
     border:1px solid var(--border);border-radius:var(--radius-md);padding:14px;margin-bottom:10px;
   }
   .order-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:13.5px;font-weight:700;}
-  .order-status{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--amber);background:var(--card-strong);padding:3px 9px;border-radius:999px;}
-  .order-status.done{color:var(--mint);}
+  .order-status{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--amber-deep);background:var(--card-strong);padding:3px 9px;border-radius:999px;}
+  .order-status.done{color:var(--mint-deep);}
   .order-items{font-family:var(--font-mono);font-size:12px;color:var(--ink-soft);line-height:1.6;margin-bottom:8px;}
   .order-meta{font-size:11.5px;color:var(--ink-soft);margin-bottom:2px;}
   .order-timer{
     font-family:var(--font-mono);font-size:15px;font-weight:700;margin:6px 0;padding:7px 11px;
     border-radius:10px;display:inline-block;background:var(--card-strong);color:var(--ink);
   }
-  .order-timer.warn{ color:var(--amber); background:rgba(240,169,62,0.14); }
-  .order-timer.over{ color:var(--coral); background:rgba(240,87,122,0.16); }
+  .order-timer.warn{ color:var(--amber-deep); background:rgba(185,132,80,0.14); }
+  .order-timer.over{ color:var(--coral-deep); background:var(--coral-soft); }
   .order-meta b{color:var(--ink);}
   .btn-ghost{
     width:100%;margin-top:10px;padding:11px;border-radius:12px;border:1px solid var(--border);
@@ -601,7 +549,7 @@
 
   .toast{
     position:fixed;left:50%;bottom:26px;transform:translate(-50%,12px);
-    background:#100C13;color:var(--amber);padding:11px 18px;border-radius:999px;
+    background:var(--ink);color:var(--paper);padding:11px 18px;border-radius:999px;
     font-size:12.5px;font-weight:700;border:1px solid var(--border);box-shadow:var(--sh-sm);
     opacity:0;transition:opacity .2s ease, transform .2s ease;z-index:50;white-space:nowrap;
     font-family:var(--font-mono);
@@ -630,11 +578,6 @@
   @keyframes spin{to{transform:rotate(360deg);}}
   .rays{transform-origin:12px 12px;animation:spin 9s linear infinite;}
 
-  @keyframes breathe{0%,100%{transform:scale(1);}50%{transform:scale(1.05);}}
-  @keyframes breatheRotate{0%,100%{transform:rotate(20deg) scale(1);}50%{transform:rotate(20deg) scale(1.06);}}
-  .deco-sun{animation:breathe 7s ease-in-out infinite;}
-  .deco-wedge{animation:breatheRotate 8s ease-in-out infinite;}
-
   @media (hover:hover) and (pointer:fine){
     .item-card:hover:not(:active){transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--ink);}
     .btn-primary:hover:not(:active){transform:translate(-2px,-2px);box-shadow:7px 7px 0 var(--ink);}
@@ -651,7 +594,7 @@
   .shop-row, .pay-row, .opt-row{ transition:transform .12s ease; }
 
   .ripple-fx{
-    position:fixed; border-radius:50%; background:rgba(27,20,15,.18);
+    position:fixed; border-radius:50%; background:rgba(74,59,47,.14);
     pointer-events:none; transform:scale(0); opacity:1; z-index:80;
   }
   @keyframes rippleGo{ to{transform:scale(1); opacity:0;} }
@@ -673,7 +616,7 @@
   }
 
   @media (prefers-reduced-motion:reduce){
-    .screen, .fade-up, .price-pop, .dot, .rays, .deco-sun, .deco-wedge, .ripple-fx.go, .confetti-piece,
+    .screen, .fade-up, .price-pop, .dot, .rays, .ripple-fx.go, .confetti-piece,
     .flower-note.show, .ready-stamp, .stamp-in, .pulse-dot{
       animation:none !important;
     }
@@ -682,12 +625,6 @@
 </style>
 </head>
 <body>
-  <div class="aurora">
-    <div class="aurora-blob aurora-1"></div>
-    <div class="aurora-blob aurora-2"></div>
-    <div class="aurora-blob aurora-3"></div>
-  </div>
-  <div class="suntravel"></div>
   <div class="shell">
     <div class="awning"></div>
     <div id="app"></div>
@@ -704,7 +641,56 @@ const CATEGORIES = [
   {id:'pizza', label:'Пицца'},
   {id:'fitness', label:'ПП десерты'},
 ];
-const CAT_SWATCH = {coffee:'swatch-amber', cold:'swatch-mint', tea:'swatch-coral', notcoffee:'swatch-mint', signature:'swatch-coral', pizza:'swatch-amber', fitness:'swatch-mint'};
+
+/* ---------- Line icon set (matches the redesigned mockup) — one per category ---------- */
+const CAT_ICON_PATHS = {
+  coffee: '<path d="M4 9h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9Z"/><path d="M17 10h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M7 3c0 1 1 1 1 2s-1 1-1 2"/><path d="M11 3c0 1 1 1 1 2s-1 1-1 2"/>',
+  cold: '<path d="M6 4h12l-1.2 15.2A2 2 0 0 1 14.8 21H9.2a2 2 0 0 1-2-1.8L6 4Z"/><path d="M6.5 9h11"/><path d="M15 2v4"/>',
+  tea: '<path d="M3 10h13a4 4 0 0 1 0 8H8a5 5 0 0 1-5-5v-3Z"/><path d="M16 12h3a2 2 0 0 1 0 4h-2"/><path d="M7 10V6a2 2 0 0 1 2-2h2"/>',
+  notcoffee: '<path d="M5 8h11v7a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5V8Z"/><path d="M16 10h1.5a2 2 0 0 1 0 4H16"/><path d="M8.5 3c1 1 1 2 0 3"/>',
+  signature: '<path d="M12 3l1.8 5.4L19 10l-5.2 1.6L12 17l-1.8-5.4L5 10l5.2-1.6L12 3Z"/>',
+  pizza: '<path d="M12 3 3 19h18L12 3Z"/><circle cx="12" cy="12" r="1"/><circle cx="10" cy="15.5" r="1"/><circle cx="14" cy="15.5" r="1"/>',
+  fitness: '<path d="M20 4C10 4 4 10 4 20c10 0 16-6 16-16Z"/><path d="M8 16 20 4"/>',
+};
+const CAT_ICON_COLOR = {
+  coffee:'var(--amber-deep)', cold:'var(--mint-deep)', tea:'var(--coral-deep)',
+  notcoffee:'var(--mint-deep)', signature:'var(--coral-deep)', pizza:'var(--amber-deep)', fitness:'var(--mint-deep)',
+};
+function iconSVG(category){
+  const paths = CAT_ICON_PATHS[category] || CAT_ICON_PATHS.coffee;
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+}
+function iconColor(category){ return CAT_ICON_COLOR[category] || 'var(--amber-deep)'; }
+function itemThumbHTML(item){
+  if(item && item.photo){
+    return `<img src="${item.photo}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
+  }
+  return iconSVG(item ? item.category : 'coffee');
+}
+// Resizes/compresses an uploaded image client-side to a small JPEG data URL —
+// stored directly in Firebase (no separate file storage needed to set up).
+function readFileAsCompressedDataURL(file, maxSize, quality){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let w = img.width, h = img.height;
+        if(w>h){ if(w>maxSize){ h = Math.round(h*maxSize/w); w = maxSize; } }
+        else { if(h>maxSize){ w = Math.round(w*maxSize/h); h = maxSize; } }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality || 0.75));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 const ITEMS = [
   // Классика
@@ -846,7 +832,8 @@ let state = {
   adminTab:'orders', adminStaffShop:1, adminStaff:[], adminStaffLoading:false, newStaffName:'',
   newStaffPassword:'', editingStaffId:null,
   adminMenuLoading:false, newMenuName:'', newMenuCat:'coffee', newMenuPrice:'', newMenuIcon:'🍽️', adminStopCat:'coffee',
-  editingMenuItemId:null, editItemName:'', editItemIcon:'', editItemPrices:{},
+  editingMenuItemId:null, editItemName:'', editItemIcon:'', editItemPrices:{}, editItemPhoto:null,
+  newMenuPhoto:null, shopPhotos:{}, guestDisplayName:null,
   newPostDate:'', newPostText:'', newPostPhoto:'', postMsg:'', postMsgOk:false, adminPosts:[], adminPostsLoading:false,
   editingPrizeId:null, newPrizeLabel:'', newPrizeEmoji:'', newPrizeType:'stamp', newPrizeValue:'', newPrizeWeight:'', prizeMsg:'', prizeMsgOk:false,
 };
@@ -928,6 +915,10 @@ async function initLoyalty(){
   LOYALTY_ID = await resolveLoyaltyId();
   const g = await getLoyaltyGuest(LOYALTY_ID);
   state.loyalty = Math.min(7, g.stamps || 0);
+  if(g.name){
+    state.guestDisplayName = g.name;
+    if(!state.guestName) state.guestName = g.name;
+  }
   render();
 }
 
@@ -1214,6 +1205,15 @@ async function placeOrder(){
     clientId: LOYALTY_ID || TELEGRAM_ID || CLIENT_ID,
   };
 
+  // Remember the guest's name for next visit's greeting (fire-and-forget, non-blocking).
+  if(LOYALTY_ID && state.guestName && state.guestName.trim()){
+    try{
+      fetch(DB_URL + '/guests/' + LOYALTY_ID + '.json', {
+        method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: state.guestName.trim() })
+      });
+    }catch(e){}
+  }
+
   state.payingNow = true;
   render();
 
@@ -1290,7 +1290,7 @@ function renderMenu(){
             </button>
           </div>
         </div>
-        <div class="greeting">${getGreeting()}. <span class="mark">Закажи по пути</span></div>
+        <div class="greeting">${getGreeting()}${state.guestDisplayName ? ', ' + esc(state.guestDisplayName) : ''}. <span class="mark">Закажи по пути</span></div>
         <p class="subgreeting">Собери заказ за минуту — заберёшь его сразу, минуя очередь.</p>
       </div>
       ${state.order && !orderCancelled ? `
@@ -1318,17 +1318,17 @@ function renderMenu(){
           if(stopped){
             return `
           <div class="item-card fade-up" style="animation-delay:${idx*35}ms;opacity:0.45;">
-            <div class="item-icon ${CAT_SWATCH[i.category]}" style="filter:grayscale(1);">${i.icon}</div>
+            <div class="item-icon" style="color:${iconColor(i.category)};filter:grayscale(1);">${itemThumbHTML(i)}</div>
             <div class="item-info">
               <h3 style="text-decoration:line-through;">${i.name}</h3>
-              <div class="item-price" style="color:var(--coral);">Нет в наличии</div>
+              <div class="item-price" style="color:var(--coral-deep);">Нет в наличии</div>
             </div>
           </div>
         `;
           }
           return `
           <div class="item-card fade-up rippleable" style="animation-delay:${idx*35}ms" data-action="open-customize" data-item="${i.id}">
-            <div class="item-icon ${CAT_SWATCH[i.category]}">${i.icon}</div>
+            <div class="item-icon" style="color:${iconColor(i.category)};">${itemThumbHTML(i)}</div>
             <div class="item-info">
               <h3>${star}${i.name}</h3>
               <div class="item-price">${priceLabel}</div>
@@ -1362,7 +1362,7 @@ function renderCustomize(){
         <h2>Настроить напиток</h2>
       </div>
       <div class="cust-hero">
-        <div class="item-icon">${item.icon}</div>
+        <div class="item-icon" style="color:${iconColor(item.category)};">${itemThumbHTML(item)}</div>
         <h1>${item.name}</h1>
       </div>
 
@@ -1452,7 +1452,7 @@ function renderCart(){
       <div class="section" style="display:flex;flex-direction:column;gap:8px;padding-top:6px;">
         ${state.cart.map((l,idx)=>`
           <div class="cart-line fade-up" style="animation-delay:${idx*30}ms">
-            <div class="item-icon ${CAT_SWATCH[l.category]||'swatch-amber'}">${l.icon}</div>
+            <div class="item-icon" style="color:${iconColor(l.category)};">${itemThumbHTML(l)}</div>
             <div class="cart-line-info">
               <h4>${l.name}</h4>
               <div class="opts">${cartLineOpts(l)}</div>
@@ -1473,7 +1473,7 @@ function renderCart(){
         <div class="punch-card clickable rippleable" data-action="go-card">
           <div class="punch-top"><b>Карта лояльности</b><span>${state.loyalty} / 7</span></div>
           <div class="punch-row">
-            ${Array.from({length:7}).map((_,i)=>`<div class="punch fade-up ${i<state.loyalty?'filled':''}" style="animation-delay:${i*30}ms">${i<state.loyalty?checkSVG('var(--ink)'):''}</div>`).join('')}
+            ${Array.from({length:7}).map((_,i)=>`<div class="punch fade-up ${i<state.loyalty?'filled':''}" style="animation-delay:${i*30}ms">${i<state.loyalty?checkSVG('#fff'):''}</div>`).join('')}
           </div>
           <div class="punch-note">${state.loyalty>=7 ? 'Следующий классический кофе (M) — подарок от нас ☀️' : `Ещё ${7-state.loyalty} классических кофе — и седьмой бесплатно`}</div>
         </div>
@@ -1486,7 +1486,7 @@ function renderCart(){
           return `
           <div class="shop-row rippleable ${state.shopId===s.id?'active':''}" data-action="set-shop" data-shop="${s.id}">
             <div><div class="nm">${s.name}</div><div class="ad">${s.addr}</div>
-              <div class="ad" style="margin-top:2px;color:${state.shopId===s.id ? '#140800' : (st.open?'var(--mint)':'var(--coral)')};font-weight:700;">
+              <div class="ad" style="margin-top:2px;color:${state.shopId===s.id ? 'var(--mint-deep)' : (st.open?'var(--mint-deep)':'var(--coral-deep)')};font-weight:700;">
                 ${st.open ? `Открыто до ${st.closesAt}` : `Закрыто · откроется в ${st.opensAt}`}
               </div>
             </div>
@@ -1552,7 +1552,7 @@ function renderCard(){
           <div style="padding-top:16px;">
             <div class="punch-top" style="margin-bottom:11px;"><b>Штампы</b><span>${state.loyalty} / 7</span></div>
             <div class="punch-row">
-              ${Array.from({length:7}).map((_,i)=>`<div class="punch fade-up ${i<state.loyalty?'filled':''}" style="animation-delay:${i*30}ms">${i<state.loyalty?checkSVG('var(--ink)'):''}</div>`).join('')}
+              ${Array.from({length:7}).map((_,i)=>`<div class="punch fade-up ${i<state.loyalty?'filled':''}" style="animation-delay:${i*30}ms">${i<state.loyalty?checkSVG('#fff'):''}</div>`).join('')}
             </div>
             <div class="punch-note">${state.loyalty>=7 ? 'Следующий классический кофе (M) — подарок от нас ☀️' : `Ещё ${7-state.loyalty} классических кофе — и седьмой бесплатно`}</div>
           </div>
@@ -1645,12 +1645,12 @@ function renderCard(){
       <div class="section">
         <div class="section-label">Наши кофейни</div>
         <a class="addrcard" href="https://yandex.ru/maps/?pt=37.789429,55.715088&z=17&l=map" target="_blank" rel="noopener">
-          <div class="aicon">📍</div>
+          <div class="aicon" style="overflow:hidden;">${state.shopPhotos[1] ? `<img src="${state.shopPhotos[1]}" style="width:100%;height:100%;object-fit:cover;">` : '📍'}</div>
           <div class="atext"><b>1-я Новокузьминская, 15/5</b><span>Открыть на Яндекс.Картах</span></div>
           <div class="arrow">↗</div>
         </a>
         <a class="addrcard" href="https://yandex.ru/maps/?pt=37.641308,55.678413&z=17&l=map" target="_blank" rel="noopener">
-          <div class="aicon">📍</div>
+          <div class="aicon" style="overflow:hidden;">${state.shopPhotos[2] ? `<img src="${state.shopPhotos[2]}" style="width:100%;height:100%;object-fit:cover;">` : '📍'}</div>
           <div class="atext"><b>2-й Нагатинский проезд, 2/2к2</b><span>Открыть на Яндекс.Картах</span></div>
           <div class="arrow">↗</div>
         </a>
@@ -1725,14 +1725,14 @@ function renderStaff(){
         <div class="hint" style="text-align:center;margin:0 0 10px;">или введите ID вручную</div>
         <input class="text-input" type="text" placeholder="ID гостя с его карты" value="${esc(state.chargeIdValue||'')}" data-action="set-charge-id">
         <button class="btn-ghost rippleable" data-action="staff-charge-loyalty" style="margin-top:8px;">Начислить штамп</button>
-        ${state.chargeMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.chargeMsgOk?'var(--mint)':'var(--coral)'};font-weight:700;">${state.chargeMsg}</div>` : ''}
+        ${state.chargeMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.chargeMsgOk?'var(--mint-deep)':'var(--coral-deep)'};font-weight:700;">${state.chargeMsg}</div>` : ''}
       </div>
       <div class="section">
         <div class="section-label">Погасить приз с колеса удачи</div>
         <input class="text-input" type="text" placeholder="ID гостя" value="${esc(state.redeemGuestId||'')}" data-action="set-redeem-guest-id">
         <input class="text-input" style="margin-top:8px;" type="text" placeholder="Код приза (например W3F9K)" value="${esc(state.redeemVoucherId||'')}" data-action="set-redeem-voucher-id">
         <button class="btn-ghost rippleable" data-action="staff-redeem-voucher" style="margin-top:8px;">Погасить приз</button>
-        ${state.redeemMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.redeemMsgOk?'var(--mint)':'var(--coral)'};font-weight:700;">${state.redeemMsg}</div>` : ''}
+        ${state.redeemMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.redeemMsgOk?'var(--mint-deep)':'var(--coral-deep)'};font-weight:700;">${state.redeemMsg}</div>` : ''}
       </div>
       <div class="section">
         <div class="section-label">Заказы точки</div>
@@ -1840,7 +1840,7 @@ function renderAdminStaffTab(){
               </div>
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
-              <span style="font-size:12.5px;color:${isActive?'var(--mint)':'var(--coral)'};font-weight:700;">${isActive ? 'На смене — получает уведомления' : 'Не на смене / уволен(а) — уведомления выключены'}</span>
+              <span style="font-size:12.5px;color:${isActive?'var(--mint-deep)':'var(--coral-deep)'};font-weight:700;">${isActive ? 'На смене — получает уведомления' : 'Не на смене / уволен(а) — уведомления выключены'}</span>
               <div class="switch ${isActive?'on':''} rippleable" data-action="admin-toggle-staff-active" data-id="${m.id}"></div>
             </div>
           </div>`;
@@ -1852,6 +1852,23 @@ function renderAdminStaffTab(){
 
 function renderAdminMenuTab(){
   return `
+    <div class="section">
+      <div class="section-label">Фото наших кофеен</div>
+      ${SHOPS.map(s=>`
+        <div class="order-card" style="display:flex;align-items:center;gap:12px;">
+          <div style="width:52px;height:52px;border-radius:14px;overflow:hidden;flex:none;background:var(--card-strong);display:flex;align-items:center;justify-content:center;">
+            ${state.shopPhotos[s.id] ? `<img src="${state.shopPhotos[s.id]}" style="width:100%;height:100%;object-fit:cover;">` : '📍'}
+          </div>
+          <div style="flex:1;min-width:0;">
+            <b style="font-size:12.5px;">${s.name.replace('Солнцекофе — ','')}</b>
+            <div class="order-meta" style="margin-top:2px;">${s.addr}</div>
+          </div>
+          <label class="btn-ghost" style="margin:0;padding:9px 12px;white-space:nowrap;cursor:pointer;">
+            📷 ${state.shopPhotos[s.id] ? 'Заменить' : 'Загрузить'}
+            <input type="file" accept="image/*" data-action="set-shop-photo" data-shop="${s.id}" style="display:none;">
+          </label>
+        </div>`).join('')}
+    </div>
     <div class="section">
       <div class="section-label">Новая позиция</div>
       <div class="field">
@@ -1865,6 +1882,13 @@ function renderAdminMenuTab(){
       <div class="field" style="margin-top:8px;display:flex;gap:8px;">
         <input class="text-input" type="number" inputmode="numeric" placeholder="Цена, ₽" value="${esc(state.newMenuPrice)}" data-action="set-new-menu-price" style="flex:1;">
         <input class="text-input" type="text" placeholder="Эмодзи" value="${esc(state.newMenuIcon)}" data-action="set-new-menu-icon" style="width:76px;text-align:center;">
+      </div>
+      <div class="field" style="margin-top:8px;display:flex;align-items:center;gap:10px;">
+        ${state.newMenuPhoto ? `<img src="${state.newMenuPhoto}" style="width:44px;height:44px;border-radius:12px;object-fit:cover;flex:none;">` : ''}
+        <label class="btn-ghost" style="margin:0;text-align:center;cursor:pointer;">
+          📷 ${state.newMenuPhoto ? 'Заменить фото' : 'Загрузить фото'}
+          <input type="file" accept="image/*" data-action="set-new-menu-photo" style="display:none;">
+        </label>
       </div>
       <button class="btn-ghost rippleable" data-action="admin-add-menu-item" style="margin-top:8px;">Добавить позицию</button>
     </div>
@@ -1896,6 +1920,14 @@ function renderAdminMenuTab(){
             <div class="order-card">
               <div class="field"><input class="text-input" type="text" placeholder="Название" value="${esc(state.editItemName)}" data-action="set-edit-item-name"></div>
               <div class="field" style="margin-top:8px;"><input class="text-input" type="text" placeholder="Эмодзи" value="${esc(state.editItemIcon)}" data-action="set-edit-item-icon" style="width:76px;text-align:center;"></div>
+              <div class="field" style="margin-top:8px;display:flex;align-items:center;gap:10px;">
+                ${state.editItemPhoto ? `<img src="${state.editItemPhoto}" style="width:44px;height:44px;border-radius:12px;object-fit:cover;flex:none;">` : ''}
+                <label class="btn-ghost" style="margin:0;text-align:center;cursor:pointer;">
+                  📷 ${state.editItemPhoto ? 'Заменить фото' : 'Загрузить фото'}
+                  <input type="file" accept="image/*" data-action="set-edit-item-photo" style="display:none;">
+                </label>
+                ${state.editItemPhoto ? `<button class="iconbtn rippleable" data-action="clear-edit-item-photo" type="button">✕</button>` : ''}
+              </div>
               <div class="field" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
                 ${Object.keys(i.sizes).map(sz=>`
                   <div style="display:flex;align-items:center;gap:6px;">
@@ -1940,7 +1972,7 @@ function renderAdminPostsTab(){
         <input class="text-input" type="text" placeholder="https://...jpg" value="${esc(state.newPostPhoto||'')}" data-action="set-post-photo">
       </div>
       <button class="btn-ghost rippleable" data-action="admin-save-post" style="margin-top:8px;">Сохранить пост на эту дату</button>
-      ${state.postMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.postMsgOk?'var(--mint)':'var(--coral)'};font-weight:700;">${state.postMsg}</div>` : ''}
+      ${state.postMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.postMsgOk?'var(--mint-deep)':'var(--coral-deep)'};font-weight:700;">${state.postMsg}</div>` : ''}
     </div>
     <div class="section">
       <div class="section-label">Ближайшие посты</div>
@@ -1978,7 +2010,7 @@ function renderAdminWheelTab(){
         <button class="btn-ghost rippleable" data-action="admin-save-prize" style="flex:1;">${state.editingPrizeId ? 'Сохранить' : 'Добавить'}</button>
         ${state.editingPrizeId ? `<button class="btn-ghost rippleable" data-action="admin-cancel-prize-edit" style="flex:1;">Отмена</button>` : ''}
       </div>
-      ${state.prizeMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.prizeMsgOk?'var(--mint)':'var(--coral)'};font-weight:700;">${state.prizeMsg}</div>` : ''}
+      ${state.prizeMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.prizeMsgOk?'var(--mint-deep)':'var(--coral-deep)'};font-weight:700;">${state.prizeMsg}</div>` : ''}
     </div>
     <div class="section">
       <div class="section-label">Текущие призы (шанс выпадения)</div>
@@ -2003,7 +2035,7 @@ function renderOrderList(orders, withActions){
     <div class="order-card">
       <div class="order-head">
         <div><b>№${o.number || '—'}</b> ${o.shopName ? `· ${o.shopName}` : ''}</div>
-        <div class="order-status ${o.status==='done'?'done':''}" style="${o.status==='cancelled'?'color:var(--coral);background:rgba(240,87,122,0.14);':''}">${o.status==='done' ? 'Готов' : (o.status==='cancelled' ? 'Отменён (возврат)' : (o.status==='accepted' ? 'В работе' : 'Новый — не принят'))}</div>
+        <div class="order-status ${o.status==='done'?'done':''}" style="${o.status==='cancelled'?'color:var(--coral-deep);background:var(--coral-soft);':''}">${o.status==='done' ? 'Готов' : (o.status==='cancelled' ? 'Отменён (возврат)' : (o.status==='accepted' ? 'В работе' : 'Новый — не принят'))}</div>
       </div>
       <div class="order-items">${(o.itemsText||'').replace(/\n/g,'<br>')}</div>
       <div class="order-meta">Итого: <b>${money(o.total||0)}</b>${o.tip ? ` (из них чаевые ${money(o.tip)})` : ''} · ${o.payMethod||''} · ${o.pickup||''}</div>
@@ -2015,8 +2047,8 @@ function renderOrderList(orders, withActions){
       ${o.status==='done' && o.completedBy ? `<div class="order-meta">Закрыл: <b>${esc(o.completedBy)}</b></div>` : ''}
       ${withActions && o.status==='new' ? `<button class="btn-primary rippleable" data-action="order-accept" data-id="${o.id}" style="margin-top:8px;"><span>Принять заказ</span><span class="sub">→</span></button>` : ''}
       ${withActions && o.status==='accepted' ? `<button class="btn-ghost rippleable" data-action="order-done" data-id="${o.id}">Отметить готовым</button>` : ''}
-      ${!withActions && o.paid && o.tbankPaymentId && !o.refunded ? `<button class="btn-ghost rippleable" data-action="order-refund" data-id="${o.id}" data-payment-id="${o.tbankPaymentId}" style="margin-top:8px;color:var(--coral);">Оформить возврат</button>` : ''}
-      ${!withActions && o.refunded ? `<div class="order-meta" style="color:var(--mint);font-weight:700;margin-top:6px;">✓ Возврат оформлен</div>` : ''}
+      ${!withActions && o.paid && o.tbankPaymentId && !o.refunded ? `<button class="btn-ghost rippleable" data-action="order-refund" data-id="${o.id}" data-payment-id="${o.tbankPaymentId}" style="margin-top:8px;color:var(--coral-deep);">Оформить возврат</button>` : ''}
+      ${!withActions && o.refunded ? `<div class="order-meta" style="color:var(--mint-deep);font-weight:700;margin-top:6px;">✓ Возврат оформлен</div>` : ''}
     </div>
   `).join('');
 }
@@ -2152,10 +2184,10 @@ async function addAdminMenuItem(){
   try{
     await fetch(DB_URL + '/menu.json', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name, category: state.newMenuCat, price, icon: state.newMenuIcon || '🍽️', hit:false })
+      body: JSON.stringify({ name, category: state.newMenuCat, price, icon: state.newMenuIcon || '🍽️', hit:false, photo: state.newMenuPhoto || null })
     });
   }catch(e){}
-  state.newMenuName = ''; state.newMenuPrice = '';
+  state.newMenuName = ''; state.newMenuPrice = ''; state.newMenuPhoto = null;
   await loadExtraMenu();
   state.adminMenuLoading = false; render();
 }
@@ -2210,7 +2242,7 @@ async function saveAdminPrize(){
   if(!label || !value || !weight || weight<=0){
     state.prizeMsg = 'Заполните название, значение и вес (больше нуля).'; state.prizeMsgOk = false; render(); return;
   }
-  const colorPool = ['#F0A93E','#5EE6C0','#F0577A'];
+  const colorPool = ['#B98450','#7C9A78','#C98B93'];
   const id = state.editingPrizeId || ('p' + Date.now());
   const existing = WHEEL_PRIZES.find(p=>p.id===id);
   const color = existing ? existing.color : colorPool[WHEEL_PRIZES.length % colorPool.length];
@@ -2273,12 +2305,12 @@ const LOYALTY_GOAL = 7;
 // These are just the *defaults* — admin can edit/add/remove prizes; whatever's
 // saved in Firebase (/wheel_prizes) always wins once loaded.
 const DEFAULT_WHEEL_PRIZES = [
-  { id:'stamp1',   label:'+1 штамп',            emoji:'⭐', weight:28, type:'stamp',     value:1,  color:'#F0A93E' },
-  { id:'syrup',    label:'Сироп в подарок',     emoji:'🍯', weight:24, type:'free_item', value:'Сироп на выбор',      color:'#5EE6C0' },
-  { id:'disc5',    label:'Скидка 5%',           emoji:'🎫', weight:20, type:'discount',  value:5,  color:'#F0577A' },
-  { id:'dessert',  label:'ПП-десерт в подарок', emoji:'🍰', weight:14, type:'free_item', value:'ПП-десерт',           color:'#F0A93E' },
-  { id:'disc10',   label:'Скидка 10%',          emoji:'🎉', weight:10, type:'discount',  value:10, color:'#5EE6C0' },
-  { id:'coffee',   label:'Бесплатный кофе!',    emoji:'☕', weight:4,  type:'free_item', value:'Классический кофе (M)', color:'#F0577A' },
+  { id:'stamp1',   label:'+1 штамп',            emoji:'⭐', weight:28, type:'stamp',     value:1,  color:'#B98450' },
+  { id:'syrup',    label:'Сироп в подарок',     emoji:'🍯', weight:24, type:'free_item', value:'Сироп на выбор',      color:'#7C9A78' },
+  { id:'disc5',    label:'Скидка 5%',           emoji:'🎫', weight:20, type:'discount',  value:5,  color:'#C98B93' },
+  { id:'dessert',  label:'ПП-десерт в подарок', emoji:'🍰', weight:14, type:'free_item', value:'ПП-десерт',           color:'#B98450' },
+  { id:'disc10',   label:'Скидка 10%',          emoji:'🎉', weight:10, type:'discount',  value:10, color:'#7C9A78' },
+  { id:'coffee',   label:'Бесплатный кофе!',    emoji:'☕', weight:4,  type:'free_item', value:'Классический кофе (M)', color:'#C98B93' },
 ];
 let WHEEL_PRIZES = DEFAULT_WHEEL_PRIZES.slice();
 
@@ -2302,13 +2334,13 @@ function buildWheelSVG(){
     const a1 = ((i+1)*seg - 90) * Math.PI/180;
     const x0 = cx + r*Math.cos(a0), y0 = cy + r*Math.sin(a0);
     const x1 = cx + r*Math.cos(a1), y1 = cy + r*Math.sin(a1);
-    paths += `<path d="M${cx},${cy} L${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 0,1 ${x1.toFixed(2)},${y1.toFixed(2)} Z" fill="${p.color}" stroke="#0C0A10" stroke-width="2"/>`;
+    paths += `<path d="M${cx},${cy} L${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 0,1 ${x1.toFixed(2)},${y1.toFixed(2)} Z" fill="${p.color}" stroke="#F2E6D6" stroke-width="2"/>`;
     const mid = (a0+a1)/2;
     const tx = cx + (r*0.62)*Math.cos(mid), ty = cy + (r*0.62)*Math.sin(mid);
     const rotDeg = (i*seg + seg/2);
     paths += `<text x="${tx.toFixed(2)}" y="${ty.toFixed(2)}" font-size="20" text-anchor="middle" dominant-baseline="middle" transform="rotate(${rotDeg.toFixed(1)} ${tx.toFixed(2)} ${ty.toFixed(2)})">${p.emoji}</text>`;
   });
-  return `<svg viewBox="0 0 240 240" width="240" height="240">${paths}<circle cx="120" cy="120" r="16" fill="#0C0A10" stroke="#F0A93E" stroke-width="2"/></svg>`;
+  return `<svg viewBox="0 0 240 240" width="240" height="240">${paths}<circle cx="120" cy="120" r="16" fill="#F2E6D6" stroke="#B98450" stroke-width="2"/></svg>`;
 }
 
 function pickWeightedPrize(){
@@ -2624,7 +2656,7 @@ function renderStatus(){
       <div class="screen">
         <div class="status-top">
           <button class="iconbtn rippleable" data-action="status-to-menu" style="margin-bottom:10px;">← К меню</button>
-          <div class="status-eyebrow" style="color:var(--coral);">Заказ отменён</div>
+          <div class="status-eyebrow" style="color:var(--coral-deep);background:var(--coral-soft);">Заказ отменён</div>
         </div>
         <div class="waiting-accept">
           <div style="font-size:56px;text-align:center;margin-bottom:14px;">💸</div>
@@ -2693,8 +2725,8 @@ function renderStatus(){
 /* ---------- ICONS ---------- */
 function sunMark(){
   return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="12" cy="12" r="5" fill="#140800"/>
-    <g stroke="#140800" stroke-width="2" stroke-linecap="round">
+    <circle cx="12" cy="12" r="5" fill="#fff"/>
+    <g stroke="#fff" stroke-width="2" stroke-linecap="round">
       <line x1="12" y1="1.5" x2="12" y2="4"/>
       <line x1="12" y1="20" x2="12" y2="22.5"/>
       <line x1="1.5" y1="12" x2="4" y2="12"/>
@@ -2829,7 +2861,7 @@ function initStatusTicker(){
     done[idx] = true;
     st[idx].classList.remove('active');
     st[idx].classList.add('done', 'stamp-in');
-    st[idx].innerHTML = checkSVG('#1B1420');
+    st[idx].innerHTML = checkSVG('#fff');
     setTimeout(()=>st[idx].classList.remove('stamp-in'), 460);
     if(idx>0) lines[idx-1].classList.add('filled');
   }
@@ -2957,14 +2989,35 @@ document.addEventListener('click', (e)=>{
       state.editItemName = i.name;
       state.editItemIcon = i.icon;
       state.editItemPrices = Object.assign({}, i.sizes);
+      state.editItemPhoto = i.photo || null;
       render();
     }
   }
   else if(action==='admin-cancel-item-edit'){ state.editingMenuItemId=null; render(); }
+  else if(action==='clear-edit-item-photo'){ state.editItemPhoto=null; render(); }
   else if(action==='admin-save-item-edit'){ saveMenuItemEdit(el.dataset.id); }
   else if(action==='order-accept'){ acceptOrder(el.dataset.id); }
   else if(action==='order-done'){ markOrderDone(el.dataset.id); }
   else if(action==='order-refund'){ refundOrder(el.dataset.id, el.dataset.paymentId); }
+});
+
+document.addEventListener('change', (e)=>{
+  const el = e.target.closest('[data-action]');
+  if(!el || el.type !== 'file') return;
+  const file = el.files && el.files[0];
+  if(!file) return;
+  const action = el.dataset.action;
+  if(action==='set-new-menu-photo'){
+    readFileAsCompressedDataURL(file, 480, 0.72).then(dataUrl=>{
+      state.newMenuPhoto = dataUrl; render();
+    }).catch(()=>showToast('Не удалось загрузить фото.'));
+  } else if(action==='set-edit-item-photo'){
+    readFileAsCompressedDataURL(file, 480, 0.72).then(dataUrl=>{
+      state.editItemPhoto = dataUrl; render();
+    }).catch(()=>showToast('Не удалось загрузить фото.'));
+  } else if(action==='set-shop-photo'){
+    uploadShopPhoto(el.dataset.shop, file);
+  }
 });
 
 document.addEventListener('input', (e)=>{
@@ -3004,7 +3057,7 @@ async function loadExtraMenu(){
     if(obj){
       EXTRA_ITEMS = Object.keys(obj).map(id=>{
         const m = obj[id];
-        return { id: 'x_'+id, dbId:id, category:m.category, name:m.name, sizes:{m:m.price}, hit:!!m.hit, icon:m.icon||'🍽️', custom:true };
+        return { id: 'x_'+id, dbId:id, category:m.category, name:m.name, sizes:{m:m.price}, hit:!!m.hit, icon:m.icon||'🍽️', photo:m.photo||null, custom:true };
       });
     }
   }catch(e){ /* ignore, menu just stays with built-in items */ }
@@ -3029,6 +3082,26 @@ async function loadStopList(){
   }catch(e){ /* keep whatever we had */ }
 }
 
+async function loadShopPhotos(){
+  try{
+    const res = await fetch(DB_URL + '/shop_photos.json');
+    const obj = res.ok ? await res.json() : null;
+    state.shopPhotos = obj || {};
+  }catch(e){ /* keep whatever we had */ }
+  render();
+}
+
+async function uploadShopPhoto(shopId, file){
+  try{
+    const dataUrl = await readFileAsCompressedDataURL(file, 640, 0.72);
+    state.shopPhotos[shopId] = dataUrl;
+    render();
+    await fetch(DB_URL + '/shop_photos/' + shopId + '.json', {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(dataUrl)
+    });
+  }catch(e){ showToast('Не удалось загрузить фото — попробуйте другое.'); }
+}
+
 async function saveMenuItemEdit(id){
   const name = state.editItemName.trim();
   const icon = state.editItemIcon.trim() || '🍽️';
@@ -3041,10 +3114,11 @@ async function saveMenuItemEdit(id){
   try{
     await fetch(DB_URL + '/menu_overrides/' + id + '.json', {
       method:'PUT', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name, icon, sizes })
+      body: JSON.stringify({ name, icon, sizes, photo: state.editItemPhoto || null })
     });
   }catch(e){}
   state.editingMenuItemId = null;
+  state.editItemPhoto = null;
   await loadExtraMenu();
 }
 
@@ -3151,6 +3225,7 @@ if(!cameFromPayment){
 }
 loadExtraMenu();
 loadWheelPrizes();
+loadShopPhotos();
 initLoyalty();
 render();
 </script>
