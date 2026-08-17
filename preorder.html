@@ -87,6 +87,9 @@
     box-shadow:var(--sh-sm); position:relative; overflow:visible;
   }
   .iconbtn:active{transform:scale(0.92)!important;}
+  .cardbtn-lg{
+    width:52px;height:52px;font-size:24px;
+  }
   .topbar h2{font-family:var(--font-display);font-size:18px;margin:0;font-weight:700;}
 
   /* Brand header */
@@ -160,6 +163,42 @@
     background:var(--paper);
     margin-top:auto;
   }
+
+  /* Bottom tab bar — persistent nav on top-level screens (menu/card/orders) */
+  .tabbar{
+    position:sticky;bottom:0;left:0;right:0;margin-top:auto;
+    display:flex;border-top:1px solid var(--border);
+    background:var(--card-strong);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
+    padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px));
+  }
+  .tab-item{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;
+    border-radius:14px;cursor:pointer;position:relative;background:none;border:none;font-family:var(--font-body);
+  }
+  .tab-item.active{color:var(--amber-deep);}
+  .tab-item:not(.active){color:var(--ink-soft);}
+  .tab-item svg{width:22px;height:22px;}
+  .tab-item span{font-size:10.5px;font-weight:700;}
+  .tab-badge{
+    position:absolute;top:2px;right:22%;background:var(--amber);color:#fff;
+    font-size:9px;font-weight:800;width:15px;height:15px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+  }
+
+  /* Live loyalty progress widget on the home screen */
+  .loyalty-widget{
+    margin:0 18px 14px;background:var(--card-strong);border:1px solid var(--border);
+    border-radius:20px;padding:13px 15px;display:flex;align-items:center;gap:13px;
+    box-shadow:var(--sh-sm);cursor:pointer;
+  }
+  .ring-wrap{position:relative;width:48px;height:48px;flex:none;}
+  .ring-wrap svg{width:100%;height:100%;transform:rotate(-90deg);}
+  .ring-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:10.5px;font-weight:700;color:var(--amber-deep);}
+  .loyalty-widget-text{flex:1;min-width:0;}
+  .loyalty-widget-text b{font-family:var(--font-display);font-size:13.5px;display:block;}
+  .loyalty-widget-text span{font-size:11px;color:var(--ink-soft);}
+  .loyalty-widget-arrow{color:var(--ink-soft);font-size:16px;flex:none;}
+
   .btn-primary{
     width:100%;border:none;border-radius:18px;padding:16px 20px;
     background:var(--amber);
@@ -315,7 +354,7 @@
     display:inline-flex;padding:10px;background:#ffffff;border:1px solid var(--border);
     border-radius:var(--radius-md);margin:0 auto 12px;
   }
-  .qr-wrap img{display:block;width:180px;height:180px;image-rendering:pixelated;}
+  .qr-wrap img{display:block;width:240px;height:240px;image-rendering:pixelated;}
   .member-card-id{font-family:var(--font-mono);font-size:19px;font-weight:700;letter-spacing:.04em;}
   .member-card-hint{font-size:12px;color:var(--ink-soft);margin-top:8px;line-height:1.4;max-width:260px;margin-left:auto;margin-right:auto;}
   .member-card-divider{border-top:1px solid var(--border);margin:16px -4px 0;position:relative;}
@@ -1299,16 +1338,14 @@ function renderMenu(){
             <div class="badge">${sunMark()}</div>
             <span class="wordmark">Солнцекофе</span>
           </div>
-          <div style="display:flex;gap:8px;">
-            <button class="iconbtn rippleable" data-action="go-card" title="Моя карта">🪪</button>
-            <button class="cartbtn rippleable" data-action="go-cart">
-              Корзина ${cartCount()>0 ? `<span class="dot">${cartCount()}</span>` : ''}
-            </button>
-          </div>
+          <button class="cartbtn rippleable" data-action="go-cart">
+            Корзина ${cartCount()>0 ? `<span class="dot">${cartCount()}</span>` : ''}
+          </button>
         </div>
         <div class="greeting">${getGreeting()}${state.guestDisplayName ? ', ' + esc(state.guestDisplayName) : ''}. <span class="mark">Закажи по пути</span></div>
         <p class="subgreeting">Собери заказ за минуту — заберёшь его сразу, минуя очередь.</p>
       </div>
+      ${loyaltyWidgetHTML()}
       ${state.order && !orderCancelled ? `
         <div class="section" style="padding-top:0;">
           <div class="active-order-banner rippleable" data-action="back-to-status">
@@ -1353,13 +1390,16 @@ function renderMenu(){
           </div>
         `;}).join('')}
       </div>
-      ${cartCount()>0 ? `
-      <div class="stickybar">
-        <button class="btn-primary rippleable" data-action="go-cart">
-          <span>Корзина · ${cartCount()} ${pluralPos(cartCount())}</span>
-          <span class="sub price-pop">${money(cartTotal())}</span>
-        </button>
-      </div>` : ''}
+      <div style="position:sticky;bottom:0;left:0;right:0;margin-top:auto;background:var(--paper);">
+        ${cartCount()>0 ? `
+        <div style="padding:12px 18px 8px;">
+          <button class="btn-primary rippleable" data-action="go-cart">
+            <span>Корзина · ${cartCount()} ${pluralPos(cartCount())}</span>
+            <span class="sub price-pop">${money(cartTotal())}</span>
+          </button>
+        </div>` : ''}
+        ${tabBarHTML('menu')}
+      </div>
     </div>
   `;
 }
@@ -1550,7 +1590,7 @@ function cartLineOpts(l){
 function renderCard(){
   const displayId = LOYALTY_ID || 'Загрузка…';
   const qrData = `solncekofe:${displayId}`;
-  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&qzone=1&color=1B140F&bgcolor=FCFAF3&data=${encodeURIComponent(qrData)}`;
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&qzone=1&color=1B140F&bgcolor=FCFAF3&data=${encodeURIComponent(qrData)}`;
   return `
     <div class="screen">
       <div class="topbar"><button class="iconbtn rippleable" data-action="back-to-menu">←</button><h2>Моя карта</h2></div>
@@ -1561,7 +1601,7 @@ function renderCard(){
             <div class="member-card-brand">${sunMark()} Солнцекофе</div>
             <div class="member-card-tag">Клуб гостей</div>
           </div>
-          <div class="qr-wrap"><img src="${qrSrc}" alt="QR-код карты гостя" width="180" height="180"></div>
+          <div class="qr-wrap"><img src="${qrSrc}" alt="QR-код карты гостя" width="240" height="240"></div>
           <div class="member-card-id">ID ${displayId}</div>
           <div class="member-card-hint">Покажи QR-код или назови ID баристе на кассе — начислим штамп за покупку</div>
           <div class="member-card-divider"></div>
@@ -1643,22 +1683,6 @@ function renderCard(){
       </div>
 
       <div class="section">
-        <div class="section-label">Мои заказы</div>
-        ${state.myOrdersLoading ? `<p class="empty-note">Загружаем…</p>` :
-          (state.myOrders.length ? state.myOrders.map(o=>`
-            <div class="order-card">
-              <div class="order-head">
-                <div><b>№${o.number||'—'}</b> ${o.shopName ? '· ' + o.shopName.replace('Солнцекофе — ','') : ''}</div>
-                <div style="font-size:12px;color:var(--ink-soft);">${o.createdAt ? new Date(o.createdAt).toLocaleDateString('ru-RU', {day:'numeric', month:'short'}) : ''}</div>
-              </div>
-              <div class="order-items">${esc((o.itemsText||'').split('\n')[0])}${(o.itemsText||'').split('\n').length>1 ? ` и ещё ${(o.itemsText||'').split('\n').length-1}…` : ''}</div>
-              <div class="order-meta">Итого: <b>${money(o.total||0)}</b></div>
-            </div>`).join('')
-          : `<p class="empty-note">Здесь появится история ваших заказов.</p>`)
-        }
-      </div>
-
-      <div class="section">
         <div class="section-label">Наши кофейни</div>
         <a class="addrcard" href="https://yandex.ru/maps/?pt=37.789429,55.715088&z=17&l=map" target="_blank" rel="noopener">
           <div class="aicon" style="overflow:hidden;">${state.shopPhotos[1] ? `<img src="${state.shopPhotos[1]}" style="width:100%;height:100%;object-fit:cover;">` : '📍'}</div>
@@ -1686,42 +1710,29 @@ function renderCard(){
         <a href="#" class="rippleable" data-action="go-admin">Я администратор →</a>
       </div>
 
-      <div class="stickybar">
-        <button class="btn-primary rippleable" data-action="back-to-menu"><span>К меню</span><span class="sub">→</span></button>
-      </div>
+      ${tabBarHTML('card')}
     </div>
   `;
 }
 
 /* ---------- RENDER: STAFF ---------- */
 function renderStaff(){
-  if(!state.staffShop){
-    return `
-      <div class="screen">
-        <div class="topbar"><button class="iconbtn rippleable" data-action="back-to-menu">←</button><h2>Выберите точку</h2></div>
-        <div class="section">
-          ${SHOPS.map(s=>`
-            <div class="shop-row rippleable" data-action="staff-pick-shop" data-shop="${s.id}">
-              <div><div class="nm">${s.name}</div><div class="ad">${s.addr}</div></div>
-            </div>`).join('')}
-        </div>
-      </div>
-    `;
-  }
   if(!state.staffName){
-    const shop = SHOPS.find(s=>s.id===state.staffShop);
     return `
       <div class="screen">
-        <div class="topbar"><button class="iconbtn rippleable" data-action="staff-change-shop">←</button><h2>${shop.name}</h2></div>
+        <div class="topbar"><button class="iconbtn rippleable" data-action="back-to-menu">←</button><h2>Вход для сотрудников</h2></div>
         <div class="section">
           <div class="pin-gate">
             <div class="section-label">Ваш личный пароль</div>
             <input class="text-input" type="password" placeholder="••••" data-action="set-staff-pin" value="${esc(state.staffPinValue)}">
+            <div class="hint" style="margin-top:6px;">Точку определим автоматически по вашему паролю.</div>
             ${state.staffPinError ? `<div class="pin-error">${state.staffPinError}</div>` : ''}
           </div>
         </div>
         <div class="stickybar">
-          <button class="btn-primary rippleable" data-action="staff-pin-submit"><span>Войти</span><span class="sub">→</span></button>
+          <button class="btn-primary rippleable" data-action="staff-pin-submit" ${state.staffListLoading ? 'disabled' : ''}>
+            <span>${state.staffListLoading ? 'Проверяем…' : 'Войти'}</span><span class="sub">→</span>
+          </button>
         </div>
       </div>
     `;
@@ -2083,14 +2094,27 @@ async function loadStaffList(){
 async function staffPasswordLogin(){
   const pass = (state.staffPinValue||'').trim();
   if(!pass){ state.staffPinError='Введите пароль.'; render(); return; }
-  if(state.staffListLoading){ return; }
-  if(!state.staffList.length){ await loadStaffList(); }
-  const match = state.staffList.find(m => (m.password||'') === pass);
+  if(state.staffListLoading) return;
+  state.staffListLoading = true; render();
+
+  let match = null, matchedShop = null;
+  for(const shop of SHOPS){
+    try{
+      const res = await fetch(DB_URL + '/staff/' + shop.id + '.json');
+      const obj = res.ok ? await res.json() : null;
+      const list = obj ? Object.keys(obj).map(id=>Object.assign({id}, obj[id])) : [];
+      const found = list.find(m => (m.password||'') === pass);
+      if(found){ match = found; matchedShop = shop.id; break; }
+    }catch(e){ /* try the next shop */ }
+  }
+
+  state.staffListLoading = false;
   if(!match){
     state.staffPinError = 'Неверный пароль. Если вы новый сотрудник — попросите администратора добавить вас.';
     render();
     return;
   }
+  state.staffShop = matchedShop;
   state.staffName = match.name;
   state.staffPinError = '';
   state.staffPinValue = '';
@@ -2741,6 +2765,93 @@ function renderStatus(){
 }
 
 /* ---------- ICONS ---------- */
+function tabBarHTML(active){
+  const stampCount = state.loyalty || 0;
+  return `
+    <div class="tabbar">
+      <button class="tab-item rippleable ${active==='menu'?'active':''}" data-action="tab-go-menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9Z"/><path d="M17 10h1.5a2.5 2.5 0 0 1 0 5H17"/></svg>
+        <span>Меню</span>
+      </button>
+      <button class="tab-item rippleable ${active==='card'?'active':''}" style="position:relative;" data-action="tab-go-card">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18"/></svg>
+        <span>Карта</span>
+        ${stampCount>0 ? `<div class="tab-badge">${stampCount}</div>` : ''}
+      </button>
+      <button class="tab-item rippleable ${active==='orders'?'active':''}" data-action="tab-go-orders">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12v4l2 14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2l2-14V2Z"/><path d="M6 8h12"/></svg>
+        <span>Заказы</span>
+      </button>
+    </div>
+  `;
+}
+
+function loyaltyWidgetHTML(){
+  const goal = 7;
+  const n = Math.min(goal, state.loyalty || 0);
+  const r = 20, circ = 2*Math.PI*r;
+  const offset = circ * (1 - n/goal);
+  const note = n>=goal ? 'Готово — следующий кофе бесплатно ☀️' : `Ещё ${goal-n} ${n===goal-1?'чашка':'чашки'} — и восьмая бесплатно`;
+  return `
+    <div class="loyalty-widget rippleable" data-action="go-card">
+      <div class="ring-wrap">
+        <svg viewBox="0 0 48 48">
+          <circle cx="24" cy="24" r="${r}" fill="none" stroke="var(--border)" stroke-width="5"/>
+          <circle cx="24" cy="24" r="${r}" fill="none" stroke="var(--amber)" stroke-width="5" stroke-linecap="round"
+            stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}"/>
+        </svg>
+        <div class="ring-label">${n}/${goal}</div>
+      </div>
+      <div class="loyalty-widget-text">
+        <b>Карта лояльности</b>
+        <span>${note}</span>
+      </div>
+      <div class="loyalty-widget-arrow">→</div>
+    </div>
+  `;
+}
+
+/* ---------- RENDER: ORDERS (tab) ---------- */
+function renderOrders(){
+  const orderReady = state.order && state.order.status==='accepted' && state.order.acceptedAt &&
+    (Date.now()-state.order.acceptedAt) >= state.order.prepMinutes*60000;
+  const orderWaitingAccept = state.order && state.order.status==='new';
+  const orderCancelled = state.order && state.order.status==='cancelled';
+  return `
+    <div class="screen">
+      <div class="topbar"><h2>Мои заказы</h2></div>
+      ${state.order && !orderCancelled ? `
+        <div class="section" style="padding-top:0;">
+          <div class="active-order-banner rippleable" data-action="back-to-status">
+            <div class="active-order-icon">${orderReady ? '✅' : (orderWaitingAccept ? '🔔' : '☕')}</div>
+            <div style="flex:1;min-width:0;">
+              <b>${orderReady ? `Заказ №${state.order.number} готов!` : (orderWaitingAccept ? `Заказ №${state.order.number} ждёт, когда его примут` : `Заказ №${state.order.number} готовится`)}</b>
+              <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">${state.order.shop.name} · нажмите, чтобы посмотреть статус</div>
+            </div>
+            <div class="arrow">→</div>
+          </div>
+        </div>
+      ` : ''}
+      <div class="section">
+        <div class="section-label">История</div>
+        ${state.myOrdersLoading ? `<p class="empty-note">Загружаем…</p>` :
+          (state.myOrders.length ? state.myOrders.map(o=>`
+            <div class="order-card">
+              <div class="order-head">
+                <div><b>№${o.number||'—'}</b> ${o.shopName ? '· ' + o.shopName.replace('Солнцекофе — ','') : ''}</div>
+                <div style="font-size:12px;color:var(--ink-soft);">${o.createdAt ? new Date(o.createdAt).toLocaleDateString('ru-RU', {day:'numeric', month:'short'}) : ''}</div>
+              </div>
+              <div class="order-items">${esc((o.itemsText||'').split('\n')[0])}${(o.itemsText||'').split('\n').length>1 ? ` и ещё ${(o.itemsText||'').split('\n').length-1}…` : ''}</div>
+              <div class="order-meta">Итого: <b>${money(o.total||0)}</b></div>
+            </div>`).join('')
+          : `<p class="empty-note">Здесь появится история ваших заказов.</p>`)
+        }
+      </div>
+      ${tabBarHTML('orders')}
+    </div>
+  `;
+}
+
 function sunMark(){
   return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <circle cx="12" cy="12" r="5" fill="#fff"/>
@@ -2765,6 +2876,7 @@ function render(){
   else if(state.screen==='customize') html = renderCustomize();
   else if(state.screen==='cart') html = renderCart();
   else if(state.screen==='card') html = renderCard();
+  else if(state.screen==='orders') html = renderOrders();
   else if(state.screen==='checkout') html = renderCheckout();
   else if(state.screen==='status') html = renderStatus();
   else if(state.screen==='staff') html = renderStaff();
@@ -2925,6 +3037,9 @@ document.addEventListener('click', (e)=>{
   const action = el.dataset.action;
 
   if(action==='go-cart'){ state.screen='cart'; render(); }
+  else if(action==='tab-go-menu'){ state.screen='menu'; render(); }
+  else if(action==='tab-go-card'){ state.screen='card'; render(); loadReferrals(); loadMyOrders(); checkWheelAvailability(); }
+  else if(action==='tab-go-orders'){ state.screen='orders'; render(); loadMyOrders(); }
   else if(action==='go-card'){ state.screen='card'; render(); loadReferrals(); loadMyOrders(); checkWheelAvailability(); }
   else if(action==='spin-wheel'){ spinWheel(); }
   else if(action==='dismiss-wheel-result'){ state.wheelJustWon = false; render(); }
@@ -2967,8 +3082,6 @@ document.addEventListener('click', (e)=>{
     if(state.adminPinValue===ADMIN_PIN){ state.adminAuthed=true; state.adminPinError=''; loadAdminOrders(); }
     else{ state.adminPinError='Неверный код доступа.'; render(); }
   }
-  else if(action==='staff-pick-shop'){ state.staffShop=parseInt(el.dataset.shop,10); loadStaffList(); }
-  else if(action==='staff-change-shop'){ state.staffShop=null; state.staffName=null; state.staffOrders=[]; state.staffPinValue=''; state.staffPinError=''; clearStaffSession(); render(); }
   else if(action==='staff-change-name'){ state.staffName=null; state.staffPinValue=''; clearStaffSession(); render(); }
   else if(action==='staff-logout'){ state.staffShop=null; state.staffName=null; state.staffOrders=[]; clearStaffSession(); state.screen='menu'; render(); }
   else if(action==='staff-refresh'){ loadStaffOrders(); }
