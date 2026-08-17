@@ -866,6 +866,8 @@ let state = {
   order:null,
   staffAuthed:false, staffPinValue:'', staffPinError:'', staffShop:null, staffOrders:[], staffLoading:false,
   chargeIdValue:'', chargeMsg:'', chargeMsgOk:false,
+  reportDate:'', reportCash:'', reportCashless:'', reportMsg:'', reportMsgOk:false,
+  expenseDate:'', expenseAmount:'', expenseSupplier:'', expenseNote:'', expenseMsg:'', expenseMsgOk:false,
   staffList:[], staffListLoading:false, staffName:null,
   adminAuthed:false, adminPinValue:'', adminPinError:'', adminOrders:[], adminStats:{count:0, revenue:0, tips:[], tipsTotal:0}, adminLoading:false,
   adminTab:'orders', adminStaffShop:1, adminStaff:[], adminStaffLoading:false, newStaffName:'',
@@ -879,6 +881,9 @@ let state = {
 let statusTimer = null;
 let uidCounter = 1;
 const WORKER_URL = 'https://solncekofe-bot.foxkiss1997.workers.dev';
+// Paste the Web App URL from Google Apps Script here once deployed (see setup guide).
+// Leave empty and reports still save to Firebase — they just won't mirror into Google Sheets yet.
+const GAS_WEBHOOK_URL = '';
 const PAYMENT_RELAY_URL = 'https://solncekofe-payment-relay.onrender.com';
 const DB_URL = 'https://solncekofe-fdcad-default-rtdb.firebaseio.com';
 const STAFF_PIN = '4444';
@@ -958,6 +963,7 @@ async function initLoyalty(){
     state.guestDisplayName = g.name;
     if(!state.guestName) state.guestName = g.name;
   }
+  if(g.contact && !state.receiptContact) state.receiptContact = g.contact;
   render();
 }
 
@@ -1244,13 +1250,18 @@ async function placeOrder(){
     clientId: LOYALTY_ID || TELEGRAM_ID || CLIENT_ID,
   };
 
-  // Remember the guest's name for next visit's greeting (fire-and-forget, non-blocking).
-  if(LOYALTY_ID && state.guestName && state.guestName.trim()){
-    try{
-      fetch(DB_URL + '/guests/' + LOYALTY_ID + '.json', {
-        method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: state.guestName.trim() })
-      });
-    }catch(e){}
+  // Remember the guest's name and contact for next visit (fire-and-forget, non-blocking).
+  if(LOYALTY_ID){
+    const patch = {};
+    if(state.guestName && state.guestName.trim()) patch.name = state.guestName.trim();
+    if(state.receiptContact && state.receiptContact.trim()) patch.contact = state.receiptContact.trim();
+    if(Object.keys(patch).length){
+      try{
+        fetch(DB_URL + '/guests/' + LOYALTY_ID + '.json', {
+          method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(patch)
+        });
+      }catch(e){}
+    }
   }
 
   state.payingNow = true;
@@ -1761,6 +1772,23 @@ function renderStaff(){
         <input class="text-input" style="margin-top:8px;" type="text" placeholder="Код приза (например W3F9K)" value="${esc(state.redeemVoucherId||'')}" data-action="set-redeem-voucher-id">
         <button class="btn-ghost rippleable" data-action="staff-redeem-voucher" style="margin-top:8px;">Погасить приз</button>
         ${state.redeemMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.redeemMsgOk?'var(--mint-deep)':'var(--coral-deep)'};font-weight:700;">${state.redeemMsg}</div>` : ''}
+      </div>
+      <div class="section">
+        <div class="section-label">Отчёт по выручке за день</div>
+        <input class="text-input" type="date" value="${esc(state.reportDate||'')}" data-action="set-report-date">
+        <input class="text-input" style="margin-top:8px;" type="number" inputmode="decimal" placeholder="Наличными, ₽" value="${esc(state.reportCash||'')}" data-action="set-report-cash">
+        <input class="text-input" style="margin-top:8px;" type="number" inputmode="decimal" placeholder="Безналичными, ₽" value="${esc(state.reportCashless||'')}" data-action="set-report-cashless">
+        <button class="btn-ghost rippleable" data-action="submit-revenue-report" style="margin-top:8px;">Отправить отчёт</button>
+        ${state.reportMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.reportMsgOk?'var(--mint-deep)':'var(--coral-deep)'};font-weight:700;">${state.reportMsg}</div>` : ''}
+      </div>
+      <div class="section">
+        <div class="section-label">Накладная / расход</div>
+        <input class="text-input" type="date" value="${esc(state.expenseDate||'')}" data-action="set-expense-date">
+        <input class="text-input" style="margin-top:8px;" type="number" inputmode="decimal" placeholder="Сумма, ₽" value="${esc(state.expenseAmount||'')}" data-action="set-expense-amount">
+        <input class="text-input" style="margin-top:8px;" type="text" placeholder="Поставщик" value="${esc(state.expenseSupplier||'')}" data-action="set-expense-supplier">
+        <input class="text-input" style="margin-top:8px;" type="text" placeholder="Комментарий (необязательно)" value="${esc(state.expenseNote||'')}" data-action="set-expense-note">
+        <button class="btn-ghost rippleable" data-action="submit-expense-report" style="margin-top:8px;">Сохранить расход</button>
+        ${state.expenseMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.expenseMsgOk?'var(--mint-deep)':'var(--coral-deep)'};font-weight:700;">${state.expenseMsg}</div>` : ''}
       </div>
       <div class="section">
         <div class="section-label">Заказы точки</div>
@@ -2337,6 +2365,66 @@ function scanLoyaltyQr(){
     state.chargeMsgOk = false;
     render();
   }
+}
+
+// Sends a copy of a report to the Google Sheet via the Apps Script webhook,
+// if one has been configured. Fire-and-forget: Firebase is the source of
+// truth, the sheet is just a convenient mirror for bookkeeping — a failed
+// or missing webhook should never block saving the report itself.
+function mirrorToGoogleSheet(payload){
+  if(!GAS_WEBHOOK_URL) return;
+  try{
+    fetch(GAS_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // avoids a CORS preflight Apps Script doesn't handle
+      body: JSON.stringify(payload),
+    }).catch(()=>{});
+  }catch(e){}
+}
+
+async function submitRevenueReport(){
+  const date = state.reportDate;
+  const cash = parseFloat(state.reportCash) || 0;
+  const cashless = parseFloat(state.reportCashless) || 0;
+  const total = cash + cashless;
+  if(!date || total<=0){
+    state.reportMsg = 'Укажите дату и хотя бы одну сумму (наличные или безнал).'; state.reportMsgOk = false; render(); return;
+  }
+  const shop = SHOPS.find(s=>s.id===state.staffShop);
+  try{
+    await fetch(DB_URL + '/revenue_reports/' + state.staffShop + '/' + date + '.json', {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ date, cash, cashless, total, submittedBy: state.staffName, submittedAt: Date.now() }),
+    });
+    mirrorToGoogleSheet({ type:'revenue', shopId: state.staffShop, shopName: shop.name, date, cash, cashless, total, submittedBy: state.staffName });
+    state.reportMsg = 'Отчёт по выручке сохранён.'; state.reportMsgOk = true;
+    state.reportCash = ''; state.reportCashless = '';
+  }catch(e){
+    state.reportMsg = 'Не удалось сохранить — проверьте связь.'; state.reportMsgOk = false;
+  }
+  render();
+}
+
+async function submitExpenseReport(){
+  const date = state.expenseDate;
+  const amount = parseFloat(state.expenseAmount);
+  const supplier = (state.expenseSupplier||'').trim();
+  if(!date || !amount || amount<=0){
+    state.expenseMsg = 'Укажите дату и сумму расхода.'; state.expenseMsgOk = false; render(); return;
+  }
+  const shop = SHOPS.find(s=>s.id===state.staffShop);
+  try{
+    await fetch(DB_URL + '/expense_reports/' + state.staffShop + '.json', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ date, amount, supplier, note: state.expenseNote||'', submittedBy: state.staffName, submittedAt: Date.now() }),
+    });
+    mirrorToGoogleSheet({ type:'expense', shopId: state.staffShop, shopName: shop.name, date, amount, supplier, note: state.expenseNote||'', submittedBy: state.staffName });
+    state.expenseMsg = 'Расход сохранён.'; state.expenseMsgOk = true;
+    state.expenseAmount = ''; state.expenseSupplier = ''; state.expenseNote = '';
+  }catch(e){
+    state.expenseMsg = 'Не удалось сохранить — проверьте связь.'; state.expenseMsgOk = false;
+  }
+  render();
 }
 
 const LOYALTY_GOAL = 7;
@@ -3089,6 +3177,8 @@ document.addEventListener('click', (e)=>{
   else if(action==='set-redeem-guest-id'){ state.redeemGuestId = el.value; }
   else if(action==='set-redeem-voucher-id'){ state.redeemVoucherId = el.value; }
   else if(action==='staff-redeem-voucher'){ redeemVoucher(); }
+  else if(action==='submit-revenue-report'){ submitRevenueReport(); }
+  else if(action==='submit-expense-report'){ submitExpenseReport(); }
   else if(action==='staff-scan-qr'){ scanLoyaltyQr(); }
   else if(action==='admin-refresh'){ loadAdminOrders(); }
   else if(action==='admin-set-tab'){
@@ -3173,6 +3263,13 @@ document.addEventListener('input', (e)=>{
   else if(action==='set-new-staff-name'){ state.newStaffName = el.value; }
   else if(action==='set-new-staff-password'){ state.newStaffPassword = el.value; }
   else if(action==='set-charge-id'){ state.chargeIdValue = el.value; }
+  else if(action==='set-report-date'){ state.reportDate = el.value; }
+  else if(action==='set-report-cash'){ state.reportCash = el.value; }
+  else if(action==='set-report-cashless'){ state.reportCashless = el.value; }
+  else if(action==='set-expense-date'){ state.expenseDate = el.value; }
+  else if(action==='set-expense-amount'){ state.expenseAmount = el.value; }
+  else if(action==='set-expense-supplier'){ state.expenseSupplier = el.value; }
+  else if(action==='set-expense-note'){ state.expenseNote = el.value; }
   else if(action==='set-new-menu-name'){ state.newMenuName = el.value; }
   else if(action==='set-new-menu-cat'){ state.newMenuCat = el.value; }
   else if(action==='set-new-menu-price'){ state.newMenuPrice = el.value; }
