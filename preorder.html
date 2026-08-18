@@ -867,6 +867,7 @@ let state = {
   staffAuthed:false, staffPinValue:'', staffPinError:'', staffShop:null, staffOrders:[], staffLoading:false,
   chargeIdValue:'', chargeMsg:'', chargeMsgOk:false,
   reportDate:'', reportCash:'', reportCashless:'', reportMsg:'', reportMsgOk:false,
+  reportsExporting:false, reportsExportMsg:'', reportsExportMsgOk:false,
   expenseDate:'', expenseAmount:'', expenseSupplier:'', expenseNote:'', expenseMsg:'', expenseMsgOk:false,
   staffList:[], staffListLoading:false, staffName:null,
   adminAuthed:false, adminPinValue:'', adminPinError:'', adminOrders:[], adminStats:{count:0, revenue:0, tips:[], tipsTotal:0}, adminLoading:false,
@@ -1832,11 +1833,99 @@ function renderAdmin(){
           <div class="tab ${state.adminTab==='menu'?'active':''} rippleable" data-action="admin-set-tab" data-tab="menu">Меню</div>
           <div class="tab ${state.adminTab==='posts'?'active':''} rippleable" data-action="admin-set-tab" data-tab="posts">Посты</div>
           <div class="tab ${state.adminTab==='wheel'?'active':''} rippleable" data-action="admin-set-tab" data-tab="wheel">Колесо</div>
+          <div class="tab ${state.adminTab==='reports'?'active':''} rippleable" data-action="admin-set-tab" data-tab="reports">Отчёты</div>
         </div>
       </div>
-      ${state.adminTab==='orders' ? renderAdminOrdersTab() : state.adminTab==='staff' ? renderAdminStaffTab() : state.adminTab==='menu' ? renderAdminMenuTab() : state.adminTab==='posts' ? renderAdminPostsTab() : renderAdminWheelTab()}
+      ${state.adminTab==='orders' ? renderAdminOrdersTab() : state.adminTab==='staff' ? renderAdminStaffTab() : state.adminTab==='menu' ? renderAdminMenuTab() : state.adminTab==='posts' ? renderAdminPostsTab() : state.adminTab==='reports' ? renderAdminReportsTab() : renderAdminWheelTab()}
     </div>
   `;
+}
+
+function renderAdminReportsTab(){
+  return `
+    <div class="section">
+      <div class="section-label">Отчёты по выручке и расходам</div>
+      <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 12px;line-height:1.5;">
+        Все отчёты, которые сотрудники отправляли из раздела «Я сотрудник», уже сохранены здесь.
+        Нажми кнопку — скачается файл со всеми записями. Его можно открыть в Excel или загрузить
+        в Google Таблицу: Файл → Импорт → Загрузить → выбрать файл → «Заменить текущий лист» или «Вставить новый лист».
+      </p>
+      <button class="btn-primary rippleable" data-action="export-reports-csv" ${state.reportsExporting ? 'disabled' : ''}>
+        <span>${state.reportsExporting ? 'Готовим файл…' : '📥 Скачать отчёты (CSV)'}</span><span class="sub">→</span>
+      </button>
+      ${state.reportsExportMsg ? `<div class="order-meta" style="margin-top:10px;color:${state.reportsExportMsgOk?'var(--mint-deep)':'var(--coral-deep)'};font-weight:700;">${state.reportsExportMsg}</div>` : ''}
+    </div>
+  `;
+}
+
+// Builds one CSV with every revenue + expense report across both shops and
+// triggers a normal file download — no network calls to Google at all, so
+// nothing here can be blocked by CORS or authorization. The admin opens the
+// file and imports it into Google Sheets whenever it's convenient.
+async function exportReportsCSV(){
+  state.reportsExporting = true; state.reportsExportMsg=''; render();
+  try{
+    const [revRes, expRes] = await Promise.all([
+      fetch(DB_URL + '/revenue_reports.json'),
+      fetch(DB_URL + '/expense_reports.json'),
+    ]);
+    const revObj = revRes.ok ? await revRes.json() : null;
+    const expObj = expRes.ok ? await expRes.json() : null;
+
+    const rows = [['Тип','Дата','Точка','Наличные','Безнал','Сумма','Поставщик','Комментарий','Кто внёс']];
+
+    if(revObj){
+      Object.keys(revObj).forEach(shopId=>{
+        const shop = SHOPS.find(s=>s.id===Number(shopId));
+        const shopName = shop ? shop.name : ('Точка ' + shopId);
+        const byDate = revObj[shopId] || {};
+        Object.keys(byDate).forEach(date=>{
+          const r = byDate[date];
+          rows.push(['Выручка', date, shopName, r.cash||0, r.cashless||0, r.total||0, '', '', r.submittedBy||'']);
+        });
+      });
+    }
+    if(expObj){
+      Object.keys(expObj).forEach(shopId=>{
+        const shop = SHOPS.find(s=>s.id===Number(shopId));
+        const shopName = shop ? shop.name : ('Точка ' + shopId);
+        const byId = expObj[shopId] || {};
+        Object.keys(byId).forEach(id=>{
+          const e = byId[id];
+          rows.push(['Расход', e.date||'', shopName, '', '', e.amount||0, e.supplier||'', e.note||'', e.submittedBy||'']);
+        });
+      });
+    }
+
+    if(rows.length===1){
+      state.reportsExportMsg = 'Пока нет ни одного отчёта — нечего скачивать.';
+      state.reportsExportMsgOk = false;
+    } else {
+      const csv = rows.map(r=>r.map(cell=>{
+        const s = String(cell).replace(/"/g,'""');
+        return /[",;\n]/.test(s) ? `"${s}"` : s;
+      }).join(';')).join('\r\n');
+      const blob = new Blob(['\uFEFF' + csv], { type:'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'solncekofe-otchety-' + moscowDateStringClient() + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      state.reportsExportMsg = `Готово — скачано ${rows.length-1} строк.`;
+      state.reportsExportMsgOk = true;
+    }
+  }catch(e){
+    state.reportsExportMsg = 'Не удалось собрать файл — проверьте связь и попробуйте ещё раз.';
+    state.reportsExportMsgOk = false;
+  }
+  state.reportsExporting = false; render();
+}
+function moscowDateStringClient(){
+  const msk = new Date(Date.now() + 3*60*60*1000);
+  return msk.toISOString().slice(0,10);
 }
 
 function renderAdminOrdersTab(){
@@ -2371,16 +2460,38 @@ function scanLoyaltyQr(){
 // if one has been configured. Fire-and-forget: Firebase is the source of
 // truth, the sheet is just a convenient mirror for bookkeeping — a failed
 // or missing webhook should never block saving the report itself.
+// Sends a copy of a report to the Google Sheet. Uses a hidden form POST
+// (targeting a hidden iframe) instead of fetch() — plain form submissions
+// aren't subject to CORS blocking the way fetch requests are, which is what
+// made the earlier fetch-based version unreliable against Apps Script's
+// redirect chain. We never read the response; Firebase stays the source of
+// truth and this is just a best-effort mirror.
+let gsheetIframeReady = false;
+function ensureGsheetIframe(){
+  if(gsheetIframeReady) return;
+  const iframe = document.createElement('iframe');
+  iframe.name = 'gsheet-mirror-frame';
+  iframe.style.display = 'none';
+  document.body.appendChild(iframe);
+  gsheetIframeReady = true;
+}
 function mirrorToGoogleSheet(payload){
   if(!GAS_WEBHOOK_URL) return;
   try{
-    fetch(GAS_WEBHOOK_URL, {
-      method: 'POST',
-      mode: 'no-cors', // Apps Script doesn't send CORS headers — this tells the browser
-                        // not to block sending the request just because we can't read the response.
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // avoids a CORS preflight Apps Script doesn't handle
-      body: JSON.stringify(payload),
-    }).catch(()=>{});
+    ensureGsheetIframe();
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = GAS_WEBHOOK_URL;
+    form.target = 'gsheet-mirror-frame';
+    form.style.display = 'none';
+    const field = document.createElement('input');
+    field.type = 'hidden';
+    field.name = 'payload';
+    field.value = JSON.stringify(payload);
+    form.appendChild(field);
+    document.body.appendChild(form);
+    form.submit();
+    setTimeout(()=>form.remove(), 3000);
   }catch(e){}
 }
 
@@ -3181,6 +3292,7 @@ document.addEventListener('click', (e)=>{
   else if(action==='staff-redeem-voucher'){ redeemVoucher(); }
   else if(action==='submit-revenue-report'){ submitRevenueReport(); }
   else if(action==='submit-expense-report'){ submitExpenseReport(); }
+  else if(action==='export-reports-csv'){ exportReportsCSV(); }
   else if(action==='staff-scan-qr'){ scanLoyaltyQr(); }
   else if(action==='admin-refresh'){ loadAdminOrders(); }
   else if(action==='admin-set-tab'){
