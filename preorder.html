@@ -868,6 +868,7 @@ let state = {
   chargeIdValue:'', chargeMsg:'', chargeMsgOk:false,
   reportDate:'', reportCash:'', reportCashless:'', reportMsg:'', reportMsgOk:false,
   reportsExporting:false, reportsExportMsg:'', reportsExportMsgOk:false,
+  reportsView:'weekly', reportsLoading:false, reportsAgg:{ weekly:{}, monthly:{}, suppliers:{} },
   expenseDate:'', expenseAmount:'', expenseSupplier:'', expenseNote:'', expenseMsg:'', expenseMsgOk:false,
   staffList:[], staffListLoading:false, staffName:null,
   adminAuthed:false, adminPinValue:'', adminPinError:'', adminOrders:[], adminStats:{count:0, revenue:0, tips:[], tipsTotal:0}, adminLoading:false,
@@ -1842,21 +1843,154 @@ function renderAdmin(){
 }
 
 function renderAdminReportsTab(){
+  const view = state.reportsView || 'weekly';
   return `
     <div class="section">
-      <div class="section-label">Отчёты по выручке и расходам</div>
-      <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 12px;line-height:1.5;">
-        Все отчёты, которые сотрудники отправляли из раздела «Я сотрудник», уже сохранены здесь.
-        Нажми кнопку — скачается файл со всеми записями. Его можно открыть в Excel или загрузить
-        в Google Таблицу: Файл → Импорт → Загрузить → выбрать файл → «Заменить текущий лист» или «Вставить новый лист».
-      </p>
+      <div class="segmented">
+        <div class="seg rippleable ${view==='weekly'?'active':''}" data-action="set-reports-view" data-view="weekly"><div class="lb" style="font-size:12px;">По неделям</div></div>
+        <div class="seg rippleable ${view==='monthly'?'active':''}" data-action="set-reports-view" data-view="monthly"><div class="lb" style="font-size:12px;">По месяцам</div></div>
+        <div class="seg rippleable ${view==='suppliers'?'active':''}" data-action="set-reports-view" data-view="suppliers"><div class="lb" style="font-size:12px;">Поставщики</div></div>
+      </div>
+    </div>
+    ${state.reportsLoading ? `<div class="section"><p class="empty-note">Считаем…</p></div>` : renderReportsView(view)}
+    <div class="section">
+      <button class="btn-ghost rippleable" data-action="admin-refresh-reports" style="margin-bottom:8px;">⟳ Обновить данные</button>
       <button class="btn-primary rippleable" data-action="export-reports-csv" ${state.reportsExporting ? 'disabled' : ''}>
-        <span>${state.reportsExporting ? 'Готовим файл…' : '📥 Скачать отчёты (CSV)'}</span><span class="sub">→</span>
+        <span>${state.reportsExporting ? 'Готовим файл…' : '📥 Скачать всё сырыми данными (CSV)'}</span><span class="sub">→</span>
       </button>
       ${state.reportsExportMsg ? `<div class="order-meta" style="margin-top:10px;color:${state.reportsExportMsgOk?'var(--mint-deep)':'var(--coral-deep)'};font-weight:700;">${state.reportsExportMsg}</div>` : ''}
     </div>
   `;
 }
+
+function renderReportsView(view){
+  const agg = state.reportsAgg || { weekly:{}, monthly:{}, suppliers:{} };
+  if(view==='suppliers'){
+    return SHOPS.map(shop=>{
+      const rows = (agg.suppliers[shop.id]||[]).slice(0,20);
+      return `
+      <div class="section">
+        <div class="section-label">${shop.name}</div>
+        ${rows.length ? rows.map(r=>`
+          <div class="order-card">
+            <div class="order-head"><b>${esc(r.supplier)}</b><span style="font-family:var(--font-mono);font-weight:700;color:var(--amber-deep);">${money(r.total)}</span></div>
+            <div class="order-meta">${r.count} ${r.count===1?'накладная':'накладных'} · последняя: ${r.last||'—'}</div>
+          </div>`).join('') : `<p class="empty-note">Пока нет расходов по этой точке.</p>`}
+      </div>`;
+    }).join('');
+  }
+  const periodMap = view==='weekly' ? agg.weekly : agg.monthly;
+  return SHOPS.map(shop=>{
+    const rows = (periodMap[shop.id]||[]).slice(0,12);
+    return `
+    <div class="section">
+      <div class="section-label">${shop.name}</div>
+      ${rows.length ? rows.map(r=>`
+        <div class="order-card">
+          <div class="order-head"><b>${formatPeriodLabel(r.period, view)}</b><span style="font-family:var(--font-mono);font-weight:700;">${money(r.total)}</span></div>
+          <div class="order-meta">Наличные: <b>${money(r.cash)}</b> · Безнал: <b>${money(r.cashless)}</b></div>
+          <div class="order-meta">Расходы: <b>${money(r.expense)}</b> · Прибыль: <b style="color:${r.profit>=0?'var(--mint-deep)':'var(--coral-deep)'};">${money(r.profit)}</b></div>
+        </div>`).join('') : `<p class="empty-note">Пока нет отчётов по этой точке.</p>`}
+    </div>`;
+  }).join('');
+}
+
+function formatPeriodLabel(period, view){
+  if(view==='monthly'){
+    const [y,m] = period.split('-');
+    const months = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+    return months[Number(m)-1] + ' ' + y;
+  }
+  const d = new Date(period + 'T00:00:00');
+  const end = new Date(d.getTime() + 6*86400000);
+  const fmt = dt => dt.toLocaleDateString('ru-RU', {day:'numeric', month:'short'});
+  return `${fmt(d)} – ${fmt(end)}`;
+}
+
+function isoWeekStartClient(d){
+  const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = (date.getDay() + 6) % 7;
+  date.setDate(date.getDate() - day);
+  return date;
+}
+function ymd(d){ return d.toISOString().slice(0,10); }
+
+async function loadAdminReports(){
+  state.reportsLoading = true; render();
+  try{
+    const [revRes, expRes] = await Promise.all([
+      fetch(DB_URL + '/revenue_reports.json'),
+      fetch(DB_URL + '/expense_reports.json'),
+    ]);
+    const revObj = revRes.ok ? await revRes.json() : null;
+    const expObj = expRes.ok ? await expRes.json() : null;
+
+    const weekly = {}, monthly = {}, suppliers = {};
+    SHOPS.forEach(s=>{ weekly[s.id]={}; monthly[s.id]={}; suppliers[s.id]={}; });
+
+    function addRevenue(map, shopId, key, cash, cashless){
+      if(!map[shopId]) map[shopId] = {};
+      if(!map[shopId][key]) map[shopId][key] = { period:key, cash:0, cashless:0, expense:0 };
+      map[shopId][key].cash += cash; map[shopId][key].cashless += cashless;
+    }
+    function addExpense(map, shopId, key, amount){
+      if(!map[shopId]) map[shopId] = {};
+      if(!map[shopId][key]) map[shopId][key] = { period:key, cash:0, cashless:0, expense:0 };
+      map[shopId][key].expense += amount;
+    }
+
+    if(revObj){
+      Object.keys(revObj).forEach(shopIdStr=>{
+        const shopId = Number(shopIdStr);
+        Object.keys(revObj[shopIdStr]||{}).forEach(date=>{
+          const r = revObj[shopIdStr][date];
+          const d = new Date(date + 'T00:00:00');
+          if(isNaN(d)) return;
+          addRevenue(weekly, shopId, ymd(isoWeekStartClient(d)), r.cash||0, r.cashless||0);
+          addRevenue(monthly, shopId, date.slice(0,7), r.cash||0, r.cashless||0);
+        });
+      });
+    }
+    if(expObj){
+      Object.keys(expObj).forEach(shopIdStr=>{
+        const shopId = Number(shopIdStr);
+        Object.keys(expObj[shopIdStr]||{}).forEach(id=>{
+          const e = expObj[shopIdStr][id];
+          const d = new Date((e.date||'') + 'T00:00:00');
+          if(!isNaN(d)){
+            addExpense(weekly, shopId, ymd(isoWeekStartClient(d)), e.amount||0);
+            addExpense(monthly, shopId, (e.date||'').slice(0,7), e.amount||0);
+          }
+          const supplier = (e.supplier||'').trim() || 'Без названия';
+          if(!suppliers[shopId][supplier]) suppliers[shopId][supplier] = { supplier, total:0, count:0, last:null };
+          suppliers[shopId][supplier].total += e.amount||0;
+          suppliers[shopId][supplier].count += 1;
+          if(e.date && (!suppliers[shopId][supplier].last || e.date > suppliers[shopId][supplier].last)) suppliers[shopId][supplier].last = e.date;
+        });
+      });
+    }
+
+    function finalize(map){
+      const out = {};
+      Object.keys(map).forEach(shopId=>{
+        out[shopId] = Object.values(map[shopId]).map(v=>({
+          ...v, total: v.cash+v.cashless, profit: (v.cash+v.cashless)-v.expense,
+        })).sort((a,b)=> b.period.localeCompare(a.period));
+      });
+      return out;
+    }
+    const suppliersOut = {};
+    Object.keys(suppliers).forEach(shopId=>{
+      suppliersOut[shopId] = Object.values(suppliers[shopId]).sort((a,b)=>b.total-a.total);
+    });
+
+    state.reportsAgg = { weekly: finalize(weekly), monthly: finalize(monthly), suppliers: suppliersOut };
+  }catch(e){
+    state.reportsAgg = { weekly:{}, monthly:{}, suppliers:{} };
+  }
+  state.reportsLoading = false; render();
+}
+
 
 // Builds one CSV with every revenue + expense report across both shops and
 // triggers a normal file download — no network calls to Google at all, so
@@ -3299,8 +3433,11 @@ document.addEventListener('click', (e)=>{
     state.adminTab = el.dataset.tab;
     if(state.adminTab==='staff') loadAdminStaff();
     else if(state.adminTab==='posts') loadAdminPosts();
+    else if(state.adminTab==='reports') loadAdminReports();
     else render();
   }
+  else if(action==='set-reports-view'){ state.reportsView = el.dataset.view; render(); }
+  else if(action==='admin-refresh-reports'){ loadAdminReports(); }
   else if(action==='admin-set-staff-shop'){ state.adminStaffShop = parseInt(el.dataset.shop,10); loadAdminStaff(); }
   else if(action==='admin-add-staff'){ addAdminStaff(); }
   else if(action==='admin-remove-staff'){ removeAdminStaff(el.dataset.id); }
