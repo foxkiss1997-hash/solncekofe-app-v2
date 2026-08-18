@@ -2629,6 +2629,16 @@ function mirrorToGoogleSheet(payload){
   }catch(e){}
 }
 
+// Шлёт отчёт владельцу личным сообщением в Telegram через уже рабочего бота
+// (тот же путь, что уведомления о заказах) — надёжнее любых внешних сервисов.
+function sendReportToOwnerBot(payload){
+  try{
+    fetch(WORKER_URL + '/report', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload),
+    }).catch(()=>{});
+  }catch(e){}
+}
+
 async function submitRevenueReport(){
   const date = state.reportDate;
   const cash = parseFloat(state.reportCash) || 0;
@@ -2644,6 +2654,7 @@ async function submitRevenueReport(){
       body: JSON.stringify({ date, cash, cashless, total, submittedBy: state.staffName, submittedAt: Date.now() }),
     });
     mirrorToGoogleSheet({ type:'revenue', shopId: state.staffShop, shopName: shop.name, date, cash, cashless, total, submittedBy: state.staffName });
+    sendReportToOwnerBot({ type:'revenue', shopId: state.staffShop, shopName: shop.name, date, cash, cashless, total, submittedBy: state.staffName });
     state.reportMsg = 'Отчёт по выручке сохранён.'; state.reportMsgOk = true;
     state.reportCash = ''; state.reportCashless = '';
   }catch(e){
@@ -2666,6 +2677,7 @@ async function submitExpenseReport(){
       body: JSON.stringify({ date, amount, supplier, note: state.expenseNote||'', submittedBy: state.staffName, submittedAt: Date.now() }),
     });
     mirrorToGoogleSheet({ type:'expense', shopId: state.staffShop, shopName: shop.name, date, amount, supplier, note: state.expenseNote||'', submittedBy: state.staffName });
+    sendReportToOwnerBot({ type:'expense', shopId: state.staffShop, shopName: shop.name, date, amount, supplier, note: state.expenseNote||'', submittedBy: state.staffName });
     state.expenseMsg = 'Расход сохранён.'; state.expenseMsgOk = true;
     state.expenseAmount = ''; state.expenseSupplier = ''; state.expenseNote = '';
   }catch(e){
