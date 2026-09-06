@@ -1,0 +1,114 @@
+:root {
+  --coffee: #3D3128;
+  --cream: #FFF9F1;
+  --background: #F4E8D7;
+  --yellow: #F4BC42;
+  --yellow-dark: #C98722;
+  --muted: #8C7866;
+  --line: rgba(61,49,40,.12);
+}
+
+html,
+body {
+  background:
+    radial-gradient(
+      circle at 10% 0%,
+      rgba(244,188,66,.18),
+      transparent 35%
+    ),
+    linear-gradient(
+      180deg,
+      #F8EFE2,
+      #EEDCC5
+    ) !important;
+
+  color: var(--coffee) !important;
+}
+
+.glow,
+.suntravel {
+  display: none !important;
+}
+
+.card {
+  background: rgba(255,249,241,.92) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 26px !important;
+
+  box-shadow:
+    0 16px 42px
+    rgba(79,59,39,.12) !important;
+}
+
+.brand b,
+.headtext h1,
+.staffcard h2 {
+  color: var(--coffee) !important;
+}
+
+.mark,
+.stafficon,
+.addrcard .aicon,
+.channelcard .cicon {
+  background: var(--yellow) !important;
+  color: var(--coffee) !important;
+}
+
+.modepill {
+  background: rgba(255,255,255,.55) !important;
+  border: 1px solid var(--line) !important;
+  color: var(--muted) !important;
+}
+
+.tabs {
+  background: rgba(255,255,255,.5) !important;
+  border: 1px solid var(--line) !important;
+}
+
+.tab {
+  color: var(--muted) !important;
+}
+
+.tab.active {
+  background: var(--coffee) !important;
+  color: #FFF8EF !important;
+}
+
+.menuitem {
+  border-bottom: 1px solid var(--line) !important;
+}
+
+.menuitem .name {
+  color: var(--coffee) !important;
+}
+
+.menuitem .desc {
+  color: var(--muted) !important;
+}
+
+.menuitem .price,
+.menucat,
+.headtext .eyebrow {
+  color: var(--yellow-dark) !important;
+}
+
+.addrcard {
+  background: rgba(255,249,241,.9) !important;
+  border: 1px solid var(--line) !important;
+}
+
+.btn {
+  background: var(--yellow) !important;
+  color: var(--coffee) !important;
+}
+
+.copybtn {
+  background: var(--coffee) !important;
+  color: #FFF8EF !important;
+}
+
+.field input {
+  background: var(--cream) !important;
+  color: var(--coffee) !important;
+  border: 1px solid var(--line) !important;
+}
