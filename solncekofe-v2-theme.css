@@ -1,0 +1,55 @@
+/* Солнцекофе 2.0 — premium UI layer
+   Безопасный визуальный слой: не меняет базу, заказы и лояльность.
+*/
+:root{
+  --paper:#F4EBDD;
+  --paper-dim:#E7D9C6;
+  --ink:#201D18;
+  --ink-soft:#776E63;
+  --amber:#E5A72D;
+  --amber-deep:#A66A13;
+  --mint:#1E7A55;
+  --mint-deep:#14533B;
+  --card:rgba(255,252,247,.88);
+  --card-strong:#FFFDF8;
+  --border:rgba(50,42,33,.11);
+  --sh-sm:0 7px 22px rgba(55,42,28,.08);
+  --sh-md:0 16px 38px rgba(55,42,28,.12);
+  --radius-lg:24px;
+  --radius-md:18px;
+}
+body{
+  background:
+    radial-gradient(circle at 20% 0%,rgba(240,181,61,.13),transparent 32%),
+    linear-gradient(180deg,#F7EFE4 0%,#EFE1CE 100%);
+}
+.shell{background:transparent}
+.brand{padding-top:20px}
+.badge{
+  background:#F0B53D;
+  color:#201D18;
+  box-shadow:0 7px 18px rgba(229,167,45,.25)
+}
+.wordmark{font-size:20px;letter-spacing:-.025em}
+.greeting{color:#1D1B17}
+.subgreeting{color:#776E63}
+.item-card,.loyalty-widget,.punch-card,.member-card,.shop-row,.opt-row,.cart-line{
+  background:rgba(255,253,248,.88);
+  border-color:rgba(50,42,33,.10);
+  box-shadow:var(--sh-sm)
+}
+.btn-primary,.item-add{
+  background:linear-gradient(135deg,#D99A25,#F1BA49);
+  color:#211A10
+}
+.tab.active{background:#24211C;color:#F6C65B}
+.tabbar{
+  background:rgba(255,251,244,.94);
+  border-color:rgba(50,42,33,.10)
+}
+@media (min-width:641px){
+  .shell{
+    max-width:480px;
+    background:rgba(255,253,248,.60)
+  }
+}
