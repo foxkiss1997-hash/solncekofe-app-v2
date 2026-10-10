@@ -4,7 +4,7 @@
  * Production is opt-in and must not be selected before the test workflow passes.
  */
 const OPS_DATABASE = 'https://solncekofe-fdcad-default-rtdb.firebaseio.com';
-const OPS_ALLOWED_ORIGINS = ['https://foxkiss1997-hash.github.io'];
+const OPS_ALLOWED_ORIGINS = ['https://foxkiss1997-hash.github.io', 'https://solncekofe-staff-test-oct10.tursunovhaki.chatgpt.site'];
 function doPost(e){
   let request={},answer;
   try{
@@ -13,10 +13,10 @@ function doPost(e){
     const props=PropertiesService.getScriptProperties(),mode=props.getProperty('MODE');
     if(!['test','production'].includes(mode)||request.mode!==mode)throw Error('Режим приложения и интеграции не совпадает.');
     const root=mode==='test'?'/ops_v3_test':'';
-    if(request.action==='saveChecklistConfig'){
+    if(['saveChecklistConfig','authorizeAdmin'].includes(request.action)){
       const password=props.getProperty('ADMIN_PASSWORD');
       if(!password||!request.auth?.admin||request.auth.password!==password)throw Error('Нет доступа администратора.');
-      answer=saveChecklistConfig_(request,root);
+      answer=request.action==='authorizeAdmin'?{authorized:true}:saveChecklistConfig_(request,root);
     }else if(request.action==='submitReport'){
       const report=validateReport_(request.report);authorizeStaff_(report,request.auth);authorizeChecklist_(report,root);
       answer=saveReport_(report,root,props);
@@ -176,4 +176,41 @@ function runIntegrationSmokeTest(){
  const results=reports.map(r=>{const valid=validateReport_(r);authorizeChecklist_(valid,root);const first=saveReport_(valid,root,props);const retry=saveReport_(valid,root,props);return {first,retry};});
  console.log(JSON.stringify({testOnly:true,spreadsheetId:props.getProperty('SPREADSHEET_ID'),results}));
  return results;
+}
+
+// Owner-only diagnostic in the editor. Never logs passwords or staff identities.
+// Exercises the deployed TEST endpoint with server-side credentials, not the main app.
+function runEndpointIntegrationTest(){
+ const props=PropertiesService.getScriptProperties();
+ if(props.getProperty('MODE')!=='test'||props.getProperty('SPREADSHEET_ID')!=='1HBtoURCZBjqcbrBjNvV3LwNYM9IEL8w-Ku6GN6wRTcw')throw Error('Диагностика разрешена только в тестовом проекте.');
+ const password=props.getProperty('ADMIN_PASSWORD');if(!password)throw Error('Сохраните ADMIN_PASSWORD самостоятельно в настройках проекта.');
+ const root='/ops_v3_test',endpoint='https://script.google.com/macros/s/AKfycbwtUCHluill1Op33aDBXnCvotAmRxBnkI8Nz0D01bAOygVMmWwMtLyDdKbRGY5Vv1TE/exec';
+ const post=request=>{
+  const nonce=Utilities.getUuid().replace(/-/g,''),payload={apiVersion:3,mode:'test',returnOrigin:OPS_ALLOWED_ORIGINS[0],nonce,...request};
+  const response=UrlFetchApp.fetch(endpoint,{method:'post',payload:{payload:JSON.stringify(payload)},muteHttpExceptions:true});
+  if(response.getResponseCode()!==200)throw Error('Endpoint HTTP '+response.getResponseCode());
+  let body=response.getContentText();
+  for(let i=0;i<6;i++)body=body.replace(/\\x([a-f0-9]{2})/gi,(_,hex)=>String.fromCharCode(parseInt(hex,16))).replace(/\\u([a-f0-9]{4})/gi,(_,hex)=>String.fromCharCode(parseInt(hex,16))).replace(/\\([\\/"'])/g,'$1');
+  const match=body.match(/window\.top\.postMessage\((\{[\s\S]*?\}),/);if(!match)throw Error('Endpoint не вернул подтверждение.');
+  const answer=JSON.parse(match[1]);if(answer.channel!=='solncekofe-ops-v3'||answer.nonce!==nonce||answer.apiVersion!==3||!answer.ok)throw Error(answer.error||'Неподтверждённый ответ endpoint.');return answer;
+ };
+ const adminLogin=post({action:'authorizeAdmin',auth:{admin:true,password}});if(adminLogin.authorized!==true)throw Error('Вход администратора не подтверждён.');
+ const results=[1,2].map(shopId=>{
+  const staff=Object.values(dbRead_('/staff/'+shopId)||{}).find(x=>x.active!==false&&x.name&&x.password);if(!staff)throw Error('Нет сотрудника для проверки точки '+shopId+'.');
+  const report={reportId:Utilities.getUuid().replace(/-/g,''),schemaVersion:3,shopId,type:'delivery',submittedBy:staff.name,submittedAt:Date.now(),date:Utilities.formatDate(new Date(),'Europe/Moscow','yyyy-MM-dd'),party:'ТЕСТ endpoint — не рабочая поставка',goods:'ТЕСТ HTTP и фотографии',note:'Синтетическая проверка; не включать в рабочие отчёты.',amount:1,payment:'cash',photos:[{id:Utilities.getUuid().replace(/-/g,''),group:'report',dataUrl:'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAQABADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD0uiiivyc+hP/Z'}]};
+  const request={action:'submitReport',auth:{password:staff.password},report};const first=post(request),retry=post(request);
+  if(first.reportId!==report.reportId||retry.reportId!==report.reportId||first.status!=='synced'||retry.status!=='synced')throw Error('Отчёт не синхронизирован.');
+  const previous=dbRead_(root+'/checklist_config/'+shopId);
+  const original=previous?.stages||Object.fromEntries(Object.entries(OPS_DEFAULT_CHECKLISTS).map(([stage,items])=>[stage,items.map(([id,label])=>({id,label,active:true,requirePhoto:false}))]));
+  const stages=JSON.parse(JSON.stringify(original));const itemId='test_'+Utilities.getUuid().replace(/-/g,'');
+  const save=()=>post({action:'saveChecklistConfig',shopId,config:{stages},auth:{admin:true,password}});
+  let added=false,archived=false;
+  try{
+   stages.day.push({id:itemId,label:'ТЕСТ добавления пункта',active:true,requirePhoto:true});save();added=dbRead_(root+'/checklist_config/'+shopId)?.stages.day.some(x=>x.id===itemId&&x.active&&x.requirePhoto);
+   const item=stages.day.find(x=>x.id===itemId);item.label='ТЕСТ изменения и архивирования';item.active=false;save();archived=dbRead_(root+'/checklist_config/'+shopId)?.stages.day.some(x=>x.id===itemId&&!x.active&&x.label===item.label);
+  }finally{post({action:'saveChecklistConfig',shopId,config:{stages:original},auth:{admin:true,password}});}
+  if(!added||!archived)throw Error('Шаблон не подтверждён.');
+  return {shopId,reportId:report.reportId,status:first.status,retryStatus:retry.status,adminAdd:added,adminEditArchive:archived,templateRestored:true};
+ });
+ console.log(JSON.stringify({testOnly:true,deployedEndpoint:true,adminConfigured:true,adminLoginVerified:true,results}));return results;
 }
