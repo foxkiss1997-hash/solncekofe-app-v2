@@ -691,6 +691,7 @@
   </div>
 
 <script src="operations-v3.js?v=20261010-working-sheet"></script>
+<script src="payments-v4.js?v=20261010-pickup-link"></script>
 <script>
 /* ---------- DATA (menu: Солнцекофе, Yandex Eda) ---------- */
 const CATEGORIES = [
@@ -888,7 +889,7 @@ let state = {
   customizeOpts:{size:'m', milk:'regular', syrup:'none', shot:false, qty:1},
   loyalty:4,
   shopId:1,
-  payMethod:'card',
+  payMethod:'pickup',
   pickupASAP:true,
   scheduledTime:'',
   guestName:'',
@@ -1247,10 +1248,14 @@ async function submitOrderToStaff(order){
         guestName: order.guestName || 'без имени',
         receiptContact: order.receiptContact || '',
         payMethod: order.payMethodLabel,
+        paymentMode: 'pickup',
+        paid: false,
+        paymentStatus: 'unpaid',
         pickup: order.pickupText,
         clientId: order.clientId,
       })
     });
+    if(!res.ok)throw Error('Сервер не подтвердил получение заказа.');
     const data = await res.json();
     return data;
   }catch(e){ console.error('order send failed', e); return null; }
@@ -1258,6 +1263,10 @@ async function submitOrderToStaff(order){
 
 async function placeOrder(){
   if(!shopStatus(state.shopId).open) return;
+  if(state.payingNow)return;
+  if(!state.cart.length){state.checkoutError='Корзина пуста.';render();return;}
+  if(state.payMethod==='pickup')return placePickupOrder();
+  if(state.checkoutPaymentLink){state.checkoutError='Ссылка уже создана. Откройте её ниже, чтобы не создавать второй платёж.';render();return;}
   if(!(state.receiptContact||'').trim()){
     state.checkoutError = 'Укажите email или телефон — без этого не сможем прислать чек.';
     render();
@@ -1325,14 +1334,18 @@ async function placeOrder(){
     return;
   }
 
-  // Stash enough to resume once we're bounced back from the bank's payment page.
+  const paymentUrl=safePaymentUrl(result.paymentUrl);
+  if(!paymentUrl||!result.orderId){state.checkoutError='Сервер не вернул корректную ссылку на оплату. Деньги не подтверждены.';render();return;}
+  // Keep the existing bank order and link when the mini-app is reopened.
   try{
     localStorage.setItem('sk_pending_payment', JSON.stringify({
-      orderId: result.orderId, number, shop, pickupLabel, cartSnapshot, total, startedAt: Date.now()
+      paymentUrl,orderId: result.orderId, number, shop, pickupLabel, cartSnapshot, total, startedAt: Date.now()
     }));
   }catch(e){}
 
-  window.location.href = result.paymentUrl;
+  state.checkoutPaymentLink={paymentUrl,orderId:result.orderId,number,total};
+  watchCheckoutLink();
+  render();
   return;
 }
 function newOrder(){
@@ -2309,16 +2322,18 @@ function renderOrderList(orders, withActions){
   return orders.map(o=>`
     <div class="order-card">
       <div class="order-head">
-        <div><b>№${o.number || '—'}</b> ${o.shopName ? `· ${o.shopName}` : ''}</div>
+        <div><b>№${esc(o.number || '—')}</b> ${o.shopName ? `· ${esc(o.shopName)}` : ''}</div>
         <div class="order-status ${o.status==='done'?'done':''}" style="${o.status==='cancelled'?'color:var(--coral-deep);background:var(--coral-soft);':''}">${o.status==='done' ? 'Готов' : (o.status==='cancelled' ? 'Отменён (возврат)' : (o.status==='accepted' ? 'В работе' : 'Новый — не принят'))}</div>
       </div>
-      <div class="order-items">${(o.itemsText||'').replace(/\n/g,'<br>')}</div>
-      <div class="order-meta">Итого: <b>${money(o.total||0)}</b>${o.tip ? ` (из них чаевые ${money(o.tip)})` : ''} · ${o.payMethod||''} · ${o.pickup||''}</div>
+      <div class="order-items">${esc(o.itemsText||'').replace(/\n/g,'<br>')}</div>
+      <div class="order-meta">Итого: <b>${money(o.total||0)}</b>${o.tip ? ` (из них чаевые ${money(o.tip)})` : ''} · ${esc(o.payMethod||'')} · ${esc(o.pickup||'')}</div>
+      <div class="order-meta">${o.paid===true?'✓ Оплата подтверждена':'Оплата не подтверждена'}</div>
+      ${withActions?pickupPaymentControls(o):''}
       ${withActions && o.status==='accepted' && o.acceptedAt ?
         `<div class="order-timer" id="timer-${o.id}">…</div>`
         : (o.status==='accepted' && o.prepMinutes ? `<div class="order-meta">Готовность: <b>~${o.prepMinutes} мин</b> с момента принятия</div>` : '')
       }
-      <div class="order-meta">Имя: ${o.guestName||'—'} · ID: ${o.clientId||'—'}</div>
+      <div class="order-meta">Имя: ${esc(o.guestName||'—')} · ID: ${esc(o.clientId||'—')}</div>
       ${o.status==='done' && o.completedBy ? `<div class="order-meta">Закрыл: <b>${esc(o.completedBy)}</b></div>` : ''}
       ${withActions && o.status==='new' ? `<button class="btn-primary rippleable" data-action="order-accept" data-id="${o.id}" style="margin-top:8px;"><span>Принять заказ</span><span class="sub">→</span></button>` : ''}
       ${withActions && o.status==='accepted' ? `<button class="btn-ghost rippleable" data-action="order-done" data-id="${o.id}">Отметить готовым</button>` : ''}
@@ -2385,7 +2400,7 @@ async function loadStaffOrders(silent){
     const res = await fetch(DB_URL + '/orders.json');
     const obj = res.ok ? await res.json() : null;
     const all = obj ? Object.keys(obj).map(id=>Object.assign({id}, obj[id])) : [];
-    state.staffOrders = all.filter(o=>o.shopId===state.staffShop && o.status!=='done' && o.status!=='cancelled').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    state.staffOrders = all.filter(o=>o.shopId===state.staffShop && o.status!=='cancelled' && (o.status!=='done'||(o.payMethod==='При получении'&&o.paid!==true))).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   }catch(e){ if(!silent) state.staffOrders = []; }
   state.staffLoading = false; render();
 }
@@ -2401,14 +2416,14 @@ async function loadAdminOrders(){
     const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
     const todays = all.filter(o=>(o.createdAt||0) >= startOfDay.getTime());
     const tips = {};
-    todays.forEach(o=>{
+    todays.filter(o=>o.paid===true&&!o.refunded).forEach(o=>{
       if(o.completedBy && o.tip){ tips[o.completedBy] = (tips[o.completedBy]||0) + o.tip; }
     });
     state.adminStats = {
       count: todays.length,
-      revenue: todays.reduce((s,o)=>s+(o.total||0),0),
+      revenue: todays.filter(o=>o.paid===true&&!o.refunded).reduce((s,o)=>s+(o.total||0),0),
       tips: Object.entries(tips).sort((a,b)=>b[1]-a[1]),
-      tipsTotal: todays.reduce((s,o)=>s+(o.tip||0),0),
+      tipsTotal: todays.filter(o=>o.paid===true&&!o.refunded).reduce((s,o)=>s+(o.tip||0),0),
     };
   }catch(e){ state.adminOrders = []; }
   state.adminLoading = false; render();
@@ -2918,22 +2933,21 @@ function renderCheckout(){
       </div>
 
       <div class="section">
-        <div class="section-label">Email или телефон для чека</div>
+        <div class="section-label">${state.payMethod==='pickup'?'Email или телефон (необязательно)':'Email или телефон для чека'}</div>
         <input class="text-input" type="text" inputmode="email" placeholder="Куда прислать электронный чек" value="${esc(state.receiptContact||'')}" data-action="set-receipt-contact">
-        <div class="hint" style="margin-top:6px;">Нужно по закону — чек за покупку придёт сюда автоматически.</div>
+        <div class="hint" style="margin-top:6px;">${state.payMethod==='pickup'?'Оплатите наличными, картой или по СБП на кассе. Чек выдаст бариста.':'Контакт для электронного чека при онлайн-оплате.'}</div>
         ${state.checkoutError ? `<div class="pin-error" style="margin-top:6px;">${state.checkoutError}</div>` : ''}
       </div>
 
       <div class="section">
         <div class="section-label">Способ оплаты</div>
-        <div class="order-card" style="display:flex;align-items:center;gap:12px;">
-          <div class="pico" style="font-size:22px;">🔒</div>
-          <div>
-            <div style="font-weight:700;">Картой, SberPay или по СБП</div>
-            <div class="order-meta" style="margin-top:2px;">Выберете способ на защищённой странице банка после нажатия «Оплатить» — мы не храним и не видим данные карты.</div>
-          </div>
+        <div class="segmented" role="group" aria-label="Способ оплаты">
+          <button type="button" class="seg rippleable ${state.payMethod==='pickup'?'active':''}" data-action="set-pay" data-pay="pickup" aria-pressed="${state.payMethod==='pickup'}"><div class="lb">☕ При получении</div></button>
+          <button type="button" class="seg rippleable ${state.payMethod==='link'?'active':''}" data-action="set-pay" data-pay="link" aria-pressed="${state.payMethod==='link'}"><div class="lb">🔗 По ссылке</div></button>
         </div>
+        <div class="hint" style="margin-top:8px">${state.payMethod==='pickup'?'Оформите заказ и оплатите на кассе при получении.':'Создадим ссылку на страницу банка. Её можно открыть или скопировать; доступные способы покажет банк.'}</div>
       </div>
+      ${renderCheckoutPaymentLink()}
 
       <div class="section">
         <div class="section-label">Чаевые сотрудникам</div>
@@ -2960,7 +2974,7 @@ function renderCheckout(){
 
       <div class="stickybar">
         <button class="btn-primary rippleable" data-action="pay" ${(!shopStatus(state.shopId).open || state.payingNow) ? 'disabled' : ''}>
-          <span>${state.payingNow ? 'Открываем оплату…' : (shopStatus(state.shopId).open ? 'Оплатить' : 'Точка закрыта')}</span><span class="sub price-pop">${money(cartTotal()+tipAmount())}</span>
+          <span>${state.payingNow ? 'Отправляем…' : (shopStatus(state.shopId).open ? (readPendingPickup()?'Проверить отправку':state.payMethod==='pickup'?'Оформить заказ':state.checkoutPaymentLink?'Ссылка готова':'Получить ссылку на оплату') : 'Точка закрыта')}</span><span class="sub price-pop">${money(cartTotal()+tipAmount())}</span>
         </button>
       </div>
     </div>
@@ -2983,7 +2997,7 @@ function renderStatus(){
         </div>
         <div class="waiting-accept">
           <div style="font-size:56px;text-align:center;margin-bottom:14px;">💸</div>
-          <div class="waiting-text">Заказ №${o.number} отменён, деньги возвращаются на карту — обычно это занимает от нескольких минут до нескольких рабочих дней, в зависимости от банка.</div>
+          <div class="waiting-text">Заказ №${o.number} отменён.${o.refunded?' Возврат оформлен; срок зачисления зависит от банка.':o.paid===true?' По вопросам возврата свяжитесь с кофейней.':' Оплата не подтверждена.'}</div>
         </div>
         <div class="stickybar">
           <button class="btn-primary rippleable" data-action="new-order"><span>Оформить новый заказ</span><span class="sub">→</span></button>
@@ -3018,6 +3032,7 @@ function renderStatus(){
       `}
       <div class="dial-order">Заказ <b>№${o.number}</b> · Заберёшь: <b>${o.pickupLabel}</b></div>
       <div class="status-shop">${o.shop.name} · ${o.shop.addr}</div>
+      <div class="order-card"><b>${o.paid===true?'✓ Оплата подтверждена':o.payMethod==='При получении'?'Оплата при получении':'Оплата не подтверждена'}</b>${o.payMethod==='При получении'&&o.paid!==true?'<p class="order-meta">Оплатите на кассе. Бариста подтвердит получение денег.</p>':''}</div>
 
       <div class="stations">
         <div class="station-wrap"><div class="station" id="st0"></div><div class="station-label">Принят точкой</div></div>
@@ -3168,7 +3183,7 @@ function render(){
     initStatusTicker();
   }
 
-  const shouldPollOrder = state.screen==='status' && state.order && state.order.firebaseId && state.order.status!=='done' && state.order.status!=='cancelled';
+  const shouldPollOrder = state.screen==='status' && state.order && state.order.firebaseId && state.order.status!=='cancelled' && (state.order.status!=='done'||state.order.paid!==true);
   if(shouldPollOrder){
     ensureOrderStatusPolling();
   } else {
@@ -3200,11 +3215,13 @@ async function pollOrderStatus(){
     const o = await res.json();
     if(!o) return;
     const wasStatus = state.order.status;
+    const wasPaid=state.order.paid;
+    state.order.paid=o.paid===true;state.order.refunded=o.refunded===true;
     if(o.status) state.order.status = o.status;
     if(o.acceptedAt) state.order.acceptedAt = o.acceptedAt;
     if(o.prepMinutes) state.order.prepMinutes = o.prepMinutes;
     saveOrderToStorage();
-    if(wasStatus !== state.order.status){
+    if(wasStatus !== state.order.status||wasPaid!==state.order.paid){
       render();
     }
   }catch(e){}
@@ -3340,7 +3357,9 @@ document.addEventListener('click', (e)=>{
   else if(action==='set-shop'){ state.shopId = parseInt(el.dataset.shop,10); render(); }
   else if(action==='set-pickup'){ state.pickupASAP = el.dataset.mode==='asap'; render(); }
   else if(action==='go-checkout'){ state.screen='checkout'; render(); }
-  else if(action==='set-pay'){ state.payMethod = el.dataset.pay; render(); }
+  else if(action==='set-pay'){ if(readPendingPickup()){state.checkoutError='Сначала проверьте отправку предыдущего заказа.';}else if(state.checkoutPaymentLink){state.checkoutError='Ссылка на оплату уже создана. Сначала проверьте этот платёж.';}else{state.payMethod=el.dataset.pay==='link'?'link':'pickup';state.checkoutError='';}render(); }
+  else if(action==='copy-payment-link'){copyCheckoutPaymentLink();}
+  else if(action==='pickup-payment-confirm'){confirmPickupPayment(el.dataset.id);}
   else if(action==='set-tip'){ state.tipPercent = el.dataset.val==='custom' ? 'custom' : parseInt(el.dataset.val,10); render(); }
   else if(action==='pay'){ placeOrder(); }
   else if(action==='new-order'){ newOrder(); }
@@ -3456,7 +3475,7 @@ document.addEventListener('change', (e)=>{
   }
 });
 
-document.addEventListener('change',(e)=>{ const el=e.target.closest('[data-action]'); if(!el||el.type==='file')return; if(el.dataset.action==='set-op-payment'){state.opPayment=el.value;} else if(el.dataset.action==='shift-check'){state.shiftChecks[el.dataset.key]=el.checked;} else if(el.dataset.action==='checklist-stage'){if(SHIFT_CHECKLISTS[el.value])state.checklistStage=el.value;state.checklistMsg='';render();} else if(el.dataset.action==='checklist-item'){const draft=readChecklistDraft();draft[el.dataset.key]=el.checked;const saved=saveChecklistDraft(draft);state.checklistMsg=saved?'':'Не удалось сохранить отметки на устройстве.';state.checklistMsgOk=false;render();} });
+document.addEventListener('change',(e)=>{ const el=e.target.closest('[data-action]'); if(!el||el.type==='file')return; if(el.dataset.action==='set-op-payment'){state.opPayment=el.value;} else if(el.dataset.action==='pickup-payment-via'){state.pickupPaymentVia??={};state.pickupPaymentVia[el.dataset.id]=el.value;} else if(el.dataset.action==='shift-check'){state.shiftChecks[el.dataset.key]=el.checked;} else if(el.dataset.action==='checklist-stage'){if(SHIFT_CHECKLISTS[el.value])state.checklistStage=el.value;state.checklistMsg='';render();} else if(el.dataset.action==='checklist-item'){const draft=readChecklistDraft();draft[el.dataset.key]=el.checked;const saved=saveChecklistDraft(draft);state.checklistMsg=saved?'':'Не удалось сохранить отметки на устройстве.';state.checklistMsgOk=false;render();} });
 
 document.addEventListener('input', (e)=>{
   const el = e.target.closest('[data-action]');
@@ -3605,10 +3624,10 @@ async function pollPaymentConfirmation(orderId, deadline){
     const res = await fetch(DB_URL + '/order_lookup/' + orderId + '.json');
     const realId = await res.json();
     if(realId){
-      clearInterval(paymentConfirmTimer);
       const oRes = await fetch(DB_URL + '/orders/' + realId + '.json');
       const o = await oRes.json();
-      if(o){
+      if(o&&o.paid===true){
+        clearInterval(paymentConfirmTimer);
         state.order = Object.assign({}, o, {
           firebaseId: realId,
           shop: SHOPS.find(s=>s.id===o.shopId) || { name:o.shopName, addr:o.shopAddr },
@@ -3617,6 +3636,7 @@ async function pollPaymentConfirmation(orderId, deadline){
         });
         saveOrderToStorage();
         localStorage.removeItem('sk_pending_payment');
+        state.checkoutPaymentLink=null;state.cart=[];
         render();
       }
     }
@@ -3681,6 +3701,7 @@ if(!cameFromPayment){
       clearStoredOrder();
     }
   })();
+  restorePendingCheckout();
 }
 loadExtraMenu();
 loadWheelPrizes();
