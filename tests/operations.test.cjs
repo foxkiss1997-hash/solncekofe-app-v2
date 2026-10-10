@@ -42,3 +42,17 @@ test('administrator login requires positive server acknowledgement and never tru
  vm.runInContext('sendOpsRequest=async()=>({authorized:false})',f.context);await f.context.adminPasswordLoginV3();assert.equal(f.run('state.adminAuthed'),false);
  vm.runInContext('sendOpsRequest=async()=>({authorized:true})',f.context);await f.context.adminPasswordLoginV3();assert.equal(f.run('state.adminAuthed'),true);
 });
+
+test('production is explicitly enabled, confined to the main origin and isolated from test destinations',()=>{
+ const b=back(),values={MODE:'test',SPREADSHEET_ID:'test-book',PHOTO_FOLDER_ID:'test-folder',PRODUCTION_SPREADSHEET_ID:'1vC8zXVTzKzvWPw_vOx7OKXEtJyx9zQJr-Y1Kbn-QLR4',PRODUCTION_PHOTO_FOLDER_ID:'private-working-folder'};
+ const props={getProperty:k=>values[k]};const request={mode:'production',returnOrigin:'https://foxkiss1997-hash.github.io'};
+ assert.throws(()=>b.context.selectOpsDestination_(request,props),/ещё не подключена/);
+ values.PRODUCTION_ENABLED='true';
+ assert.throws(()=>b.context.selectOpsDestination_({...request,returnOrigin:'https://solncekofe-staff-test-oct10.tursunovhaki.chatgpt.site'},props),/ещё не подключена/);
+ const prod=b.context.selectOpsDestination_(request,props),testOnly=b.context.selectOpsDestination_({mode:'test'},props);
+ assert.equal(prod.root,'/ops_v3');assert.equal(prod.props.getProperty('SPREADSHEET_ID'),values.PRODUCTION_SPREADSHEET_ID);
+ assert.equal(testOnly.root,'/ops_v3_test');assert.equal(testOnly.props.getProperty('SPREADSHEET_ID'),'test-book');
+ const r=b.context.validateReport_(report({type:'revenue',cash:350,cashless:500}));
+ assert.equal(b.context.saveReport_(r,prod.root,prod.props).status,'synced');
+ assert(b.writes.every(x=>x.path==='/ops_v3'||x.path.startsWith('/ops_v3/')));assert.equal(b.sheets['Выручка'].rows[1][6],850);
+});
