@@ -1,6 +1,6 @@
 /* Operations only. No guest, QR, voucher or stamp writes. */
 const OPS_V3_TEST_MODE = true;
-const REPORTS_WEBHOOK_URL = ''; // Fill with the separately tested Apps Script deployment.
+const REPORTS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbwtUCHluill1Op33aDBXnCvotAmRxBnkI8Nz0D01bAOygVMmWwMtLyDdKbRGY5Vv1TE/exec'; // Test deployment; OPS_V3_TEST_MODE stays true.
 let opsChecklistConfig = {}, opsPhotoDrafts = {}, opsQueueBusy = false;
 const OPS_STAGE_NAMES = {open:'Открытие',day:'В течение дня',close:'Закрытие'};
 function opsRoot(){ return OPS_V3_TEST_MODE ? '/ops_v3_test' : ''; }
