@@ -5,14 +5,23 @@
  */
 const OPS_DATABASE = 'https://solncekofe-fdcad-default-rtdb.firebaseio.com';
 const OPS_ALLOWED_ORIGINS = ['https://foxkiss1997-hash.github.io', 'https://solncekofe-staff-test-oct10.tursunovhaki.chatgpt.site'];
+function selectOpsDestination_(request,props){
+  if(request.mode==='production'){
+    if(props.getProperty('PRODUCTION_ENABLED')!=='true'||request.returnOrigin!==OPS_ALLOWED_ORIGINS[0])throw Error('Рабочая интеграция ещё не подключена.');
+    const sheet=props.getProperty('PRODUCTION_SPREADSHEET_ID'),folder=props.getProperty('PRODUCTION_PHOTO_FOLDER_ID');
+    if(sheet!=='1vC8zXVTzKzvWPw_vOx7OKXEtJyx9zQJr-Y1Kbn-QLR4'||!folder)throw Error('Проверьте рабочую таблицу и папку фото.');
+    return {root:'/ops_v3',props:{getProperty:k=>k==='SPREADSHEET_ID'?sheet:k==='PHOTO_FOLDER_ID'?folder:props.getProperty(k)}};
+  }
+  if(request.mode!=='test'||props.getProperty('MODE')!=='test')throw Error('Режим приложения и интеграции не совпадает.');
+  return {root:'/ops_v3_test',props};
+}
 function doPost(e){
   let request={},answer;
   try{
     request=JSON.parse(e.parameter.payload||'{}');
     if(request.apiVersion!==3||!OPS_ALLOWED_ORIGINS.includes(request.returnOrigin)||!/^[a-f0-9]{32}$/.test(request.nonce||''))throw Error('Некорректный запрос.');
-    const props=PropertiesService.getScriptProperties(),mode=props.getProperty('MODE');
-    if(!['test','production'].includes(mode)||request.mode!==mode)throw Error('Режим приложения и интеграции не совпадает.');
-    const root=mode==='test'?'/ops_v3_test':'';
+    const selected=selectOpsDestination_(request,PropertiesService.getScriptProperties());
+    const props=selected.props,root=selected.root;
     if(['saveChecklistConfig','authorizeAdmin'].includes(request.action)){
       const password=props.getProperty('ADMIN_PASSWORD');
       if(!password||!request.auth?.admin||request.auth.password!==password)throw Error('Нет доступа администратора.');
@@ -118,7 +127,7 @@ function reportRows_(r){
 function saveReport_(incoming,root,props){
   const sheetId=props.getProperty('SPREADSHEET_ID'),folderId=props.getProperty('PHOTO_FOLDER_ID');
   if(!sheetId||!folderId)throw Error('Администратор ещё не подключил таблицу и папку фото.');
-  if(root&&sheetId==='1vC8zXVTzKzvWPw_vOx7OKXEtJyx9zQJr-Y1Kbn-QLR4')throw Error('Для теста нужна копия таблицы.');
+  if(root==='/ops_v3_test'&&sheetId==='1vC8zXVTzKzvWPw_vOx7OKXEtJyx9zQJr-Y1Kbn-QLR4')throw Error('Для теста нужна копия таблицы.');
   const lock=LockService.getScriptLock();lock.waitLock(30000);
   try{
     const path=root+'/report_submissions/'+incoming.reportId,existing=dbRead_(path);
@@ -213,4 +222,41 @@ function runEndpointIntegrationTest(){
   return {shopId,reportId:report.reportId,status:first.status,retryStatus:retry.status,adminAdd:added,adminEditArchive:archived,templateRestored:true};
  });
  console.log(JSON.stringify({testOnly:true,deployedEndpoint:true,adminConfigured:true,adminLoginVerified:true,results}));return results;
+}
+
+// Owner-run production setup; no synthetic reports or finance rows are written.
+function prepareProductionIntegration(){
+ const p=PropertiesService.getScriptProperties(),sheetId='1vC8zXVTzKzvWPw_vOx7OKXEtJyx9zQJr-Y1Kbn-QLR4';
+ if(!p.getProperty('ADMIN_PASSWORD'))throw Error('Пароль администратора не настроен.');
+ const book=SpreadsheetApp.openById(sheetId);
+ const expected=[['Выручка',12],['Расходы',12],['Поставки',12],['Смены',14],['Чек-листы',16],['Проблемы',12]];
+ expected.forEach(([name,width])=>{const sheet=book.getSheetByName(name);if(!sheet||sheet.getRange(1,width).getValue()!=='ID отчёта')throw Error('Проверьте заголовки '+name);});
+ let folderId=p.getProperty('PRODUCTION_PHOTO_FOLDER_ID');
+ if(!folderId)folderId=DriveApp.createFolder('Солнцекофе — фотоотчёты сотрудников').getId();
+ const folder=DriveApp.getFolderById(folderId);
+ if(folder.getSharingAccess()!==DriveApp.Access.PRIVATE)throw Error('Рабочая папка фото должна быть закрытой.');
+ const changes={};[1,2].forEach(shop=>{
+  if(!dbRead_('/ops_v3/checklist_config/'+shop)){
+   const config=dbRead_('/ops_v3_test/checklist_config/'+shop),history=dbRead_('/ops_v3_test/checklist_config_history/'+shop);
+   if(config)changes['checklist_config/'+shop]=config;
+   if(history)changes['checklist_config_history/'+shop]=history;
+  }
+ });
+ if(Object.keys(changes).length)dbRequest_('/ops_v3','patch',changes);
+ p.setProperties({PRODUCTION_SPREADSHEET_ID:sheetId,PRODUCTION_PHOTO_FOLDER_ID:folderId,PRODUCTION_ENABLED:'true'});
+ console.log(JSON.stringify({productionConfigured:true,spreadsheetId:sheetId,photoFolderId:folderId,privatePhotos:true,testModePreserved:p.getProperty('MODE')==='test',syntheticReportsWritten:0}));
+}
+function runProductionReadinessCheck(){
+ const p=PropertiesService.getScriptProperties();
+ const selected=selectOpsDestination_({mode:'production',returnOrigin:OPS_ALLOWED_ORIGINS[0]},p);
+ const endpoint='https://script.google.com/macros/s/AKfycbwtUCHluill1Op33aDBXnCvotAmRxBnkI8Nz0D01bAOygVMmWwMtLyDdKbRGY5Vv1TE/exec';
+ const nonce=Utilities.getUuid().replace(/-/g,'');
+ const payload={apiVersion:3,nonce,mode:'production',returnOrigin:OPS_ALLOWED_ORIGINS[0],action:'authorizeAdmin',auth:{admin:true,password:p.getProperty('ADMIN_PASSWORD')}};
+ let body=UrlFetchApp.fetch(endpoint,{method:'post',payload:{payload:JSON.stringify(payload)},muteHttpExceptions:true}).getContentText();
+ for(let i=0;i<6;i++)body=body.replace(/\\x([0-9a-f]{2})/gi,(_,h)=>String.fromCharCode(parseInt(h,16))).replace(/\\u([0-9a-f]{4})/gi,(_,h)=>String.fromCharCode(parseInt(h,16))).replace(/\\\//g,'/').replace(/\\\\/g,'\\').replace(/\\"/g,'"');
+ const match=body.match(/window\.top\.postMessage\((\{[\s\S]*?\}),/);if(!match)throw Error('Нет подтверждения рабочего endpoint.');
+ const ack=JSON.parse(match[1]);if(ack.nonce!==nonce||ack.ok!==true||ack.authorized!==true)throw Error(ack.error||'Рабочая авторизация не подтверждена.');
+ const book=SpreadsheetApp.openById(selected.props.getProperty('SPREADSHEET_ID'));
+ const folder=DriveApp.getFolderById(selected.props.getProperty('PHOTO_FOLDER_ID'));
+ console.log(JSON.stringify({productionEndpointReady:true,adminLoginVerified:true,privatePhotos:folder.getSharingAccess()===DriveApp.Access.PRIVATE,spreadsheetId:book.getId(),root:selected.root,syntheticReportsWritten:0}));
 }
