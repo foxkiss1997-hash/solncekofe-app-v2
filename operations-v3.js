@@ -64,6 +64,13 @@ function sendOpsRequest(body,password,admin=false){
     document.body.append(frame,form);try{form.submit();}catch(e){cleanup();reject(e);}
   });
 }
+async function adminPasswordLoginV3(){
+  if(state.adminVerifying)return;
+  state.adminVerifying=true;state.adminPinError='';render();
+  try{const result=await sendOpsRequest({action:'authorizeAdmin'},state.adminPinValue,true);if(result.authorized!==true)throw Error('Нет подтверждения администратора.');state.adminAuthed=true;await loadAdminOrders();}
+  catch(e){state.adminAuthed=false;state.adminPinError=e.message;}
+  finally{state.adminVerifying=false;render();}
+}
 async function updateOpsPending(){try{state.opsPending=(await opsStore('queue','readonly',s=>s.getAll())).filter(x=>x.shopId===state.staffShop&&x.submittedBy===state.staffName).length;}catch(e){state.opsSyncMessage='Не удалось открыть очередь на устройстве.';}}
 async function retryOpsQueue(){
   if(opsQueueBusy)return;if(!state.reportPassword){state.opsSyncMessage='Введите личный пароль в форме отчёта для повторной отправки.';render();return;}

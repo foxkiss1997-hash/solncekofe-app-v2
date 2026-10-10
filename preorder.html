@@ -927,7 +927,7 @@ const GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbztGalkZL0kCHJm
 const PAYMENT_RELAY_URL = 'https://solncekofe-payment-relay.onrender.com';
 const DB_URL = 'https://solncekofe-fdcad-default-rtdb.firebaseio.com';
 const STAFF_PIN = '4444';
-const ADMIN_PIN = '55555';
+
 let CLIENT_ID = 'SK-' + (1000 + Math.floor(Math.random()*9000));
 let TELEGRAM_ID = null;
 let REFERRED_BY = null;
@@ -1806,13 +1806,13 @@ function renderAdmin(){
         <div class="topbar"><button class="iconbtn rippleable" data-action="back-to-menu">←</button><h2>Администратор</h2></div>
         <div class="section">
           <div class="pin-gate">
-            <div class="section-label">Код администратора</div>
-            <input class="text-input" type="password" inputmode="numeric" placeholder="•••••" data-action="set-admin-pin" value="${esc(state.adminPinValue)}">
+            <div class="section-label">Пароль администратора</div>
+            <input class="text-input" type="password" autocomplete="current-password" placeholder="Пароль" data-action="set-admin-pin" value="${esc(state.adminPinValue)}">
             ${state.adminPinError ? `<div class="pin-error">${state.adminPinError}</div>` : ''}
           </div>
         </div>
         <div class="stickybar">
-          <button class="btn-primary rippleable" data-action="admin-pin-submit"><span>Войти</span><span class="sub">→</span></button>
+          <button class="btn-primary rippleable" data-action="admin-pin-submit" ${state.adminVerifying?'disabled':''}><span>${state.adminVerifying?'Проверяем…':'Войти'}</span><span class="sub">→</span></button>
         </div>
       </div>
     `;
@@ -3359,10 +3359,7 @@ document.addEventListener('click', (e)=>{
   }
   else if(action==='go-admin'){ state.screen='admin'; render(); }
   else if(action==='staff-pin-submit'){ staffPasswordLogin(); }
-  else if(action==='admin-pin-submit'){
-    if(state.adminPinValue===ADMIN_PIN){ state.adminAuthed=true; state.adminPinError=''; loadAdminOrders(); }
-    else{ state.adminPinError='Неверный код доступа.'; render(); }
-  }
+  else if(action==='admin-pin-submit'){ adminPasswordLoginV3(); }
   else if(action==='staff-change-name'){ state.reportPassword='';state.opMode=null;state.shiftChecks=emptyShiftChecks();state.staffName=null; state.staffPinValue=''; clearStaffSession(); render(); }
   else if(action==='staff-logout'){state.reportPassword='';state.opMode=null;state.shiftChecks=emptyShiftChecks();state.staffShop=null; state.staffName=null; state.staffOrders=[]; clearStaffSession(); state.screen='menu'; render(); }
   else if(action==='staff-refresh'){ loadStaffOrders(); loadTodayOps();loadChecklistConfig();updateOpsPending(); }
