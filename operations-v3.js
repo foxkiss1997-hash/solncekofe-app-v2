@@ -1,9 +1,10 @@
 /* Operations only. No guest, QR, voucher or stamp writes. */
-const OPS_V3_TEST_MODE = true;
-const REPORTS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbwtUCHluill1Op33aDBXnCvotAmRxBnkI8Nz0D01bAOygVMmWwMtLyDdKbRGY5Vv1TE/exec'; // Test deployment; OPS_V3_TEST_MODE stays true.
+const OPS_V3_TEST_MODE = false;
+const OPS_SPREADSHEET_URL='https://docs.google.com/spreadsheets/d/1vC8zXVTzKzvWPw_vOx7OKXEtJyx9zQJr-Y1Kbn-QLR4/edit';
+const REPORTS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbwtUCHluill1Op33aDBXnCvotAmRxBnkI8Nz0D01bAOygVMmWwMtLyDdKbRGY5Vv1TE/exec'; // One protected endpoint; test and production destinations are separate.
 let opsChecklistConfig = {}, opsPhotoDrafts = {}, opsQueueBusy = false;
 const OPS_STAGE_NAMES = {open:'Открытие',day:'В течение дня',close:'Закрытие'};
-function opsRoot(){ return OPS_V3_TEST_MODE ? '/ops_v3_test' : ''; }
+function opsRoot(){ return OPS_V3_TEST_MODE ? '/ops_v3_test' : '/ops_v3'; }
 function opsId(){ return crypto.randomUUID().replace(/-/g,''); }
 function opsDraftKey(){return [state.staffShop,state.staffName,todayKey(),state.opMode==='checklist'?state.checklistStage:state.opMode].join(':');}
 function getChecklistItems(stage,shopId=state.staffShop){
@@ -16,7 +17,7 @@ async function loadChecklistConfig(){
   render();
 }
 function opsStore(name,mode,operation){
-  return new Promise((resolve,reject)=>{const req=indexedDB.open('solncekofe-operations-v3',1);
+  return new Promise((resolve,reject)=>{const req=indexedDB.open(OPS_V3_TEST_MODE?'solncekofe-operations-v3':'solncekofe-operations-v3-production',1);
     req.onupgradeneeded=()=>{req.result.createObjectStore('queue',{keyPath:'reportId'});req.result.createObjectStore('drafts');};
     req.onerror=()=>reject(req.error);req.onsuccess=()=>{const db=req.result,tx=db.transaction(name,mode);let result;
       try{const r=operation(tx.objectStore(name));r.onsuccess=()=>{result=r.result;};r.onerror=()=>reject(r.error);}catch(e){db.close();reject(e);return;}
@@ -111,7 +112,7 @@ function getEditableChecklist(){
 }
 function renderAdminChecklists(){
   const config=getEditableChecklist(),stage=state.adminChecklistStage,items=config.stages[stage];
-  return `<div class="ops-form"><h3>Управление чек-листами</h3><p class="hint">Изменения применятся к новым отчётам. Отправленные отчёты сохраняют прежние пункты и фото.</p><select class="ops-select" data-action="admin-checklist-shop" aria-label="Кофейня">${SHOPS.map(s=>`<option value="${s.id}" ${s.id===state.adminChecklistShop?'selected':''}>${esc(s.name)}</option>`).join('')}</select><select class="ops-select" data-action="admin-checklist-stage" aria-label="Этап">${Object.entries(OPS_STAGE_NAMES).map(([id,label])=>`<option value="${id}" ${id===stage?'selected':''}>${label}</option>`).join('')}</select>${items.map((x,i)=>`<div class="ops-check-editor ${x.active===false?'archived':''}"><input class="text-input" value="${esc(x.label)}" maxlength="180" data-action="admin-checklist-label" data-id="${x.id}" aria-label="Пункт ${i+1}"><label class="checkline"><input type="checkbox" data-action="admin-checklist-photo" data-id="${x.id}" ${x.requirePhoto?'checked':''}>Фото обязательно</label><button class="ops-cancel" data-action="admin-checklist-toggle" data-id="${x.id}">${x.active===false?'Вернуть пункт':'Убрать пункт'}</button></div>`).join('')}<button class="ops-cancel" data-action="admin-checklist-add">＋ Добавить пункт</button><button class="ops-submit" data-action="admin-checklist-save" ${state.opsConfigSaving?'disabled':''}>Сохранить для этой кофейни</button>${state.opsConfigMessage?`<p class="hint">${esc(state.opsConfigMessage)}</p>`:''}</div>`;
+  return `<div class="ops-form"><h3>Управление чек-листами</h3><p><a class="ops-cancel" href="${OPS_SPREADSHEET_URL}" target="_blank" rel="noopener">📊 Рабочая Google Таблица</a></p><p class="hint">Изменения применятся к новым отчётам. Отправленные отчёты сохраняют прежние пункты и фото.</p><select class="ops-select" data-action="admin-checklist-shop" aria-label="Кофейня">${SHOPS.map(s=>`<option value="${s.id}" ${s.id===state.adminChecklistShop?'selected':''}>${esc(s.name)}</option>`).join('')}</select><select class="ops-select" data-action="admin-checklist-stage" aria-label="Этап">${Object.entries(OPS_STAGE_NAMES).map(([id,label])=>`<option value="${id}" ${id===stage?'selected':''}>${label}</option>`).join('')}</select>${items.map((x,i)=>`<div class="ops-check-editor ${x.active===false?'archived':''}"><input class="text-input" value="${esc(x.label)}" maxlength="180" data-action="admin-checklist-label" data-id="${x.id}" aria-label="Пункт ${i+1}"><label class="checkline"><input type="checkbox" data-action="admin-checklist-photo" data-id="${x.id}" ${x.requirePhoto?'checked':''}>Фото обязательно</label><button class="ops-cancel" data-action="admin-checklist-toggle" data-id="${x.id}">${x.active===false?'Вернуть пункт':'Убрать пункт'}</button></div>`).join('')}<button class="ops-cancel" data-action="admin-checklist-add">＋ Добавить пункт</button><button class="ops-submit" data-action="admin-checklist-save" ${state.opsConfigSaving?'disabled':''}>Сохранить для этой кофейни</button>${state.opsConfigMessage?`<p class="hint">${esc(state.opsConfigMessage)}</p>`:''}</div>`;
 }
 async function saveAdminChecklist(){
   if(!state.adminAuthed||state.opsConfigSaving)return;const config=JSON.parse(JSON.stringify(getEditableChecklist())),shop=state.adminChecklistShop;state.opsConfigSaving=true;render();
