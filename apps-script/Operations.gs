@@ -167,7 +167,12 @@ function runIntegrationSmokeTest(){
  const checks=OPS_DEFAULT_CHECKLISTS.day.map(([key,label])=>({key,label,done:true,requirePhoto:false}));
  const closing=OPS_DEFAULT_CHECKLISTS.close.map(([key,label])=>({key,label,done:true,requirePhoto:false}));
  const sample=(type,extra)=>({reportId:Utilities.getUuid().replace(/-/g,''),schemaVersion:3,configRevision:'default',shopId:1,date,type,submittedBy:'ТЕСТ — не рабочий отчёт',submittedAt:Date.now(),photos:[{id:Utilities.getUuid().replace(/-/g,''),group:type==='shift'?'closing':'report',dataUrl:photo}],...extra});
- const reports=[sample('delivery',{party:'ТЕСТ поставщика',goods:'ТЕСТ накладной',amount:1,payment:'cash'}),sample('checklist',{stage:'day',checks}),sample('shift',{stage:'close',checks:closing,cash:1,cashless:1,actualCash:1,openedAt:Date.now()})];
+ const reports=[1,2].flatMap(shopId=>[
+  sample('delivery',{shopId,party:'ТЕСТ поставщика',goods:'ТЕСТ накладной',amount:1,payment:'cash'}),
+  sample('checklist',{shopId,stage:'day',checks}),
+  sample('shift',{shopId,stage:'close',checks:closing,cash:1,cashless:1,actualCash:1,openedAt:Date.now()})
+ ]);
+ reports.filter(r=>r.type==='shift').forEach(r=>r.photos.push({id:Utilities.getUuid().replace(/-/g,''),group:'revenue',dataUrl:photo}));
  const results=reports.map(r=>{const valid=validateReport_(r);authorizeChecklist_(valid,root);const first=saveReport_(valid,root,props);const retry=saveReport_(valid,root,props);return {first,retry};});
  console.log(JSON.stringify({testOnly:true,spreadsheetId:props.getProperty('SPREADSHEET_ID'),results}));
  return results;
