@@ -692,6 +692,7 @@
 
 <script src="operations-v3.js?v=20261010-working-sheet"></script>
 <script src="payments-v4.js?v=20261010-pickup-link"></script>
+<script src="staff-alerts-v1.js?v=20261011-order-alerts"></script>
 <script>
 /* ---------- DATA (menu: Солнцекофе, Yandex Eda) ---------- */
 const CATEGORIES = [
@@ -1322,8 +1323,9 @@ async function placeOrder(){
       method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(paymentPayload)
     });
     result = await res.json();
+    if(!res.ok)result={ok:false,error:result?.error||'Сервер оплаты не подтвердил создание ссылки.'};
   }catch(e){
-    result = { ok:false, error:'Не удалось связаться с сервером оплаты.' };
+    result = { ok:false, error:'Не удалось связаться с сервером оплаты. Корзина сохранена.' };
   }
 
   state.payingNow = false;
@@ -1793,7 +1795,7 @@ function renderStaff(){
     <div class="ops-grid"><button class="ops-card green rippleable" data-action="open-op" data-mode="delivery"><span class="ops-ico">📦</span><b>Поставка</b><small>Приход товара и накладная</small></button><button class="ops-card sun rippleable" data-action="open-op" data-mode="expense"><span class="ops-ico">💸</span><b>Расход</b><small>Из кассы или безнал</small></button><button class="ops-card red rippleable" data-action="open-op" data-mode="issue"><span class="ops-ico">⚠️</span><b>Проблема</b><small>Сообщить владельцу</small></button><button class="ops-card rippleable" data-action="open-op" data-mode="close"><span class="ops-ico">🌙</span><b>Закрыть смену</b><small>Деньги · чек-лист · фото</small></button></div>
     <div class="ops-wide"><div class="ops-wide-title">Сегодня</div><div class="ops-stats"><div class="ops-stat"><b>${state.todayOps.deliveries||0}</b><span>ПОСТАВОК</span></div><div class="ops-stat"><b>${state.todayOps.expenses||0}</b><span>РАСХОДОВ</span></div><div class="ops-stat"><b>${state.todayOps.issues||0}</b><span>ПРОБЛЕМ</span></div></div></div>
     <div class="ops-grid"><button class="ops-card green rippleable" data-action="open-op" data-mode="checklist"><span class="ops-ico">📋</span><b>Чек-листы</b><small>Открытие · в течение дня · закрытие</small></button></div>
-    ${renderOpsSync()}${renderStaffOpForm()}
+    ${renderStaffOrderAlerts()}${renderOpsSync()}${renderStaffOpForm()}
     <div class="ops-form"><h3>Ввести ID гостя вручную</h3><input class="text-input" type="text" placeholder="ID гостя" value="${esc(state.chargeIdValue||'')}" data-action="set-charge-id"><button class="ops-submit rippleable" data-action="staff-charge-loyalty">Начислить штамп</button>${state.chargeMsg?`<div class="ops-message ${state.chargeMsgOk?'ok':'bad'}">${state.chargeMsg}</div>`:''}</div>
     <div class="ops-wide"><div class="ops-wide-title">Заказы точки</div>${state.staffLoading?`<p class="ops-muted">Загружаем…</p>`:renderOrderList(state.staffOrders,true)}</div>
   </div>`;
@@ -2394,15 +2396,23 @@ async function staffPasswordLogin(){
   loadStaffOrders();
 }
 
+let staffOrdersRequest=null;
 async function loadStaffOrders(silent){
-  if(!silent){ state.staffLoading = true; render(); }
+  if(!state.staffShop||!state.staffName)return;
+  const shopId=state.staffShop,name=state.staffName,key=shopId+':'+name;
+  if(staffOrdersRequest===key)return;
+  staffOrdersRequest=key;
+  if(!silent){state.staffLoading=true;render();}
   try{
-    const res = await fetch(DB_URL + '/orders.json');
-    const obj = res.ok ? await res.json() : null;
-    const all = obj ? Object.keys(obj).map(id=>Object.assign({id}, obj[id])) : [];
-    state.staffOrders = all.filter(o=>o.shopId===state.staffShop && o.status!=='cancelled' && (o.status!=='done'||(o.payMethod==='При получении'&&o.paid!==true))).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-  }catch(e){ if(!silent) state.staffOrders = []; }
-  state.staffLoading = false; render();
+    const res=await fetch(DB_URL+'/orders.json');
+    if(!res.ok)throw Error('Нет связи с заказами. Последний список сохранён.');
+    const obj=await res.json();
+    if(state.staffShop!==shopId||state.staffName!==name)return;
+    const all=obj?Object.keys(obj).map(id=>Object.assign({id},obj[id])):[];
+    state.staffOrders=all.filter(o=>o.shopId===shopId&&o.status!=='cancelled'&&(o.status!=='done'||(o.payMethod==='При получении'&&o.paid!==true))).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    state.staffOrdersError='';state.staffOrdersCheckedAt=Date.now();observeStaffOrders(state.staffOrders);
+  }catch(e){if(state.staffShop===shopId&&state.staffName===name)state.staffOrdersError='Нет связи с заказами. Последний список сохранён; нажмите обновление.';}
+  finally{if(staffOrdersRequest===key)staffOrdersRequest=null;if(state.staffShop===shopId&&state.staffName===name){state.staffLoading=false;render();}}
 }
 
 async function loadAdminOrders(){
@@ -3236,7 +3246,7 @@ function startStaffLiveUpdates(){
   if(!staffPollTimer){
     staffPollTimer = setInterval(()=>{
       if(state.screen==='staff' && state.staffShop && state.staffName) loadStaffOrders(true);
-    }, 20000);
+    }, 5000);
   }
 }
 function stopStaffLiveUpdates(){
@@ -3358,6 +3368,11 @@ document.addEventListener('click', (e)=>{
   else if(action==='set-pickup'){ state.pickupASAP = el.dataset.mode==='asap'; render(); }
   else if(action==='go-checkout'){ state.screen='checkout'; render(); }
   else if(action==='set-pay'){ if(readPendingPickup()){state.checkoutError='Сначала проверьте отправку предыдущего заказа.';}else if(state.checkoutPaymentLink){state.checkoutError='Ссылка на оплату уже создана. Сначала проверьте этот платёж.';}else{state.payMethod=el.dataset.pay==='link'?'link':'pickup';state.checkoutError='';}render(); }
+  else if(action==='open-payment-link'){
+    const url=safePaymentUrl(state.checkoutPaymentLink?.paymentUrl);
+    if(!url){e.preventDefault();showToast('Ссылка недоступна.');}
+    else if(window.Telegram?.WebApp?.openLink){e.preventDefault();try{window.Telegram.WebApp.openLink(url);}catch(err){showToast('Скопируйте ссылку и откройте её в браузере.');}}
+  }
   else if(action==='copy-payment-link'){copyCheckoutPaymentLink();}
   else if(action==='pickup-payment-confirm'){confirmPickupPayment(el.dataset.id);}
   else if(action==='set-tip'){ state.tipPercent = el.dataset.val==='custom' ? 'custom' : parseInt(el.dataset.val,10); render(); }
@@ -3381,6 +3396,7 @@ document.addEventListener('click', (e)=>{
   else if(action==='admin-pin-submit'){ adminPasswordLoginV3(); }
   else if(action==='staff-change-name'){ state.reportPassword='';state.opMode=null;state.shiftChecks=emptyShiftChecks();state.staffName=null; state.staffPinValue=''; clearStaffSession(); render(); }
   else if(action==='staff-logout'){state.reportPassword='';state.opMode=null;state.shiftChecks=emptyShiftChecks();state.staffShop=null; state.staffName=null; state.staffOrders=[]; clearStaffSession(); state.screen='menu'; render(); }
+  else if(action==='staff-enable-sound'){ enableStaffOrderSignal(); }
   else if(action==='staff-refresh'){ loadStaffOrders(); loadTodayOps();loadChecklistConfig();updateOpsPending(); }
   else if(action==='staff-charge-loyalty'){ chargeLoyaltyById(); }
   else if(action==='set-redeem-guest-id'){ state.redeemGuestId = el.value; }
