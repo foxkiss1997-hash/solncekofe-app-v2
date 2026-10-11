@@ -1,10 +1,10 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),crypto=require('node:crypto');
-const html=fs.readFileSync('preorder.html','utf8'),moduleSource=fs.readFileSync('operations-v3.js','utf8'),backendSource=fs.readFileSync('apps-script/Operations.gs','utf8');
+const html=fs.readFileSync('preorder.html','utf8'),moduleSource=fs.readFileSync('operations-v3.js','utf8'),backendSource=fs.readFileSync('apps-script/Operations.gs','utf8'),paymentSource=fs.readFileSync('payments-v4.js','utf8');
 const inline=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]).join('\n').split('/* ---------- INIT ---------- */')[0];
 const clone=x=>JSON.parse(JSON.stringify(x));
 function front(){
- const local=new Map(),listeners={};const context=vm.createContext({console,crypto,Intl,URL,URLSearchParams,setTimeout,clearTimeout,queueMicrotask,location:{origin:'https://foxkiss1997-hash.github.io'},window:{location:{search:'',href:'https://foxkiss1997-hash.github.io/preorder.html'},addEventListener(){},removeEventListener(){}},document:{addEventListener(name,fn){(listeners[name]??=[]).push(fn)},getElementById(){return {innerHTML:'',querySelector(){return null}}}},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v)},fetch:async()=>({ok:true,json:async()=>null})});
- vm.runInContext(moduleSource,context);vm.runInContext(inline,context);vm.runInContext("render=()=>{};showToast=()=>{};Object.assign(state,{adminChecklistShop:1,adminChecklistStage:'open',opsConfigDraft:null,staffShop:1,staffName:'Тест',reportPassword:'pass',opMode:'checklist',checklistStage:'day'});",context);
+ const local=new Map(),listeners={};const context=vm.createContext({console,crypto,Intl,URL,URLSearchParams,setTimeout,clearTimeout,setInterval:()=>1,clearInterval(){},confirm:()=>true,queueMicrotask,location:{origin:'https://foxkiss1997-hash.github.io'},window:{location:{search:'',href:'https://foxkiss1997-hash.github.io/preorder.html'},addEventListener(){},removeEventListener(){}},document:{addEventListener(name,fn){(listeners[name]??=[]).push(fn)},getElementById(){return {innerHTML:'',querySelector(){return null}}}},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)},fetch:async()=>({ok:true,json:async()=>null})});
+ vm.runInContext(moduleSource,context);vm.runInContext(paymentSource,context);vm.runInContext(fs.readFileSync('staff-alerts-v1.js','utf8'),context);vm.runInContext(inline,context);vm.runInContext("render=()=>{};showToast=()=>{};Object.assign(state,{adminChecklistShop:1,adminChecklistStage:'open',opsConfigDraft:null,staffShop:1,staffName:'Тест',reportPassword:'pass',opMode:'checklist',checklistStage:'day'});",context);
  const stores={queue:new Map(),drafts:new Map()};context.stores=stores;
  vm.runInContext("opsStore=async(name,mode,fn)=>fn({get:k=>stores[name].get(k),put:(v,k)=>stores[name].set(k||v.reportId,JSON.parse(JSON.stringify(v))),delete:k=>stores[name].delete(k),getAll:()=>Array.from(stores[name].values())});",context);
  return {context,stores,run:s=>vm.runInContext(s,context)};
@@ -56,3 +56,48 @@ test('production is explicitly enabled, confined to the main origin and isolated
  assert.equal(b.context.saveReport_(r,prod.root,prod.props).status,'synced');
  assert(b.writes.every(x=>x.path==='/ops_v3'||x.path.startsWith('/ops_v3/')));assert.equal(b.sheets['Выручка'].rows[1][6],850);
 });
+
+function checkout(f){f.run("shopStatus=()=>({open:true});state.cart=[{id:'espresso',name:'Эспрессо',category:'coffee',sizeId:'m',qty:1,unitPrice:150}];state.shopId=1;state.payMethod='pickup';state.screen='checkout';state.receiptContact='';");}
+test('pickup sends an unpaid order, clears cart only after acknowledgement and never awards stamps',async()=>{
+ const f=front();checkout(f);let body;
+ f.context.fetch=async(url,options)=>{assert(url.endsWith('/order'));body=JSON.parse(options.body);return {ok:true,json:async()=>({orderId:'-pickup-test'})};};
+ await f.context.placeOrder();assert.equal(body.payMethod,'При получении');assert.equal(body.paid,false);assert.equal(f.run('state.order.paid'),false);assert.equal(f.run('state.cart.length'),0);assert.equal(f.run('state.order.firebaseId'),'-pickup-test');
+ assert.equal(f.run('readPendingPickup()'),null);
+});
+test('uncertain pickup acknowledgement preserves cart and retry checks the existing order without resubmitting',async()=>{
+ const f=front();checkout(f);let sends=0;
+ f.context.fetch=async()=>{sends++;throw Error('Network lost');};await f.context.placeOrder();assert.equal(f.run('state.cart.length'),1);assert(f.run('readPendingPickup()'));assert.equal(f.run('state.order'),null);
+ f.context.fetch=async url=>{assert(url.includes('limitToLast=50'));return {ok:true,json:async()=>({})};};await f.context.placeOrder();assert.equal(sends,1);assert.equal(f.run('state.cart.length'),1);
+ const pending=f.run('readPendingPickup()');f.context.fetch=async()=>({ok:true,json:async()=>({'-recovered':{clientId:pending.clientId,shopId:1,number:pending.number,payMethod:'При получении',createdAt:pending.placedAt,status:'new'}})});
+ await f.context.placeOrder();assert.equal(f.run('state.order.firebaseId'),'-recovered');assert.equal(f.run('state.order.paid'),false);
+});
+test('double tap on pickup starts one submission',async()=>{
+ const f=front();checkout(f);let resolve,calls=0;f.context.fetch=()=>{calls++;return new Promise(r=>resolve=r);};
+ const first=f.context.placeOrder();await f.context.placeOrder();assert.equal(calls,1);resolve({ok:true,json:async()=>({orderId:'-once'})});await first;
+});
+test('payment links reject unsafe protocols and expose no paid state before bank confirmation',async()=>{
+ const f=front();checkout(f);f.run("state.payMethod='link';state.receiptContact='test@example.invalid';watchCheckoutLink=()=>{};");let calls=0;
+ f.context.fetch=async url=>{assert(url.endsWith('/create-payment'));calls++;return {ok:true,json:async()=>({ok:true,orderId:'bank-test',paymentUrl:'https://securepay.tinkoff.ru/test'})};};
+ await f.context.placeOrder();assert.equal(f.run('state.order'),null);assert.equal(f.run('state.cart.length'),1);assert.match(f.context.renderCheckoutPaymentLink(),/Заказ ещё не оплачен/);await f.context.placeOrder();assert.equal(calls,1);
+ for(const u of ['javascript:alert(1)','http://example.com','https://user:pass@example.com'])assert.equal(f.context.safePaymentUrl(u),'');
+ f.run('state.checkoutPaymentLink=null');f.context.restorePendingCheckout();assert.equal(f.run('state.checkoutPaymentLink.orderId'),'bank-test');
+ f.context.fetch=async url=>({ok:true,json:async()=>url.includes('order_lookup')?'-bank-order':{paid:false,shopId:1}});await f.context.checkCheckoutLinkPayment();assert.equal(f.run('state.order'),null);
+ f.context.fetch=async url=>({ok:true,json:async()=>url.includes('order_lookup')?'-bank-order':{paid:true,shopId:1,status:'new',createdAt:Date.now()}});await f.context.checkCheckoutLinkPayment();assert.equal(f.run('state.order.paid'),true);assert.equal(f.run('state.cart.length'),0);
+});
+test('pickup confirmation is confined to its shop and unpaid pickup orders, and never writes loyalty or reports',()=>{
+ const b=back(),req={orderId:'-cash-order',shopId:1,submittedBy:'Тест',receivedVia:'cash'};b.db['/orders/-cash-order']={shopId:1,payMethod:'При получении',status:'new',paid:false};
+ assert.throws(()=>b.context.confirmPickupPayment_({...req,shopId:2}),/нельзя/);assert.throws(()=>b.context.confirmPickupPayment_({...req,receivedVia:'other'}),/Некорректное/);
+ const ack=b.context.confirmPickupPayment_(req);assert.equal(ack.paid,true);assert.equal(b.writes.length,1);assert.equal(b.writes[0].path,'/orders/-cash-order');assert.equal(b.writes[0].data.paymentReceivedVia,'cash');
+ b.db['/orders/-cash-order'].paid=true;assert.equal(b.context.confirmPickupPayment_(req).alreadyPaid,true);assert.equal(b.writes.length,1);
+ b.db['/orders/-cash-order']={shopId:1,payMethod:'Картой онлайн',paid:false};assert.throws(()=>b.context.confirmPickupPayment_(req),/нельзя/);
+});
+test('payment confirmation endpoint rejects an unauthenticated employee before touching an order',()=>{
+ const b=back();b.context.PropertiesService={getScriptProperties:()=>({getProperty:k=>({PRODUCTION_ENABLED:'true',PRODUCTION_SPREADSHEET_ID:'1vC8zXVTzKzvWPw_vOx7OKXEtJyx9zQJr-Y1Kbn-QLR4',PRODUCTION_PHOTO_FOLDER_ID:'private'})[k]})};
+ b.context.HtmlService={XFrameOptionsMode:{ALLOWALL:'allow'},createHtmlOutput:text=>({text,setXFrameOptionsMode(){return this;}})};
+ const result=b.context.doPost({parameter:{payload:JSON.stringify({apiVersion:3,nonce:'a'.repeat(32),mode:'production',returnOrigin:'https://foxkiss1997-hash.github.io',action:'confirmPickupPayment',shopId:1,submittedBy:'Тест',orderId:'-cash-order',receivedVia:'cash',auth:{password:'wrong'}})}});
+ assert.match(result.text,/"ok":false/);assert.equal(b.writes.length,0);
+});
+
+test('staff alerts stay within the shop, survive refresh and never alarm for accepted or cancelled orders',()=>{const f=front();let notices=[];f.context.capture=x=>notices.push(x);f.run('showToast=capture;state.staffOrders=[]');let orders=[{id:'n',shopId:1,status:'new',number:'101'},{id:'other',shopId:2,status:'new'},{id:'a',shopId:1,status:'accepted'},{id:'c',shopId:1,status:'cancelled'}];assert.equal(f.context.observeStaffOrders(orders).length,1);assert.equal(f.context.observeStaffOrders(orders).length,0);f.run('staffAlertSeen.clear()');assert.equal(f.context.observeStaffOrders(orders).length,0);assert.equal(notices.length,1);});
+test('failed staff polling keeps previous orders and shows connection error',async()=>{const f=front();f.run("state.staffOrders=[{id:'old',shopId:1,status:'new'}]");f.context.fetch=async()=>({ok:false});await f.context.loadStaffOrders(true);assert.equal(f.run('state.staffOrders[0].id'),'old');assert.match(f.run('state.staffOrdersError'),/Нет связи/);});
+test('overlapping staff polls cannot start duplicate requests or leak a previous shop response',async()=>{const f=front();let resolve,calls=0;f.context.fetch=()=>{calls++;return new Promise(r=>resolve=r)};const first=f.context.loadStaffOrders(true);await f.context.loadStaffOrders(true);assert.equal(calls,1);f.run('state.staffShop=2;state.staffOrders=[]');resolve({ok:true,json:async()=>({'foreign':{shopId:1,status:'new'}})});await first;assert.equal(f.run('state.staffOrders.length'),0);});

@@ -26,6 +26,10 @@ function doPost(e){
       const password=props.getProperty('ADMIN_PASSWORD');
       if(!password||!request.auth?.admin||request.auth.password!==password)throw Error('Нет доступа администратора.');
       answer=request.action==='authorizeAdmin'?{authorized:true}:saveChecklistConfig_(request,root);
+    }else if(request.action==='confirmPickupPayment'){
+      if(root!=='/ops_v3')throw Error('Оплата доступна только в рабочем приложении.');
+      authorizeStaff_({shopId:request.shopId,submittedBy:request.submittedBy},request.auth);
+      answer=confirmPickupPayment_(request);
     }else if(request.action==='submitReport'){
       const report=validateReport_(request.report);authorizeStaff_(report,request.auth);authorizeChecklist_(report,root);
       answer=saveReport_(report,root,props);
@@ -37,6 +41,17 @@ function doPost(e){
   return HtmlService.createHtmlOutput('<!doctype html><meta charset="utf-8"><p>Обработка отчёта завершена.</p><script>window.top.postMessage('+message+','+JSON.stringify(target)+');</script>').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 function dbRead_(path){return dbRequest_(path,'get');}
+function confirmPickupPayment_(request){
+  if(![1,2].includes(request.shopId)||!/^[-a-zA-Z0-9_]{1,100}$/.test(request.orderId||'')||!['cash','card','sbp'].includes(request.receivedVia))throw Error('Некорректное подтверждение оплаты.');
+  const lock=LockService.getScriptLock();lock.waitLock(30000);
+  try{
+    const path='/orders/'+request.orderId,order=dbRead_(path);
+    if(!order||order.shopId!==request.shopId||order.status==='cancelled'||order.refunded||order.payMethod!=='При получении')throw Error('Этот заказ нельзя оплатить при получении.');
+    if(order.paid===true)return {paid:true,orderId:request.orderId,alreadyPaid:true};
+    dbRequest_(path,'patch',{paid:true,paymentStatus:'paid',paymentReceivedVia:request.receivedVia,paidAt:Date.now(),paymentConfirmedBy:request.submittedBy,paymentConfirmationSource:'staff'});
+    return {paid:true,orderId:request.orderId};
+  }finally{lock.releaseLock();}
+}
 function dbRequest_(path,method,data){
   const response=UrlFetchApp.fetch(OPS_DATABASE+(path||'/')+'.json',{method,contentType:'application/json',...(data===undefined?{}:{payload:JSON.stringify(data)}),muteHttpExceptions:true});
   if(response.getResponseCode()<200||response.getResponseCode()>=300)throw Error('База не подтвердила сохранение ('+response.getResponseCode()+').');
