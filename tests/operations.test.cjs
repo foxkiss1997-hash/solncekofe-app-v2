@@ -2,6 +2,30 @@ const test=require('node:test'),assert=require('node:assert/strict'),vm=require(
 const html=fs.readFileSync('preorder.html','utf8'),moduleSource=fs.readFileSync('operations-v3.js','utf8'),backendSource=fs.readFileSync('apps-script/Operations.gs','utf8');
 const inline=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]).join('\n').split('/* ---------- INIT ---------- */')[0];
 const clone=x=>JSON.parse(JSON.stringify(x));
+test('real Apps Script sandbox acknowledgements arrive while spoofed hosts and mismatched nonces are ignored',async()=>{
+ const f=front(),events=new Map();let payload,removed=0;
+ f.context.window.addEventListener=(name,fn)=>events.set(name,fn);
+ f.context.window.removeEventListener=name=>events.delete(name);
+ f.context.document.createElement=tag=>({appendChild(el){payload=JSON.parse(el.value)},submit(){},remove(){removed++}});
+ f.context.document.body={append(){}};
+ const pending=f.context.sendOpsRequest({action:'authorizeAdmin'},'',true);
+ const ack={channel:'solncekofe-ops-v3',apiVersion:3,nonce:payload.nonce,ok:true,authorized:true};
+ const send=(origin,data=ack)=>events.get('message')({origin,data});
+ send('https://script.googleusercontent.com.attacker.test');
+ send('https://n-example-script.googleusercontent.com',{...ack,nonce:'wrong'});
+ assert.equal(removed,0);
+ send('https://n-dl54vw4gjdkpbnbwviyzuhoojza4nwtlpxnyhcy-0lu-script.googleusercontent.com');
+ assert.equal((await pending).authorized,true);assert.equal(removed,2);
+});
+test('Google sandbox authentication errors reach the login form instead of timing out',async()=>{
+ const f=front();let listener,payload;
+ f.context.window.addEventListener=(name,fn)=>{listener=fn};
+ f.context.document.createElement=tag=>({appendChild(el){payload=JSON.parse(el.value)},submit(){},remove(){}});
+ f.context.document.body={append(){}};
+ const pending=f.context.sendOpsRequest({action:'authorizeAdmin'},'',true);
+ listener({origin:'https://n-example-0lu-script.googleusercontent.com',data:{channel:'solncekofe-ops-v3',apiVersion:3,nonce:payload.nonce,ok:false,error:'Нет доступа администратора.'}});
+ await assert.rejects(pending,/Нет доступа администратора/);
+});
 function front(){
  const local=new Map(),listeners={};const context=vm.createContext({console,crypto,Intl,URL,URLSearchParams,setTimeout,clearTimeout,queueMicrotask,location:{origin:'https://foxkiss1997-hash.github.io'},window:{location:{search:'',href:'https://foxkiss1997-hash.github.io/preorder.html'},addEventListener(){},removeEventListener(){}},document:{addEventListener(name,fn){(listeners[name]??=[]).push(fn)},getElementById(){return {innerHTML:'',querySelector(){return null}}}},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v)},fetch:async()=>({ok:true,json:async()=>null})});
  vm.runInContext(moduleSource,context);vm.runInContext(inline,context);vm.runInContext("render=()=>{};showToast=()=>{};Object.assign(state,{adminChecklistShop:1,adminChecklistStage:'open',opsConfigDraft:null,staffShop:1,staffName:'Тест',reportPassword:'pass',opMode:'checklist',checklistStage:'day'});",context);
