@@ -60,7 +60,7 @@ function sendOpsRequest(body,password,admin=false){
     const nonce=opsId(),frame=document.createElement('iframe'),form=document.createElement('form');frame.name='ops-'+nonce;frame.hidden=true;form.hidden=true;form.method='POST';form.action=REPORTS_WEBHOOK_URL;form.target=frame.name;
     const field=document.createElement('input');field.type='hidden';field.name='payload';field.value=JSON.stringify({apiVersion:3,nonce,returnOrigin:location.origin,mode:OPS_V3_TEST_MODE?'test':'production',...body,auth:{password,admin}});form.appendChild(field);
     let timer;const cleanup=()=>{clearTimeout(timer);window.removeEventListener('message',listener);form.remove();frame.remove();};
-    const listener=e=>{if(!/^https:\/\/(?:script\.google\.com|(?:[a-z0-9-]+\.)?script\.googleusercontent\.com)$/.test(e.origin)||e.data?.channel!=='solncekofe-ops-v3'||e.data.nonce!==nonce)return;cleanup();if(e.data.ok&&e.data.apiVersion===3)resolve(e.data);else reject(Error(e.data.error||'Таблица не подтвердила сохранение.'));};
+    const listener=e=>{if(!/^https:\/\/(?:script\.google\.com|(?:[a-z0-9-]+[.-])?script\.googleusercontent\.com)$/.test(e.origin)||e.data?.channel!=='solncekofe-ops-v3'||e.data.nonce!==nonce)return;cleanup();if(e.data.ok&&e.data.apiVersion===3)resolve(e.data);else reject(Error(e.data.error||'Таблица не подтвердила сохранение.'));};
     window.addEventListener('message',listener);timer=setTimeout(()=>{cleanup();reject(Error('Нет подтверждения Google. Отчёт остаётся в очереди.'));},60000);
     document.body.append(frame,form);try{form.submit();}catch(e){cleanup();reject(e);}
   });
