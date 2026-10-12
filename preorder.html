@@ -690,7 +690,7 @@
     <div id="app"></div>
   </div>
 
-<script src="operations-v3.js?v=20261012-google-response-fix"></script>
+<script src="operations-v3.js?v=20261012-staff-shop-choice"></script>
 <script>
 /* ---------- DATA (menu: Солнцекофе, Yandex Eda) ---------- */
 const CATEGORIES = [
@@ -1769,17 +1769,17 @@ function renderCard(){
 /* ---------- RENDER: STAFF ---------- */
 function renderStaff(){
   if(!state.staffName){
-    return `<div class="screen ops-shell"><div class="topbar"><button class="iconbtn rippleable" data-action="back-to-menu">←</button><h2>Вход сотрудника</h2></div><div class="ops-hero"><div class="ops-kicker">СОЛНЦЕКОФЕ · КОМАНДА</div><h1>Рабочий день без лишних действий</h1><div class="ops-muted">Введите личный пароль — точка определится автоматически.</div></div><div class="ops-form"><input class="text-input" type="password" placeholder="Личный пароль" data-action="set-staff-pin" value="${esc(state.staffPinValue)}">${state.staffPinError?`<div class="ops-message bad">${state.staffPinError}</div>`:''}<button class="ops-submit rippleable" data-action="staff-pin-submit">${state.staffListLoading?'Проверяем…':'Войти →'}</button></div></div>`;
+    return `<div class="screen ops-shell"><div class="topbar"><button class="iconbtn rippleable" data-action="back-to-menu">←</button><h2>Вход сотрудника</h2></div><div class="ops-hero"><div class="ops-kicker">СОЛНЦЕКОФЕ · КОМАНДА</div><h1>Рабочий день без лишних действий</h1><div class="ops-muted">Выберите кофейню и введите личный пароль для этой точки.</div></div><div class="ops-form">${renderStaffShopSelector()}<input class="text-input" type="password" placeholder="Личный пароль" data-action="set-staff-pin" value="${esc(state.staffPinValue)}">${state.staffPinError?`<div class="ops-message bad">${state.staffPinError}</div>`:''}<button class="ops-submit rippleable" data-action="staff-pin-submit">${state.staffListLoading?'Проверяем…':'Войти →'}</button></div></div>`;
   }
   const shop=SHOPS.find(s=>s.id===state.staffShop)||{name:'Точка'};
   const shiftText=state.shiftOpenedAt?'Смена открыта · '+new Date(state.shiftOpenedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'Рабочая смена';
   return `<div class="screen ops-shell">
     <div class="topbar"><button class="iconbtn rippleable" data-action="staff-change-name">←</button><h2>☀️ СОЛНЦЕКОФЕ</h2><button class="iconbtn rippleable" data-action="staff-refresh" style="margin-left:auto">⟳</button><button class="iconbtn rippleable" data-action="staff-logout">🚪</button></div>
-    <div class="ops-hero"><div class="ops-kicker">${esc(shop.name)}</div><h1>Добрый день, ${esc(state.staffName)}!</h1><div class="shift-pill">● ${shiftText}</div></div>
+    <div class="ops-hero">${renderStaffShopSelector()}<div class="ops-kicker">${esc(shop.name)}</div><h1>Добрый день, ${esc(state.staffName)}!</h1><div class="shift-pill">● ${shiftText}</div></div>
     <div class="ops-grid"><button class="ops-card green rippleable" data-action="staff-scan-qr"><span class="ops-ico">☕</span><b>Начислить штамп</b><small>Сканировать QR гостя</small></button><button class="ops-card sun rippleable" data-action="open-op" data-mode="reward"><span class="ops-ico">🎁</span><b>Погасить подарок</b><small>По ID и коду</small></button></div>
     <div class="ops-grid"><button class="ops-card green rippleable" data-action="open-op" data-mode="delivery"><span class="ops-ico">📦</span><b>Поставка</b><small>Приход товара и накладная</small></button><button class="ops-card sun rippleable" data-action="open-op" data-mode="expense"><span class="ops-ico">💸</span><b>Расход</b><small>Из кассы или безнал</small></button><button class="ops-card red rippleable" data-action="open-op" data-mode="issue"><span class="ops-ico">⚠️</span><b>Проблема</b><small>Сообщить владельцу</small></button><button class="ops-card rippleable" data-action="open-op" data-mode="close"><span class="ops-ico">🌙</span><b>Закрыть смену</b><small>Деньги · чек-лист · фото</small></button></div>
     <div class="ops-wide"><div class="ops-wide-title">Сегодня</div><div class="ops-stats"><div class="ops-stat"><b>${state.todayOps.deliveries||0}</b><span>ПОСТАВОК</span></div><div class="ops-stat"><b>${state.todayOps.expenses||0}</b><span>РАСХОДОВ</span></div><div class="ops-stat"><b>${state.todayOps.issues||0}</b><span>ПРОБЛЕМ</span></div></div></div>
-    <div class="ops-grid"><button class="ops-card green rippleable" data-action="open-op" data-mode="checklist"><span class="ops-ico">📋</span><b>Чек-листы</b><small>Открытие · в течение дня · закрытие</small></button></div>
+    <div class="ops-grid"><button class="ops-card sun rippleable" data-action="open-op" data-mode="revenue"><span class="ops-ico">📊</span><b>Отчёт по выручке</b><small>Наличные · безнал · фото</small></button><button class="ops-card green rippleable" data-action="open-op" data-mode="checklist"><span class="ops-ico">📋</span><b>Чек-листы</b><small>Открытие · в течение дня · закрытие</small></button></div>
     ${renderOpsSync()}${renderStaffOpForm()}
     <div class="ops-form"><h3>Ввести ID гостя вручную</h3><input class="text-input" type="text" placeholder="ID гостя" value="${esc(state.chargeIdValue||'')}" data-action="set-charge-id"><button class="ops-submit rippleable" data-action="staff-charge-loyalty">Начислить штамп</button>${state.chargeMsg?`<div class="ops-message ${state.chargeMsgOk?'ok':'bad'}">${state.chargeMsg}</div>`:''}</div>
     <div class="ops-wide"><div class="ops-wide-title">Заказы точки</div>${state.staffLoading?`<p class="ops-muted">Загружаем…</p>`:renderOrderList(state.staffOrders,true)}</div>
@@ -1789,12 +1789,14 @@ function renderStaff(){
 function renderStaffOpForm(){
   const m=state.opMode;if(!m)return '';
   if(m==='checklist')return renderShiftChecklist();
+  if(m==='revenue')return `<div class="ops-form" id="ops-active-form"><h3>Отчёт по выручке</h3>${renderOpsLocation()}<label class="hint">Дата отчёта<input class="text-input" type="date" aria-label="Дата отчёта" data-action="set-report-date" value="${esc(state.reportDate||todayKey())}"></label><label class="hint">Наличные, ₽<input class="text-input" type="number" min="0" inputmode="decimal" data-action="set-report-cash" value="${esc(state.reportCash)}" aria-label="Наличные, ₽"></label><label class="hint">Безналичные, ₽<input class="text-input" type="number" min="0" inputmode="decimal" data-action="set-report-cashless" value="${esc(state.reportCashless)}" aria-label="Безналичные, ₽"></label>${renderOpsPhotos('report','Фото отчёта по выручке')}${renderOpsAuth()}<button class="ops-submit" data-action="submit-revenue-report" ${state.opsSaving||state.opsPhotoLoading?'disabled':''}>${state.opsSaving?'Отправляем…':'Отправить отчёт'}</button>${state.reportMsg?`<div class="ops-message ${state.reportMsgOk?'ok':'bad'}">${esc(state.reportMsg)}</div>`:''}<button class="ops-cancel" data-action="close-op">Закрыть</button></div>`;
+
   if(m==='reward') return `<div class="ops-form" id="ops-active-form"><h3>🎁 Погасить подарок</h3><div class="hint">Код одноразовый. После погашения повторно использовать его нельзя.</div><input class="text-input" style="margin-top:10px" type="text" placeholder="ID гостя" value="${esc(state.redeemGuestId||'')}" data-action="set-redeem-guest-id"><input class="text-input" style="margin-top:8px" type="text" placeholder="Код подарка" value="${esc(state.redeemVoucherId||'')}" data-action="set-redeem-voucher-id"><button class="ops-submit rippleable" data-action="staff-redeem-voucher">Подтвердить выдачу</button>${state.redeemMsg?`<div class="ops-message ${state.redeemMsgOk?'ok':'bad'}">${state.redeemMsg}</div>`:''}<button class="ops-cancel rippleable" data-action="close-op">Закрыть</button></div>`;
   if(m==='delivery'||m==='expense'||m==='issue'){
     const delivery=m==='delivery', issue=m==='issue'; const title=delivery?'📦 Новая поставка':issue?'⚠️ Сообщить о проблеме':'💸 Новый расход';
-    return `<div class="ops-form" id="ops-active-form"><h3>${title}</h3>${!issue?`<input class="text-input" type="number" inputmode="decimal" placeholder="Сумма, ₽" value="${esc(state.opAmount)}" data-action="set-op-amount">`:''}<input class="text-input" style="margin-top:8px" type="text" placeholder="${delivery?'Поставщик / что привезли':issue?'Что произошло?':'На что потратили'}" value="${esc(state.opParty)}" data-action="set-op-party">${!issue?`<select class="ops-select" data-action="set-op-payment"><option value="cash" ${state.opPayment==='cash'?'selected':''}>Из кассы</option><option value="cashless" ${state.opPayment==='cashless'?'selected':''}>Безналичные</option><option value="manager" ${state.opPayment==='manager'?'selected':''}>Оплатил управляющий</option></select>`:''}<input class="text-input" style="margin-top:8px" type="text" placeholder="Комментарий (необязательно)" value="${esc(state.opNote)}" data-action="set-op-note">${delivery?`<input class="text-input" style="margin-top:8px" placeholder="Что привезли" value="${esc(state.opGoods||'')}" data-action="set-op-goods">`:''}${renderOpsPhotos('report',issue?'Фото проблемы':delivery?'Накладные / фото поставки':'Чек / фото расхода')}${renderOpsAuth()}<button class="ops-submit rippleable" data-action="save-operation" ${state.opsSaving||state.opsPhotoLoading?'disabled':''}>Сохранить</button>${state.opMsg?`<div class="ops-message ${state.opMsgOk?'ok':'bad'}">${state.opMsg}</div>`:''}<button class="ops-cancel rippleable" data-action="close-op">Отмена</button></div>`;
+    return `<div class="ops-form" id="ops-active-form"><h3>${title}</h3>${renderOpsLocation()}${!issue?`<input class="text-input" type="number" inputmode="decimal" placeholder="Сумма, ₽" value="${esc(state.opAmount)}" data-action="set-op-amount">`:''}<input class="text-input" style="margin-top:8px" type="text" placeholder="${delivery?'Поставщик':issue?'Что произошло?':'На что потратили'}" value="${esc(state.opParty)}" data-action="set-op-party">${!issue?`<select class="ops-select" data-action="set-op-payment"><option value="cash" ${state.opPayment==='cash'?'selected':''}>Из кассы</option><option value="cashless" ${state.opPayment==='cashless'?'selected':''}>Безналичные</option><option value="manager" ${state.opPayment==='manager'?'selected':''}>Оплатил управляющий</option></select>`:''}<input class="text-input" style="margin-top:8px" type="text" placeholder="Комментарий (необязательно)" value="${esc(state.opNote)}" data-action="set-op-note">${delivery?`<input class="text-input" style="margin-top:8px" placeholder="Что привезли" value="${esc(state.opGoods||'')}" data-action="set-op-goods">`:''}${renderOpsPhotos('report',issue?'Фото проблемы':delivery?'Накладные / фото поставки':'Чек / фото расхода')}${renderOpsAuth()}<button class="ops-submit rippleable" data-action="save-operation" ${state.opsSaving||state.opsPhotoLoading?'disabled':''}>Сохранить</button>${state.opMsg?`<div class="ops-message ${state.opMsgOk?'ok':'bad'}">${state.opMsg}</div>`:''}<button class="ops-cancel rippleable" data-action="close-op">Отмена</button></div>`;
   }
-  if(m==='close') return `<div class="ops-form" id="ops-active-form"><h3>🌙 Закрытие смены</h3><div class="hint">1. Деньги</div><div class="ops-row"><input class="text-input" type="number" inputmode="decimal" placeholder="Наличные ₽" value="${esc(state.shiftCash)}" data-action="set-shift-cash"><input class="text-input" type="number" inputmode="decimal" placeholder="Безнал ₽" value="${esc(state.shiftCashless)}" data-action="set-shift-cashless"></div><input class="text-input" style="margin-top:8px" type="number" inputmode="decimal" placeholder="Фактически денег в кассе, ₽" value="${esc(state.shiftActual)}" data-action="set-shift-actual"><div class="hint" style="margin-top:14px">2. Чек-лист</div>${getChecklistItems('close').map(x=>`<label class="checkline"><input type="checkbox" data-action="shift-check" data-key="${x[0]}" ${state.shiftChecks[x[0]]?'checked':''}><span>${esc(x[1])}</span></label>${x[2]?renderOpsPhotos(x[0],'Фото: '+x[1]):''}`).join('')}${renderOpsPhotos('closing','3. Фото закрытой точки')}${renderOpsPhotos('revenue','4. Фото отчёта по выручке / терминала')}${renderOpsAuth()}<button class="ops-submit rippleable" data-action="close-shift" ${state.opsSaving||state.opsPhotoLoading?'disabled':''}>Закрыть смену</button>${state.shiftMsg?`<div class="ops-message ${state.shiftMsgOk?'ok':'bad'}">${state.shiftMsg}</div>`:''}<button class="ops-cancel rippleable" data-action="close-op">Отмена</button></div>`;
+  if(m==='close') return `<div class="ops-form" id="ops-active-form"><h3>🌙 Закрытие смены</h3>${renderOpsLocation()}<div class="hint">1. Деньги</div><div class="ops-row"><input class="text-input" type="number" inputmode="decimal" placeholder="Наличные ₽" value="${esc(state.shiftCash)}" data-action="set-shift-cash"><input class="text-input" type="number" inputmode="decimal" placeholder="Безнал ₽" value="${esc(state.shiftCashless)}" data-action="set-shift-cashless"></div><input class="text-input" style="margin-top:8px" type="number" inputmode="decimal" placeholder="Фактически денег в кассе, ₽" value="${esc(state.shiftActual)}" data-action="set-shift-actual"><div class="hint" style="margin-top:14px">2. Чек-лист</div>${getChecklistItems('close').map(x=>`<label class="checkline"><input type="checkbox" data-action="shift-check" data-key="${x[0]}" ${state.shiftChecks[x[0]]?'checked':''}><span>${esc(x[1])}</span></label>${x[2]?renderOpsPhotos(x[0],'Фото: '+x[1]):''}`).join('')}${renderOpsPhotos('closing','3. Фото закрытой точки')}${renderOpsPhotos('revenue','4. Фото отчёта по выручке / терминала')}${renderOpsAuth()}<button class="ops-submit rippleable" data-action="close-shift" ${state.opsSaving||state.opsPhotoLoading?'disabled':''}>Закрыть смену</button>${state.shiftMsg?`<div class="ops-message ${state.shiftMsgOk?'ok':'bad'}">${state.shiftMsg}</div>`:''}<button class="ops-cancel rippleable" data-action="close-op">Отмена</button></div>`;
   return '';
 }
 
@@ -2339,25 +2341,28 @@ async function loadStaffList(){
 }
 
 async function staffPasswordLogin(){
+  const selectedShop=state.staffShop;
+  if(![1,2].includes(selectedShop)){state.staffPinError='Сначала выберите кофейню.';render();return;}
   const pass = (state.staffPinValue||'').trim();
   if(!pass){ state.staffPinError='Введите пароль.'; render(); return; }
   if(state.staffListLoading) return;
   state.staffListLoading = true; render();
 
   let match = null, matchedShop = null;
-  for(const shop of SHOPS){
+  for(const shop of SHOPS.filter(s=>s.id===selectedShop)){
     try{
       const res = await fetch(DB_URL + '/staff/' + shop.id + '.json');
       const obj = res.ok ? await res.json() : null;
       const list = obj ? Object.keys(obj).map(id=>Object.assign({id}, obj[id])) : [];
-      const found = list.find(m => (m.password||'') === pass);
+      const found = list.find(m => m.active!==false && (m.password||'') === pass);
       if(found){ match = found; matchedShop = shop.id; break; }
     }catch(e){ /* try the next shop */ }
   }
 
   state.staffListLoading = false;
+  if(state.staffShop!==selectedShop)return;
   if(!match){
-    state.staffPinError = 'Неверный пароль. Если вы новый сотрудник — попросите администратора добавить вас.';
+    state.staffPinError = 'Пароль не подходит для выбранной кофейни. Попросите администратора добавить вас в эту точку.';
     render();
     return;
   }
@@ -2376,18 +2381,20 @@ async function staffPasswordLogin(){
       });
     }catch(e){}
   }
-  loadStaffOrders();
+  loadStaffOrders();loadTodayOps();
 }
 
 async function loadStaffOrders(silent){
+  const shop=state.staffShop,name=state.staffName;if(!shop||!name)return;
   if(!silent){ state.staffLoading = true; render(); }
   try{
     const res = await fetch(DB_URL + '/orders.json');
     const obj = res.ok ? await res.json() : null;
+    if(shop!==state.staffShop||name!==state.staffName)return;
     const all = obj ? Object.keys(obj).map(id=>Object.assign({id}, obj[id])) : [];
     state.staffOrders = all.filter(o=>o.shopId===state.staffShop && o.status!=='done' && o.status!=='cancelled').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-  }catch(e){ if(!silent) state.staffOrders = []; }
-  state.staffLoading = false; render();
+  }catch(e){ if(!silent&&shop===state.staffShop&&name===state.staffName) state.staffOrders = []; }
+  if(shop===state.staffShop&&name===state.staffName){state.staffLoading=false;render();}
 }
 
 async function loadAdminOrders(){
@@ -2599,7 +2606,9 @@ function sendReportToOwnerBot(payload){
 }
 
 async function submitRevenueReport(){
- try{const cash=Number(state.reportCash),cashless=Number(state.reportCashless);if(!state.reportDate||![cash,cashless].every(x=>Number.isFinite(x)&&x>=0)||cash+cashless<=0)throw Error('Укажите дату и суммы выручки.');await enqueueOpsReport({type:'revenue',date:state.reportDate,cash,cashless,total:cash+cashless});state.reportMsg=opsSavedMessage();state.reportMsgOk=true;state.reportCash='';state.reportCashless='';}catch(e){state.reportMsg=e.message;state.reportMsgOk=false;}render();
+ if(state.opsSaving||state.opsPhotoLoading)return;
+ state.opsSaving=true;render();
+ try{const cash=Number(state.reportCash),cashless=Number(state.reportCashless),date=state.reportDate||todayKey();if(![cash,cashless].every(x=>Number.isFinite(x)&&x>=0)||cash+cashless<=0)throw Error('Укажите суммы выручки.');await enqueueOpsReport({type:'revenue',date,cash,cashless,total:cash+cashless});state.reportMsg=opsSavedMessage();state.reportMsgOk=true;state.reportCash='';state.reportCashless='';}catch(e){state.reportMsg=e.message;state.reportMsgOk=false;}finally{state.opsSaving=false;render();}
 }
 async function submitExpenseReport(){
  try{const amount=Number(state.expenseAmount);if(!state.expenseDate||!Number.isFinite(amount)||amount<=0)throw Error('Укажите дату и сумму расхода.');await enqueueOpsReport({type:'expense',date:state.expenseDate,amount,party:state.expenseSupplier||'Расход',note:state.expenseNote||'',payment:'cash'});state.expenseMsg=opsSavedMessage();state.expenseMsgOk=true;state.expenseAmount='';state.expenseSupplier='';state.expenseNote='';}catch(e){state.expenseMsg=e.message;state.expenseMsgOk=false;}render();
@@ -2611,9 +2620,9 @@ async function logAudit(action, details){
   try{ await fetch(DB_URL+'/audit_log.json',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,details:details||{},shopId:state.staffShop,staff:state.staffName||null,at:Date.now()})}); }catch(e){}
 }
 async function loadTodayOps(){
-  if(!state.staffShop)return; const day=todayKey(); let d=0,x=0,i=0;
+  if(!state.staffShop)return; const shop=state.staffShop,name=state.staffName,day=todayKey(); let d=0,x=0,i=0;
   try{const r=await fetch(DB_URL+opsRoot()+'/operations/'+state.staffShop+'/'+day+'.json');const o=await r.json();if(o)Object.values(o).forEach(v=>{if(v.type==='delivery')d++;else if(v.type==='expense')x++;else if(v.type==='issue')i++;});}catch(e){}
-  state.todayOps={deliveries:d,expenses:x,issues:i};render();
+  if(shop===state.staffShop&&name===state.staffName){state.todayOps={deliveries:d,expenses:x,issues:i};render();}
 }
 async function saveOperation(){return saveOperationV3();}
 async function closeShift(){return closeShiftV3();}
