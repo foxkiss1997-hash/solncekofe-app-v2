@@ -52,6 +52,17 @@ async function addOpsPhotos(files,group){
   state.opsPhotoLoading=false;render();
 }
 async function removeOpsPhoto(id){const key=opsDraftKey(),next=opsPhotos().filter(x=>x.id!==id);try{await opsStore('drafts','readwrite',s=>s.put(next,key));opsPhotoDrafts[key]=next;render();}catch(e){showToast('Не удалось убрать фото.');}}
+function renderStaffShopSelector(){
+  const locked=!!(state.opMode||state.opsSaving||state.checklistSaving||state.opsPhotoLoading||opsQueueBusy||state.staffListLoading);
+  return `<label class="hint">Кофейня для работы<select class="ops-select" data-action="staff-select-shop" aria-label="Кофейня для работы" ${locked?'disabled':''}><option value="">Выберите кофейню</option>${SHOPS.map(s=>`<option value="${s.id}" ${state.staffShop===s.id?'selected':''}>${esc(s.name.replace('Солнцекофе — ',''))}</option>`).join('')}</select></label><p class="hint">${state.opMode?'Закройте форму, чтобы сменить кофейню.':'Все отчёты, поставки, расходы и заказы относятся к выбранной кофейне.'}</p>`;
+}
+function renderOpsLocation(){return `<p class="hint"><b>Точка: ${esc(SHOPS.find(s=>s.id===state.staffShop)?.name.replace('Солнцекофе — ','')||'Не выбрана')}</b></p>`;}
+function selectStaffShop(value){
+  const shop=Number(value);if(shop===state.staffShop)return true;
+  if(![1,2].includes(shop)||state.opMode||state.opsSaving||state.checklistSaving||state.opsPhotoLoading||opsQueueBusy||state.staffListLoading){render();return false;}
+  Object.assign(state,{staffShop:shop,staffName:null,reportPassword:'',staffPinValue:'',staffPinError:'',staffOrders:[],staffLoading:false,staffList:[],opsPending:0,opsSyncMessage:'',todayOps:{deliveries:0,expenses:0,issues:0},shiftOpenedAt:null,shiftChecks:emptyShiftChecks(),opAmount:'',opParty:'',opGoods:'',opNote:'',opMsg:'',shiftCash:'',shiftCashless:'',shiftActual:'',shiftMsg:'',reportDate:'',reportCash:'',reportCashless:'',reportMsg:'',opPayment:'cash',chargeIdValue:'',chargeMsg:'',redeemGuestId:'',redeemVoucherId:'',redeemMsg:''});
+  clearStaffSession();render();return true;
+}
 function renderOpsAuth(){return state.reportPassword?'':`<label class="hint">Для отправки отчёта подтвердите личный пароль<input class="text-input" type="password" autocomplete="off" placeholder="Личный пароль сотрудника" data-action="ops-report-password"></label>`;}
 function renderOpsSync(){return `<div class="ops-wide"><div class="hint">${OPS_V3_TEST_MODE?'Тестовая версия · ':''}${state.opsPending||0} отчётов ожидают отправки в таблицу</div><button class="ops-cancel" data-action="ops-retry" ${opsQueueBusy?'disabled':''}>Повторить отправку</button>${state.opsSyncMessage?`<div class="hint">${esc(state.opsSyncMessage)}</div>`:''}</div>`;}
 function sendOpsRequest(body,password,admin=false){
@@ -144,7 +155,8 @@ document.addEventListener('click',e=>{const el=e.target.closest('[data-action]')
 });
 document.addEventListener('input',e=>{const el=e.target.closest('[data-action]');if(!el)return;if(el.dataset.action==='admin-checklist-label'){const x=getEditableChecklist().stages[state.adminChecklistStage].find(x=>x.id===el.dataset.id);if(x)x.label=el.value;}else if(el.dataset.action==='ops-report-password')state.reportPassword=el.value;else if(el.dataset.action==='set-op-goods')state.opGoods=el.value;});
 document.addEventListener('change',e=>{const el=e.target.closest('[data-action]');if(!el)return;const a=el.dataset.action;
-  if(a==='ops-photo')addOpsPhotos(Array.from(el.files||[]),el.dataset.group);
+  if(a==='staff-select-shop')selectStaffShop(el.value);
+  else if(a==='ops-photo')addOpsPhotos(Array.from(el.files||[]),el.dataset.group);
   else if(a==='admin-checklist-photo'){const x=getEditableChecklist().stages[state.adminChecklistStage].find(x=>x.id===el.dataset.id);if(x)x.requirePhoto=el.checked;}
   else if(a==='admin-checklist-shop'){state.adminChecklistShop=Number(el.value);state.opsConfigDraft=null;state.opsConfigMessage='';render();}
   else if(a==='admin-checklist-stage'){state.adminChecklistStage=el.value;render();}
