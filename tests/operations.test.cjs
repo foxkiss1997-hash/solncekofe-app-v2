@@ -45,6 +45,29 @@ function back(){
  return {context,db,writes,sheets,photos,book,run:s=>vm.runInContext(s,context),failSheet:n=>{failSheet=n},failDb:v=>{failDb=v},props:{getProperty:k=>({SPREADSHEET_ID:'test-sheet',PHOTO_FOLDER_ID:'private-folder'})[k]}};
 }
 function report(overrides={}){return {reportId:'a'.repeat(32),schemaVersion:3,shopId:1,date:'2026-10-10',type:'delivery',submittedBy:'Тест',submittedAt:Date.now(),party:'Тест поставщика',goods:'Кофе',amount:500,payment:'cash',photos:[{id:'b'.repeat(32),group:'report',dataUrl:'data:image/jpeg;base64,/9j/AA=='}],...overrides};}
+test('staff login validates the selected shop even when another shop has the same password',async()=>{
+ const f=front(),calls=[];f.run("state.staffShop=2;state.staffName=null;state.staffPinValue='pass';loadStaffOrders=()=>{};loadTodayOps=()=>{};loadChecklistConfig=()=>{};");
+ f.context.fetch=async url=>{calls.push(url);return {ok:true,json:async()=>({employee:{name:'Сотрудник второй точки',password:'pass',active:true}})}};
+ await f.context.staffPasswordLogin();assert.equal(f.run('state.staffShop'),2);assert.equal(f.run('state.staffName'),'Сотрудник второй точки');assert.equal(calls.length,1);assert.match(calls[0],/staff\/2\.json$/);
+});
+test('staff login refuses inactive accounts and requires an explicit shop',async()=>{
+ const f=front();f.run("state.staffName=null;state.staffShop=null;state.staffPinValue='pass'");let calls=0;
+ f.context.fetch=async()=>{calls++;return {ok:true,json:async()=>({employee:{name:'Тест',password:'pass',active:false}})}};
+ await f.context.staffPasswordLogin();assert.equal(calls,0);f.run('state.staffShop=1');await f.context.staffPasswordLogin();assert.equal(f.run('state.staffName'),null);
+});
+test('changing shops clears authentication but preserves queued reports and saved photos',()=>{
+ const f=front();f.run("state.opMode=null;opsPhotoDrafts[opsDraftKey()]=[{id:'saved'}]");f.stores.queue.set('saved',{reportId:'saved',shopId:1,submittedBy:'Тест'});
+ assert.equal(f.context.selectStaffShop(2),true);assert.equal(f.run('state.staffShop'),2);assert.equal(f.run('state.staffName'),null);assert.equal(f.run('state.reportPassword'),'');assert.equal(f.stores.queue.size,1);assert.equal(f.run('Object.values(opsPhotoDrafts)[0][0].id'),'saved');
+ f.run("state.staffName='Тест';state.opMode='delivery'");assert.equal(f.context.selectStaffShop(1),false);assert.equal(f.run('state.staffShop'),2);
+});
+test('a previous shop order response cannot populate the new shop screen',async()=>{
+ const f=front();let finish;f.context.fetch=()=>new Promise(resolve=>{finish=resolve});const pending=f.context.loadStaffOrders(true);f.run('state.opMode=null');f.context.selectStaffShop(2);
+ finish({ok:true,json:async()=>({order:{shopId:1,status:'new'}})});await pending;assert.equal(f.run('state.staffOrders.length'),0);
+});
+test('revenue form labels its shop and submits one immutable report with photos after double tap',async()=>{
+ const f=front();f.run("state.staffShop=2;state.opMode='revenue';state.reportCash='100';state.reportCashless='200';opsPhotoDrafts[opsDraftKey()]=[{id:'photo',group:'report',dataUrl:'photo'}];sendOpsRequest=async()=>{throw Error('offline')}");
+ assert.match(f.run('renderStaffOpForm()'),/Нагатинская/);await Promise.all([f.context.submitRevenueReport(),f.context.submitRevenueReport()]);assert.equal(f.stores.queue.size,1);const saved=[...f.stores.queue.values()][0];assert.equal(saved.shopId,2);assert.equal(saved.total,300);assert.equal(saved.photos.length,1);
+});
 test('complete browser scripts parse and render staff/admin/checklist without initialization requests',()=>{const f=front();assert.match(f.run('renderStaff()'),/Фотоотчёт|фотоотчёт/);assert.match(f.run('renderAdminChecklists()'),/Убрать пункт/);assert.equal(f.run("getChecklistItems('day').length"),7);assert.match(f.run('renderChecklistV3()'),/полить цветы/);});
 test('draft checks and photos are isolated by shop, staff, date and stage',()=>{const f=front();f.run("saveChecklistDraft({hall:true});opsPhotoDrafts[opsDraftKey()]=[{id:'x'}];state.staffShop=2;");assert.equal(f.run('readChecklistDraft().hall'),undefined);assert.equal(f.run('opsPhotos().length'),0);f.run("state.staffShop=1;state.staffName='Другой';");assert.equal(f.run('readChecklistDraft().hall'),undefined);});
 test('archiving and editing future templates do not mutate queued report snapshots',async()=>{const f=front();f.run("opsChecklistConfig[1]={revision:'r1',stages:{day:[{id:'x',label:'Старое',active:true,requirePhoto:true}]}};sendOpsRequest=async()=>{throw Error('offline')};");await f.run("enqueueOpsReport({type:'checklist',checks:[{key:'x',label:'Старое',done:true}],stage:'day'})");f.run("opsChecklistConfig[1].stages.day[0].label='Новое';opsChecklistConfig[1].stages.day[0].active=false;");assert.equal(f.stores.queue.values().next().value.checks[0].label,'Старое');assert.equal(f.run("getChecklistItems('day').length"),0);});
