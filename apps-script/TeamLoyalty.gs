@@ -98,24 +98,54 @@ function handleSchedule_(request,root,props){
    const publicRow={id,shopId:point,date:row.date,start:row.start,end:row.end,name:row.name,status:row.status};
    if(row.status==='approved'&&row.name)teamRows.push(publicRow);
    if(row.name===actor.name&&['approved','pending'].includes(row.status))myRows.push({...publicRow,...(row.swap?{swap:row.swap}:{})});
+   else if(row.status==='approved'&&row.swap?.direction==='incoming'&&row.swap.to===actor.name&&['requested','accepted'].includes(row.swap.status))myRows.push({...publicRow,name:actor.name,status:'pending',requestType:'transfer',swap:row.swap});
   }
   return {rows:Object.entries(rows).map(([id,row])=>({id,...row})).filter(x=>x.status!=='cancelled').sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start)),staff:Object.values(staff).filter(x=>x.active!==false).map(x=>String(x.name)),...(!actor.admin?{myRows,teamRows}:{})};
  }
+ if(request.action==='requestShifts'){
+  if(actor.admin)throw Error('Используйте редактирование администратора.');
+  const operationId=teamId_(request.operationId),items=request.items;
+  if(!Array.isArray(items)||!items.length||items.length>31)throw Error('Выберите от 1 до 31 смены.');
+  const snap=teamSnapshot_(root+'/schedule'),all=snap.value||{},seen={},fingerprint=JSON.stringify(items),rows=[];
+  let replay=0;
+  for(const item of items){
+   const id=teamId_(item.shiftId);if(seen[id])throw Error('Смена выбрана дважды.');seen[id]=true;
+   const old=all[shopId]?.[id],event=old?.history?.[operationId];
+   if(event){if(event.actor!==actor.name||event.batch!==fingerprint)throw Error('ID операции уже использован.');replay++;}
+  }
+  if(replay){if(replay!==items.length)throw Error('Неполная история заявки. Обновите график.');return {rows:items.map(x=>({id:x.shiftId,...all[shopId][x.shiftId]})),replayed:true};}
+  for(const item of items){
+   const id=item.shiftId,old=all[shopId]?.[id];
+   const next=teamScheduleChange_({...item,action:'requestShift',operationId},actor,old,props,shopId,all,id,fingerprint);
+   (all[shopId]||(all[shopId]={}))[id]=next;rows.push({id,...next});
+  }
+  // Validate every item before the single compare-and-set: a stale item cannot leave a half-submitted selection.
+  teamComparePut_(root+'/schedule',all,snap.etag);return {rows};
+ }
  const id=teamId_(request.shiftId),operationId=teamId_(request.operationId),path=root+'/schedule/'+shopId+'/'+id,snap=teamSnapshot_(path),old=snap.value;
  if(old?.lastOperationId===operationId){if(old.updatedBy!==actor.name)throw Error('ID операции уже использован.');return {row:{id,...old}};}
+ const all={1:dbRead_(root+'/schedule/1')||{},2:dbRead_(root+'/schedule/2')||{}};
+ const next=teamScheduleChange_(request,actor,old,props,shopId,all,id,'');
+ teamComparePut_(path,next,snap.etag);return {row:{id,...next}};
+}
+function teamScheduleChange_(request,actor,old,props,shopId,all,id,batch){
+ const operationId=teamId_(request.operationId);
  if((old?.revision||'')!==(request.revision||''))throw Error('Смена уже изменена. Обновите график.');
  let next;
  if(request.action==='requestSwap'){
   if(actor.admin||!old||old.status!=='approved'||old.name!==actor.name)throw Error('Можно предложить замену только своей утверждённой смены.');
   const target=String(request.targetName||'').trim(),staff=dbRead_('/staff/'+shopId)||{};
   if(target===actor.name||!Object.values(staff).some(x=>x.active!==false&&x.name===target))throw Error('Выберите другого сотрудника этой кофейни.');
-  next={...old,swap:{from:actor.name,to:target,status:'requested'}};
- }else if(request.action==='acceptSwap'){
-  if(actor.admin||!old||old.swap?.status!=='requested'||old.swap.to!==actor.name)throw Error('Это предложение адресовано другому сотруднику.');
-  next={...old,swap:{...old.swap,status:'accepted'}};
- }else if(request.action==='approveSwap'){
-  if(!actor.admin||!old||old.swap?.status!=='accepted')throw Error('Сначала второй сотрудник должен принять замену.');
-  next={...old,name:old.swap.to,swap:{...old.swap,status:'approved'}};
+  if(['requested','accepted'].includes(old.swap?.status))throw Error('По этой смене уже есть заявка на замену.');
+  next={...old,swap:{from:actor.name,to:target,direction:'outgoing',status:'requested'}};
+ }else if(request.action==='acceptSwap'||request.action==='approveSwap'){
+  if(!old||!['requested','accepted'].includes(old.swap?.status)||old.name!==old.swap.from)throw Error('Нет действующей заявки на замену.');
+  const approver=old.swap.direction==='incoming'?old.swap.from:old.swap.to;
+  if(request.action==='approveSwap'?!actor.admin:(actor.admin||actor.name!==approver))throw Error('Подтвердить может второй участник или администратор.');
+  next={...old,name:old.swap.to,swap:{...old.swap,status:'approved',approvedBy:actor.name}};
+ }else if(request.action==='rejectSwap'){
+  if(!old||!['requested','accepted'].includes(old.swap?.status)||(!actor.admin&&![old.swap.from,old.swap.to].includes(actor.name)))throw Error('Нет доступной заявки на замену.');
+  next={...old,swap:{...old.swap,status:'rejected'}};
  }else if(request.action==='saveShift'){
   if(!actor.admin)throw Error('Редактирование доступно владельцу.');
   const date=teamDate_(request.date),start=teamTime_(request.start),end=teamTime_(request.end),name=String(request.name||'').trim();
@@ -125,23 +155,31 @@ function handleSchedule_(request,root,props){
   next={date,start,end,name,status:name?'approved':'open'};
  }else if(request.action==='requestShift'){
   if(actor.admin)throw Error('Используйте редактирование владельца.');
-  if(old){if(old.status!=='open')throw Error('Смена уже занята.');next={...old,name:actor.name,status:'pending'};}
-  else{const date=teamDate_(request.date),start=teamTime_(request.start),end=teamTime_(request.end);if(start>=end)throw Error('Проверьте время.');next={date,start,end,name:actor.name,status:'pending'};}
+  const day=old?.date||request.date;if(day<Utilities.formatDate(new Date(),'Europe/Moscow','yyyy-MM-dd'))throw Error('Нельзя подать заявку на прошедшую смену.');
+  if(old){
+   if(old.status==='approved'&&old.name!==actor.name){
+    if(['requested','accepted'].includes(old.swap?.status))throw Error('По этой смене уже есть заявка на замену.');
+    next={...old,swap:{from:old.name,to:actor.name,direction:'incoming',status:'requested'}};
+   }else if(old.status==='open')next={...old,name:actor.name,status:'pending',requestedFromOpen:true};
+   else throw Error('Смена уже занята или заявка уже отправлена.');
+  }
+  else{const date=teamDate_(request.date),start=teamTime_(request.start),end=teamTime_(request.end);if(start>=end)throw Error('Проверьте время.');for(const x of Object.values(all[shopId]||{}))if((['approved','open'].includes(x.status)||x.status==='pending'&&x.name===actor.name)&&x.date===date&&start<x.end&&x.start<end)throw Error('На это время уже есть смена. Выберите её в расписании.');next={date,start,end,name:actor.name,status:'pending'};}
  }else if(request.action==='approveShift'){
   if(!actor.admin||!old||old.status!=='pending')throw Error('Нет заявки для утверждения.');next={...old,status:'approved'};
  }else if(request.action==='cancelShift'){
-  if(!old||(!actor.admin&&(old.name!==actor.name||old.status!=='pending')))throw Error('Отменить эту смену может только владелец.');next={...old,status:'cancelled'};
+  if(!old||(!actor.admin&&(old.name!==actor.name||old.status!=='pending')))throw Error('Отменить эту смену может только владелец.');next=old.requestedFromOpen&&!actor.admin?{...old,name:'',status:'open',requestedFromOpen:false}:{...old,status:'cancelled'};
  }else throw Error('Неизвестное действие графика.');
- if(next.status==='approved'){
-  // Script lock in the dispatcher serializes approvals across both coffee shops.
-  for(const shop of [1,2])for(const [otherId,x]of Object.entries(dbRead_(root+'/schedule/'+shop)||{})){
-   if(shop===shopId&&otherId===id)continue;
-   if(x.status==='approved'&&x.name===next.name&&x.date===next.date&&next.start<x.end&&x.start<next.end)throw Error('У сотрудника уже есть смена в это время.');
-  }
+
+ if(next.status==='approved'&&!Object.values(dbRead_('/staff/'+shopId)||{}).some(x=>x.active!==false&&x.name===next.name))throw Error('Назначаемый сотрудник больше не активен в этой кофейне.');
+ if(next.status==='approved')for(const shop of [1,2])for(const [otherId,x]of Object.entries(all[shop]||{})){
+  if(shop===shopId&&otherId===id)continue;
+  if(x.status!=='approved'||x.date!==next.date||next.start>=x.end||x.start>=next.end)continue;
+  if(shop===shopId)throw Error('В это время на точке уже назначен сотрудник. На смене работает один человек.');
+  if(x.name===next.name)throw Error('У сотрудника уже есть смена в это время.');
  }
- next={...next,revision:operationId,lastOperationId:operationId,updatedBy:actor.name,updatedAt:Date.now(),history:{...(old?.history||{}),[operationId]:{action:request.action,actor:actor.name,at:Date.now(),previous:old?{date:old.date,start:old.start,end:old.end,name:old.name,status:old.status}:null}}};
- teamComparePut_(path,next,snap.etag);return {row:{id,...next}};
+ return {...next,revision:operationId,lastOperationId:operationId,updatedBy:actor.name,updatedAt:Date.now(),history:{...(old?.history||{}),[operationId]:{action:request.action,actor:actor.name,at:Date.now(),...(batch?{batch}:{}),previous:old?{date:old.date,start:old.start,end:old.end,name:old.name,status:old.status}:null}}};
 }
+
 function handleTeamRequest_(request,root,props){
  const lock=LockService.getScriptLock();lock.waitLock(30000);
  try{return /^(loyaltyLookup|awardStamp|redeemGift|spendBonus|creditBonus|reverseLoyalty)$/.test(request.action)?handleLoyalty_(request,props,root):handleSchedule_(request,root,props);}finally{lock.releaseLock();}
