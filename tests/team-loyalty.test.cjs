@@ -99,3 +99,19 @@ test('partial size overrides preserve untouched sizes in the server catalog',()=
 test('receipt order checks the selected shop stock list as well as the global stop list',()=>{
  const x=setup();x.db.shop_stoplist={1:{cap:true},2:{}};assert.throws(()=>pickup(x),/недоступна/);assert.ok(!x.db.orders);assert.equal(pickup(x,{shopId:2}).order.total,300);
 });
+
+test('existing pickup payment confirmation remains idempotent and confined to the selected shop',()=>{
+ const x=setup();x.put('/orders/legacy',{shopId:1,status:'new',payMethod:'При получении',paid:false});x.writes.length=0;
+ const req={...x.staff,orderId:'legacy',receivedVia:'cash'};
+ assert.throws(()=>x.run('confirmPickupPayment_',{...req,shopId:2}),/нельзя оплатить/);
+ x.db.orders.legacy.payMethod='receipt';x.run('confirmPickupPayment_',req);const writes=x.writes.length;
+ assert.equal(x.db.orders.legacy.paid,true);assert.equal(x.db.orders.legacy.paymentConfirmedBy,'Анна');
+ assert.equal(x.run('confirmPickupPayment_',req).alreadyPaid,true);assert.equal(x.writes.length,writes);
+});
+
+test('a first authenticated stamp creates a new card atomically and retries do not add another stamp',()=>{
+ const x=setup(),req={...x.staff,action:'awardStamp',guestId:'NEWCARD',operationId:op};
+ assert.throws(()=>x.run('handleLoyalty_',{...req,auth:{password:'bad'}}),/Пароль/);
+ x.run('handleLoyalty_',req);x.run('handleLoyalty_',req);
+ assert.equal(x.db.guests.NEWCARD.stamps,1);assert.equal(x.db.guests.NEWCARD.bonusBalance,0);assert.equal(x.writes.length,1);
+});
