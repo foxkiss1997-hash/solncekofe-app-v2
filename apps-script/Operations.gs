@@ -22,13 +22,20 @@ function doPost(e){
     if(request.apiVersion!==3||!OPS_ALLOWED_ORIGINS.includes(request.returnOrigin)||!/^[a-f0-9]{32}$/.test(request.nonce||''))throw Error('Некорректный запрос.');
     const selected=selectOpsDestination_(request,PropertiesService.getScriptProperties());
     const props=selected.props,root=selected.root;
-    if(['saveChecklistConfig','authorizeAdmin'].includes(request.action)){
+    if(request.action==='createPickupOrder'){
+      if(request.mode!=='production')throw Error('Рабочие заказы недоступны в тестовом режиме.');
+      answer=createPickupOrder_(request,props);
+    }else if(['saveChecklistConfig','authorizeAdmin'].includes(request.action)){
       const password=props.getProperty('ADMIN_PASSWORD');
       if(!password||!request.auth?.admin||request.auth.password!==password)throw Error('Нет доступа администратора.');
       answer=request.action==='authorizeAdmin'?{authorized:true}:saveChecklistConfig_(request,root);
     }else if(request.action==='submitReport'){
       const report=validateReport_(request.report);authorizeStaff_(report,request.auth);authorizeChecklist_(report,root);
       answer=saveReport_(report,root,props);
+    }else if(request.action==='teamOverview'){
+      answer=teamOverview_(request,root,props);
+    }else if(['loyaltyLookup','awardStamp','redeemGift','spendBonus','creditBonus','reverseLoyalty','listSchedule','saveShift','requestShift','approveShift','cancelShift','requestSwap','acceptSwap','approveSwap'].includes(request.action)){
+      answer=handleTeamRequest_(request,root,props);
     }else throw Error('Неизвестное действие.');
     answer={...answer,ok:true};
   }catch(err){answer={ok:false,error:String(err.message||err).slice(0,240)};}
@@ -53,13 +60,14 @@ function validateReport_(r){
   r.shopName=r.shopId===1?'Рязанский проспект':'Нагатинская';
   if(typeof r.submittedBy!=='string'||!r.submittedBy.trim()||r.submittedBy.length>100)throw Error('Укажите сотрудника.');
   r.submittedAt=Number.isFinite(r.submittedAt)?r.submittedAt:Date.now();
-  ['party','goods','note'].forEach(k=>{r[k]=String(r[k]||'').slice(0,1000);});
+  ['party','goods','note','category'].forEach(k=>{r[k]=String(r[k]||'').slice(0,1000);});
   if(['shift','revenue'].includes(r.type)){
     if(![r.cash,r.cashless].every(x=>Number.isFinite(x)&&x>=0)||r.cash+r.cashless<=0)throw Error('Некорректная выручка.');
     r.total=r.cash+r.cashless;
     if(r.type==='shift'&&(!Number.isFinite(r.actualCash)||r.actualCash<0))throw Error('Укажите факт в кассе.');
   }
   if(['delivery','expense'].includes(r.type)&&(!Number.isFinite(r.amount)||r.amount<=0||!r.party.trim()))throw Error('Укажите сумму и назначение.');
+  if(r.type==='delivery'&&!['paid','unpaid'].includes(r.paymentStatus||'paid'))throw Error('Проверьте оплату поставки.');
   if(r.type==='issue'&&!r.party.trim())throw Error('Опишите проблему.');
   if(!Array.isArray(r.photos)||r.photos.length>12)throw Error('Допускается до 12 фото.');
   let size=0;const ids=new Set();
@@ -75,7 +83,7 @@ function validateReport_(r){
     r.completed=r.checks.every(x=>x.done);
     if(r.type==='shift'&&(!r.completed||r.stage!=='close'||!r.photos.some(p=>p.group==='closing')))throw Error('Проверьте закрытие и фото точки.');
   }
-  const clean={};['reportId','schemaVersion','shopId','shopName','submittedBy','submittedAt','date','type','stage','configRevision','cash','cashless','total','actualCash','openedAt','amount','party','goods','note','payment','status','checks','completed','photos'].forEach(k=>{if(r[k]!==undefined)clean[k]=r[k];});return clean;
+  const clean={};['reportId','schemaVersion','shopId','shopName','submittedBy','submittedAt','date','type','stage','configRevision','cash','cashless','total','actualCash','openedAt','amount','party','goods','note','category','paymentStatus','payment','status','checks','completed','photos'].forEach(k=>{if(r[k]!==undefined)clean[k]=r[k];});return clean;
 }
 function saveChecklistConfig_(request,root){
   if(![1,2].includes(request.shopId)||!request.config?.stages)throw Error('Некорректная кофейня.');
@@ -117,8 +125,8 @@ function reportRows_(r){
   const checks=r.checks||[],done=key=>{const x=checks.find(c=>c.key===key);return x?(x.done?'Да':'Нет'):'';};
   const rows=[];
   if(['shift','revenue'].includes(r.type))rows.push(['Выручка',['Дата','Время','Точка','Сотрудник','Наличные','Безналичные','Итого','Расхождение','ID смены','Фото отчёта','Комментарий','ID отчёта'],[...who,r.cash,r.cashless,r.total,Number.isFinite(r.actualCash)?r.actualCash-r.cash:'',r.type==='shift'?r.reportId:'',links,r.note,r.reportId]]);
-  if(r.type==='delivery')rows.push(['Поставки',['Дата','Время','Точка','Сотрудник','Поставщик','Что привезли','Сумма','Способ оплаты','Накладная/фото','Комментарий','ID','ID отчёта'],[...who,r.party,r.goods,r.amount,r.payment,links,r.note,r.reportId,r.reportId]]);
-  if(r.type==='expense')rows.push(['Расходы',['Дата','Время','Точка','Сотрудник','Категория','Описание','Сумма','Источник оплаты','Чек/фото','Комментарий','ID','ID отчёта'],[...who,'Расход',r.party,r.amount,r.payment,links,r.note,r.reportId,r.reportId]]);
+  if(r.type==='delivery')rows.push(['Поставки',['Дата','Время','Точка','Сотрудник','Поставщик','Что привезли','Сумма','Способ оплаты','Накладная/фото','Комментарий','ID','ID отчёта'],[...who,r.party,r.goods,r.amount,r.payment,links,(r.paymentStatus==='unpaid'?'Не оплачено. ':'')+r.note,r.reportId,r.reportId]]);
+  if(r.type==='expense')rows.push(['Расходы',['Дата','Время','Точка','Сотрудник','Категория','Описание','Сумма','Источник оплаты','Чек/фото','Комментарий','ID','ID отчёта'],[...who,r.category||'Расход',r.party,r.amount,r.payment,links,r.note,r.reportId,r.reportId]]);
   if(r.type==='issue')rows.push(['Проблемы',['Дата','Время','Точка','Сотрудник','Проблема','Срочность','Фото','Статус','Решено','Комментарий','ID','ID отчёта'],[...who,r.party,'Обычная',links,'active','Нет',r.note,r.reportId,r.reportId]]);
   if(['checklist','shift'].includes(r.type))rows.push(['Чек-листы',['Дата','Время','Точка','Сотрудник','Бар','Оборудование','Зал','Холодильники/продукты','Расходники','Комментарий','Фото закрытия','ID смены','Этап','Пункты и отметки','Фото по пунктам','ID отчёта'],[...who,done('bar'),done('equipment'),done('hall'),done('fridges'),done('supplies'),r.note,r.photos.filter(p=>p.group==='closing'||p.group==='report').map(p=>p.url).join('\n'),r.type==='shift'?r.reportId:'',r.stage,checkText,r.photos.map(p=>((checks.find(c=>c.key===p.group)?.label)||p.group)+': '+p.url).join('\n'),r.reportId]]);
   if(r.type==='shift')rows.push(['Смены',['Дата','Точка','Сотрудник','Начало','Закрытие','Наличные','Безналичные','Факт в кассе','Расхождение','Статус','ID смены','Фото закрытия','Фото выручки','ID отчёта'],[r.date,r.shopName,r.submittedBy,r.openedAt?Utilities.formatDate(new Date(r.openedAt),'Europe/Moscow','HH:mm:ss'):'',time,r.cash,r.cashless,r.actualCash,r.actualCash-r.cash,'closed',r.reportId,r.photos.filter(p=>p.group==='closing').map(p=>p.url).join('\n'),r.photos.filter(p=>p.group==='revenue').map(p=>p.url).join('\n'),r.reportId]]);
