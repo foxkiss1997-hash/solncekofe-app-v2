@@ -1,0 +1,14 @@
+/* Stable, phone-first surfaces shared by guest and team. */
+html{scrollbar-gutter:stable;scroll-behavior:auto}body,.shell{min-height:100svh}
+:root{--paper:#fffaf1;--ink:#30251b;--amber:#ffd04d;--amber-deep:#77541a;--sun:#ffd04d;--font-body:system-ui,-apple-system,'Segoe UI',sans-serif;--font-display:var(--font-body);--font-hero:var(--font-body)}
+.screen,.fade-up,.price-pop{animation:none!important}.screen{overflow-anchor:none}
+input,select,textarea{font-size:16px!important}button{touch-action:manipulation}
+.tabbar,.stickybar{padding-bottom:max(12px,env(safe-area-inset-bottom));backdrop-filter:none}
+.menu-thumb{display:block;width:100%;height:100%;background-repeat:no-repeat;background-color:#f3eadb;border-radius:inherit}
+.ops-shell,.admin-sun{background:#fffaf1;color:#30251b}.ops-shell .topbar,.admin-sun .topbar{background:#fffaf1;color:#30251b}.ops-shell .topbar h2,.admin-sun .topbar h2{color:#30251b}
+.ops-hero{background:none;color:#30251b}.ops-muted,.ops-form .hint,.ops-shell .hint{color:#746b60}
+.ops-card,.ops-card.sun,.ops-card.green,.ops-card.red,.ops-wide,.ops-form{background:#fffefb;color:#30251b;border:1px solid #e9dfcc;box-shadow:none}
+.ops-card small,.ops-wide .hint{color:#746b60}.ops-form .text-input,.ops-select{background:#fff;color:#30251b;border-color:#ddd2bd}.ops-cancel{color:#554a3c;border-color:#ddd2bd}.ops-stat{background:#f6f0e5}.ops-stat b{color:#77541a}.ops-stat span,.ops-kicker{color:#746b60}.ops-message{background:#f5f0e7}.ops-message.ok{color:#2b6a39}.ops-message.bad{color:#aa3232}.shift-pill{color:#2b6a39;background:#e8f1e5;border-color:#bfd5ba}
+.admin-sun .tabs{background:#f3edde}.admin-sun .tab{color:#554a3c}.admin-sun .section-label{color:#554a3c}
+.schedule-row,.loyalty-row{padding:12px 0;border-bottom:1px solid #e9dfcc;display:grid;gap:8px}.schedule-actions{display:flex;gap:6px;flex-wrap:wrap}.schedule-actions button{width:auto;flex:1;min-width:88px}.status-badge{font-size:12px;color:#75643d}.qr-wrap{min-height:240px}.qr-wrap img{aspect-ratio:1;object-fit:contain}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
