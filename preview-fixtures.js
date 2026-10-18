@@ -38,10 +38,11 @@ window.previewRequest=async function(body){
 };
 window.previewOverview={date:previewToday,rows:[{shopId:1,revenue:28400,expense:2200,photoReports:2,issues:0,staff:[{name:'Анна',start:'08:00',end:'16:00'}],cashDifference:0,unpaidDeliveries:0},{shopId:2,revenue:20200,expense:4000,photoReports:0,issues:1,staff:[{name:'Иван',start:'12:00',end:'21:00'}],cashDifference:null,unpaidDeliveries:1}]};
 window.previewSchedule={rows:[{id:'a'.repeat(32),revision:'b'.repeat(32),date:previewToday,start:'08:00',end:'16:00',name:'Анна',status:'approved'},{id:'c'.repeat(32),revision:'d'.repeat(32),date:previewToday,start:'16:00',end:'21:00',name:'',status:'open'}],staff:['Анна','Иван']};
+window.previewSchedule.myRows=[{id:'a'.repeat(32),shopId:2,name:'Анна',date:previewToday,start:'08:00',end:'16:00',status:'approved'},...[20,22,25,28].map(day=>({id:'demo'+day,shopId:day===25?1:2,name:'Анна',date:previewToday.slice(0,8)+day,start:'08:00',end:'16:00',status:day===28?'pending':'approved'}))];
 window.previewSetup=function(state,team){
  const query=new URLSearchParams(location.search),role=query.get('role');state.shopId=2;
  if(query.get('view')==='menu-cart')state.cart=[{uid:'demo-cap',itemId:'cap',category:'coffee',name:'Капучино',sizeId:'m',qty:1,unitPrice:300,milk:null,syrup:null,shot:false},{uid:'demo-latte',itemId:'latte',category:'coffee',name:'Латте',sizeId:'m',qty:1,unitPrice:320,milk:null,syrup:null,shot:false}];
  if(query.get('view')==='drink'){state.screen='customize';state.customizeItemId='cap';}
- if(role==='staff'){Object.assign(state,{screen:'staff',staffShop:2,staffName:'Анна',reportPassword:'preview-pass',todayOps:{deliveries:1,expenses:2,issues:0}});if(team){team.schedule=window.previewSchedule;team.scheduleKey='Анна:2';}}
+ if(role==='staff'){Object.assign(state,{opMode:query.get('view')==='schedule'?'schedule':null,screen:'staff',staffShop:2,staffName:'Анна',reportPassword:'preview-pass',todayOps:{deliveries:1,expenses:2,issues:0}});if(team){team.schedule=window.previewSchedule;team.scheduleKey='Анна:2';}}
  if(role==='owner'){Object.assign(state,{screen:'admin',adminAuthed:true,adminTab:'overview',adminPinValue:'preview-owner'});if(team)team.overview=window.previewOverview;}
 };
