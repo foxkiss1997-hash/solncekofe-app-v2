@@ -27,5 +27,9 @@ try{
  w.document.querySelector('[data-date="2026-10-22"]').click();assert.match(w.document.querySelector('.schedule-day-detail').textContent,/Выходить по графику не требуется/);
  evaluate("teamUI.calendarMonth='2026-12';moveScheduleMonth(1)");assert.equal(evaluate('teamUI.calendarMonth'),'2027-01');assert.equal(w.document.querySelectorAll('.calendar-day').length,31);
  console.log('PASS: personal month calendar distinguishes approved shifts, pending requests and unassigned days across both shops');
+ evaluate("teamUI.calendarMonth='2026-10';teamUI.calendarDate='2026-10-20';teamUI.schedule.teamRows=[{name:'Анна',shopId:2,date:'2026-10-20',start:'10:00',end:'18:00',status:'approved'},{name:'Иван',shopId:2,date:'2026-10-20',start:'12:00',end:'21:00',status:'approved'},{name:'Мария',shopId:2,date:'2026-10-20',start:'18:00',end:'21:00',status:'approved'},{name:'Борис',shopId:1,date:'2026-10-20',start:'08:00',end:'21:00',status:'approved'},{name:'Черновик',shopId:2,date:'2026-10-20',start:'08:00',end:'21:00',status:'pending'}];render();");
+ const coworkers=w.document.querySelector('.shift-coworkers').textContent;assert.match(coworkers,/Иван/);assert.match(coworkers,/12:00–18:00/);assert.doesNotMatch(coworkers,/Мария|Борис|Черновик/);
+ const team=w.document.querySelector('.day-team').textContent;assert.match(team,/Мария/);assert.match(team,/Борис/);assert.doesNotMatch(team,/Черновик/);
+ console.log('PASS: coworkers require overlapping hours at the same shop; day roster includes approved shifts at both shops');
  console.log('DOM smoke tests passed. Browser layout and Telegram hardware camera still require device verification.');
 }finally{w.close();}

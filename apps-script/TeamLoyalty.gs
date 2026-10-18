@@ -93,9 +93,13 @@ function handleSchedule_(request,root,props){
  if(request.action==='listSchedule'){
   const rows=dbRead_(root+'/schedule/'+shopId)||{};
   const staff=dbRead_('/staff/'+shopId)||{};
-  const myRows=[];
-  if(!actor.admin)for(const point of [1,2])for(const [id,row]of Object.entries(dbRead_(root+'/schedule/'+point)||{}))if(row.name===actor.name&&['approved','pending'].includes(row.status))myRows.push({id,shopId:point,date:row.date,start:row.start,end:row.end,name:row.name,status:row.status,...(row.swap?{swap:row.swap}:{})});
-  return {rows:Object.entries(rows).map(([id,row])=>({id,...row})).filter(x=>x.status!=='cancelled').sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start)),staff:Object.values(staff).filter(x=>x.active!==false).map(x=>String(x.name)),...(!actor.admin?{myRows}:{})};
+  const myRows=[],teamRows=[];
+  if(!actor.admin)for(const point of [1,2])for(const [id,row]of Object.entries(dbRead_(root+'/schedule/'+point)||{})){
+   const publicRow={id,shopId:point,date:row.date,start:row.start,end:row.end,name:row.name,status:row.status};
+   if(row.status==='approved'&&row.name)teamRows.push(publicRow);
+   if(row.name===actor.name&&['approved','pending'].includes(row.status))myRows.push({...publicRow,...(row.swap?{swap:row.swap}:{})});
+  }
+  return {rows:Object.entries(rows).map(([id,row])=>({id,...row})).filter(x=>x.status!=='cancelled').sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start)),staff:Object.values(staff).filter(x=>x.active!==false).map(x=>String(x.name)),...(!actor.admin?{myRows,teamRows}:{})};
  }
  const id=teamId_(request.shiftId),operationId=teamId_(request.operationId),path=root+'/schedule/'+shopId+'/'+id,snap=teamSnapshot_(path),old=snap.value;
  if(old?.lastOperationId===operationId){if(old.updatedBy!==actor.name)throw Error('ID операции уже использован.');return {row:{id,...old}};}
