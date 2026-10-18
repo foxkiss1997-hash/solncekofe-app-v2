@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),crypto=require('node:crypto');
-const html=fs.readFileSync('preorder.html','utf8'),moduleSource=fs.readFileSync('operations-v3.js','utf8'),backendSource=fs.readFileSync('apps-script/Operations.gs','utf8');
+const html=fs.readFileSync('preorder.html','utf8'),moduleSource=['operations-v3.js','menu-photos.js','menu-experience.js','team-loyalty.js'].map(p=>fs.readFileSync(p,'utf8')).join('\n'),backendSource=fs.readFileSync('apps-script/Operations.gs','utf8');
 const inline=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]).join('\n').split('/* ---------- INIT ---------- */')[0];
 const clone=x=>JSON.parse(JSON.stringify(x));
 test('real Apps Script sandbox acknowledgements arrive while spoofed hosts and mismatched nonces are ignored',async()=>{

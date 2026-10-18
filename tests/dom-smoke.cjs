@@ -1,0 +1,25 @@
+const {JSDOM}=require('jsdom'),fs=require('node:fs'),assert=require('node:assert/strict');
+const dom=new JSDOM('<!doctype html><div id="app"></div>',{url:'https://foxkiss1997-hash.github.io/solncekofe-app-v2/preorder.html?lid=ABCD',runScripts:'outside-only',pretendToBeVisual:true});
+const w=dom.window;let scroll=0;Object.defineProperty(w,'scrollY',{get:()=>scroll});w.scrollTo=opts=>{scroll=opts.top};w.fetch=async()=>({ok:true,json:async()=>null});w.matchMedia=()=>({matches:true});
+const evaluate=s=>require('node:vm').runInContext(s,dom.getInternalVMContext());
+try{
+ for(const p of ['operations-v3.js','stable-ui.js','team-loyalty.js','menu-photos.js','menu-experience.js'])evaluate(fs.readFileSync(p,'utf8'));
+ const inline=[...fs.readFileSync('preorder.html','utf8').matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]).join('\n').split('/* ---------- INIT ---------- */')[0];evaluate(inline);
+ evaluate("Object.assign(state,{screen:'staff',staffShop:1,staffName:'Анна',reportPassword:'pass',opMode:'expense',todayOps:{}});render();");
+ let field=w.document.querySelector('[data-action="set-op-party"]');field.value='Молоко';field.dispatchEvent(new w.Event('input',{bubbles:true}));field.focus();field.setSelectionRange(2,4);scroll=700;evaluate('render();render();');
+ assert.equal(w.document.querySelector('[data-action="set-op-party"]'),field);assert.equal(w.document.activeElement,field);assert.equal(field.value,'Молоко');assert.equal(field.selectionStart,2);assert.equal(field.selectionEnd,4);assert.equal(scroll,700);
+ console.log('PASS: refresh keeps the exact input, focus, caret, form value and scroll');
+ evaluate("state.screen='menu';render();");assert.equal(scroll,0);assert.equal(w.document.querySelectorAll('.menu-thumb').length,4);
+ evaluate("state.screen='staff';render();");assert.equal(scroll,700);
+ console.log('PASS: screen navigation restores each screen position; menu renders photographic cells');
+ evaluate("Object.assign(state,{opMode:'reward'});Object.assign(teamUI,{guestId:'ABCD',lookupKey:'Анна:1:ABCD',guest:{name:'Гость',stamps:5,bonusBalance:100,vouchers:[{id:'GIFT',label:'Кофе'}],history:[]}});render();");
+ assert.equal(w.document.querySelectorAll('[data-action="team-confirm-gift"]').length,0);
+ w.document.querySelector('[data-action="team-select-gift"]').click();assert.equal(w.document.querySelectorAll('[data-action="team-confirm-gift"]').length,1);
+ evaluate("state.staffShop=2;render();");assert.equal(w.document.querySelectorAll('[data-action="team-confirm-gift"]').length,0);
+ console.log('PASS: gift confirmation appears only after selection, stale card hidden on shop change');
+ evaluate("Object.assign(state,{screen:'admin',adminAuthed:true,adminTab:'overview'});render();state.adminTab='schedule';render();state.adminTab='loyalty';render();state.screen='card';render();state.screen='checkout';render();");
+ assert.equal(w.document.querySelectorAll('[data-pay="receipt"]').length,1);assert.equal(w.document.querySelectorAll('[data-pay="link"]').length,1);
+ assert.equal(evaluate("parseGuestQr('solncekofe:ABCD')"),'ABCD');assert.equal(evaluate("parseGuestQr('ABCD')"),'ABCD');assert.throws(()=>evaluate("parseGuestQr('https://example.com/hack')"));
+ console.log('PASS: owner overview/schedule/loyalty, guest card, checkout and QR compatibility');
+ console.log('DOM smoke tests passed. Browser layout and Telegram hardware camera still require device verification.');
+}finally{w.close();}
