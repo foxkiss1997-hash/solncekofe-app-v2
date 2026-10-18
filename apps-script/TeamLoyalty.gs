@@ -33,7 +33,7 @@ function handleLoyalty_(request,props,root){
  if(request.action==='loyaltyLookup'){
   const g=dbRead_(path);if(!g)throw Error('Карта не найдена.');return {guest:loyaltyPublic_(g)};
  }
- const operationId=teamId_(request.operationId),snapshot=teamSnapshot_(path),g=snapshot.value;
+ const operationId=teamId_(request.operationId),snapshot=teamSnapshot_(path),g=snapshot.value||(request.action==='awardStamp'?{stamps:0,bonusSpins:0,bonusBalance:0,vouchers:{},createdAt:Date.now()}:null);
  if(!g)throw Error('Карта не найдена.');
  if(g.loyaltyHistory?.[operationId]){
   const old=g.loyaltyHistory[operationId];
