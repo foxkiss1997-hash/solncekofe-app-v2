@@ -1,0 +1,47 @@
+/* Only loaded by preview.html. All database requests and form submissions are isolated. */
+window.SOLNCE_PREVIEW=true;
+const previewToday=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const demoGuest={name:'',stamps:5,bonusBalance:100,bonusSpins:0,vouchers:{DEMO_GIFT:{label:'Классический кофе M',type:'free_item',redeemed:false}},loyaltyHistory:{}};
+const previewDb={
+ '/guests/DEMO.json':demoGuest,
+ '/menu.json':{farmer:{category:'pizza',name:'Крестьянская',price:750},carbonara:{category:'pizza',name:'Карбонара',price:750}},
+ '/menu_overrides.json':{raforange:{seasonal:true},ppcheesecake:{name:'ПП Сникерс',sizes:{m:330}},ppbrownie:{name:'ПП Кето шоколад',sizes:{m:330}},ppenergy:{name:'Банан карамель',sizes:{m:330}}},
+ '/stoplist.json':{},'/shop_stoplist.json':{1:{esptonik:true},2:{}},'/shop_photos.json':{},'/orders.json':{},
+ '/ops_v3/checklist_config.json':{},'/wheel_prizes.json':null,
+ '/staff/1.json':{demo:{name:'Анна',password:'preview-pass',active:true}},'/staff/2.json':{demo:{name:'Анна',password:'preview-pass',active:true}}
+};
+const previewNativeFetch=window.fetch.bind(window);
+window.fetch=async function(input,options={}){
+ const url=new URL(typeof input==='string'?input:input.url,location.href);
+ if(url.hostname.includes('firebaseio.com')){
+  const method=(options.method||'GET').toUpperCase();
+  if(method!=='GET'){throw Error('Запись в рабочую базу отключена в демонстрации.');}
+  return new Response(JSON.stringify(previewDb[url.pathname]??null),{status:200,headers:{'Content-Type':'application/json'}});
+ }
+ if(url.hostname.includes('workers.dev')||url.hostname.includes('onrender.com')||url.hostname.includes('script.google'))throw Error('Внешние операции отключены в демонстрации.');
+ return previewNativeFetch(input,options);
+};
+HTMLFormElement.prototype.submit=function(){throw Error('Отправка форм в рабочие сервисы отключена в демонстрации.');};
+window.previewRequest=async function(body){
+ const guest={name:'Демо-гость',stamps:demoGuest.stamps,bonusBalance:demoGuest.bonusBalance,vouchers:Object.entries(demoGuest.vouchers).filter(([,x])=>!x.redeemed).map(([id,x])=>({id,...x})),history:Object.entries(demoGuest.loyaltyHistory).map(([id,x])=>({id,...x}))};
+ if(body.action==='teamOverview')return window.previewOverview;
+ if(body.action==='listSchedule')return window.previewSchedule;
+ if(body.action==='authorizeAdmin')return {authorized:true};
+ if(body.action==='loyaltyLookup')return {guest};
+ if(body.action==='redeemGift'){
+  const gift=demoGuest.vouchers[body.voucherId];if(!gift||gift.redeemed)throw Error('Демо-подарок уже использован.');gift.redeemed=true;demoGuest.loyaltyHistory[body.operationId]={action:'redeemGift',label:gift.label,at:Date.now(),actor:'Анна',shopId:2};
+  return {guest:{...guest,vouchers:[],history:Object.entries(demoGuest.loyaltyHistory).map(([id,x])=>({id,...x}))},operationId:body.operationId};
+ }
+ if(body.action==='awardStamp'){demoGuest.stamps=(demoGuest.stamps+1)%7;return {guest:{...guest,stamps:demoGuest.stamps}};}
+ if(body.action==='createPickupOrder')throw Error('Демонстрация: заказ не отправлен и деньги не списывались.');
+ throw Error('Демонстрация: рабочие данные не изменяются.');
+};
+window.previewOverview={date:previewToday,rows:[{shopId:1,revenue:28400,expense:2200,photoReports:2,issues:0,staff:[{name:'Анна',start:'08:00',end:'16:00'}],cashDifference:0,unpaidDeliveries:0},{shopId:2,revenue:20200,expense:4000,photoReports:0,issues:1,staff:[{name:'Иван',start:'12:00',end:'21:00'}],cashDifference:null,unpaidDeliveries:1}]};
+window.previewSchedule={rows:[{id:'a'.repeat(32),revision:'b'.repeat(32),date:previewToday,start:'08:00',end:'16:00',name:'Анна',status:'approved'},{id:'c'.repeat(32),revision:'d'.repeat(32),date:previewToday,start:'16:00',end:'21:00',name:'',status:'open'}],staff:['Анна','Иван']};
+window.previewSetup=function(state,team){
+ const query=new URLSearchParams(location.search),role=query.get('role');state.shopId=2;
+ if(query.get('view')==='menu-cart')state.cart=[{uid:'demo-cap',itemId:'cap',category:'coffee',name:'Капучино',sizeId:'m',qty:1,unitPrice:300,milk:null,syrup:null,shot:false},{uid:'demo-latte',itemId:'latte',category:'coffee',name:'Латте',sizeId:'m',qty:1,unitPrice:320,milk:null,syrup:null,shot:false}];
+ if(query.get('view')==='drink'){state.screen='customize';state.customizeItemId='cap';}
+ if(role==='staff'){Object.assign(state,{screen:'staff',staffShop:2,staffName:'Анна',reportPassword:'preview-pass',todayOps:{deliveries:1,expenses:2,issues:0}});if(team){team.schedule=window.previewSchedule;team.scheduleKey='Анна:2';}}
+ if(role==='owner'){Object.assign(state,{screen:'admin',adminAuthed:true,adminTab:'overview',adminPinValue:'preview-owner'});if(team)team.overview=window.previewOverview;}
+};

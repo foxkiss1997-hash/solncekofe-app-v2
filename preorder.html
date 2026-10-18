@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Солнцекофе — закажи по пути</title>
 <meta name="description" content="Закажи кофе заранее и забери без очереди">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -683,6 +683,8 @@
 
 .ops-photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.ops-photo-grid img{width:100%;height:120px;object-fit:cover;border-radius:12px}.ops-photos{margin:12px 0}.ops-check-editor{margin:14px 0;padding:12px;border:1px solid #33443a;border-radius:15px}.ops-check-editor.archived{opacity:.55}.admin-sun .tabs{overflow-x:auto;display:flex}.admin-sun .tab{flex-shrink:0}
 </style>
+<link rel="stylesheet" href="unified.css?v=20261018-glass2">
+<link rel="stylesheet" href="frosted-glass.css?v=20261018-glass2">
 </head>
 <body>
   <div class="shell">
@@ -690,7 +692,11 @@
     <div id="app"></div>
   </div>
 
-<script src="operations-v3.js?v=20261012-staff-shop-choice"></script>
+<script src="operations-v3.js?v=20261018-glass2"></script>
+<script src="stable-ui.js?v=20261018-glass2"></script>
+<script src="team-loyalty.js?v=20261018-glass2"></script>
+<script src="menu-photos.js?v=20261018-glass2"></script>
+<script src="menu-experience.js?v=20261018-glass2"></script>
 <script>
 /* ---------- DATA (menu: Солнцекофе, Yandex Eda) ---------- */
 const CATEGORIES = [
@@ -723,10 +729,11 @@ function iconSVG(category){
 }
 function iconColor(category){ return CAT_ICON_COLOR[category] || 'var(--amber-deep)'; }
 function itemThumbHTML(item){
+  if(item?.itemId&&!item.id)item=itemById(item.itemId)||item;
   if(item && item.photo){
     return `<img src="${item.photo}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
   }
-  return iconSVG(item ? item.category : 'coffee');
+  return (typeof menuPhotoHTML==='function'&&menuPhotoHTML(item))||iconSVG(item ? item.category : 'coffee');
 }
 // Resizes/compresses an uploaded image client-side to a small JPEG data URL —
 // stored directly in Firebase (no separate file storage needed to set up).
@@ -767,7 +774,7 @@ const ITEMS = [
   {id:'icelatte', category:'cold', name:'Айс латте', sizes:{m:320,l:370}, icon:'🧊'},
   {id:'icecap', category:'cold', name:'Айс капучино', sizes:{m:320,l:370}, icon:'🧊'},
   {id:'matchaps', category:'cold', name:'Матча персик-кокос', sizes:{m:320,l:370}, hit:true, icon:'🍑'},
-  {id:'bumble', category:'cold', name:'Бамбл', sizes:{m:320,l:370}, icon:'🧊'},
+  {id:'bumble', category:'cold', name:'Бамбл', sizes:{m:400,l:450}, icon:'🧊'},
   {id:'cherrybumble', category:'cold', name:'Вишнёвый бамбл', sizes:{m:320,l:370}, icon:'🍒'},
 
   // Чай листовой
@@ -805,14 +812,14 @@ const ITEMS = [
   {id:'raspberrycacao', category:'signature', name:'Малиновое какао', sizes:{m:380,l:420}, icon:'🍫'},
 
   // Пицца
-  {id:'pizzamargherita', category:'pizza', name:'Маргарита', sizes:{m:490}, hit:true, icon:'🍕'},
-  {id:'pizzapepperoni', category:'pizza', name:'Пепперони', sizes:{m:550}, hit:true, icon:'🍕'},
-  {id:'pizzafunghi', category:'pizza', name:'Четыре сыра', sizes:{m:560}, icon:'🍕'},
+  {id:'pizzamargherita', category:'pizza', name:'Маргарита', sizes:{m:750}, hit:true, icon:'🍕'},
+  {id:'pizzapepperoni', category:'pizza', name:'Пепперони', sizes:{m:750}, hit:true, icon:'🍕'},
+  {id:'pizzafunghi', category:'pizza', name:'4 сыра', sizes:{m:750}, icon:'🍕'},
 
   // ПП десерты
-  {id:'ppcheesecake', category:'fitness', name:'ПП чизкейк', sizes:{m:260}, hit:true, icon:'🍰'},
-  {id:'ppbrownie', category:'fitness', name:'ПП брауни', sizes:{m:220}, icon:'🍫'},
-  {id:'ppenergy', category:'fitness', name:'Энергетические шарики', sizes:{m:180}, icon:'🥥'},
+  {id:'ppcheesecake', category:'fitness', name:'ПП Сникерс', sizes:{m:330}, hit:true, icon:'🍰'},
+  {id:'ppbrownie', category:'fitness', name:'ПП Кето шоколад', sizes:{m:330}, icon:'🍫'},
+  {id:'ppenergy', category:'fitness', name:'Банан карамель', sizes:{m:330}, icon:'🥥'},
 ];
 
 const SIZE_META = {s:{label:'S'}, m:{label:'M'}, l:{label:'L'}};
@@ -828,7 +835,7 @@ const MILKS = [
 ];
 const SYRUP_FLAVORS = ['Ваниль','Лесной орех','Карамель','Солёная карамель','Фисташка','Малина','Имбирный пряник','Кленовый','Банан','Пекан','Клубника','Мята','Персик','Лаванда','Ириска'];
 const SYRUPS = [{id:'none', label:'Без сиропа', delta:0}].concat(
-  SYRUP_FLAVORS.map((f,i)=>({id:'syr'+i, label:f, delta:40}))
+  SYRUP_FLAVORS.map((f,i)=>({id:'syr'+i, label:f, delta:50}))
 );
 const EXTRA_SHOT_PRICE = 70;
 
@@ -858,11 +865,6 @@ function shopStatus(shopId){
   const fmt = h => String(h).padStart(2,'0') + ':00';
   return { open, opensAt: fmt(openH), closesAt: fmt(closeH), isWeekend };
 }
-const PAYMENTS = [
-  {id:'card', icon:'💳', label:'Карта •• 4412'},
-  {id:'sber', icon:'🟩', label:'SberPay'},
-  {id:'apple', icon:'📱', label:'Apple Pay'},
-];
 const FLOWER_STAFF = ['Ромашка','Лаванда','Пион','Мята','Роза'];
 
 
@@ -881,14 +883,14 @@ async function submitShiftChecklist(){return submitChecklistV3();}
 /* ---------- STATE ---------- */
 let state = {
   screen:'menu',
-  category:'coffee',
+  category:'popular',
   payingNow:false,
   cart:[],
   customizeItemId:null,
   customizeOpts:{size:'m', milk:'regular', syrup:'none', shot:false, qty:1},
-  loyalty:4,
+  loyalty:0,
   shopId:1,
-  payMethod:'card',
+  payMethod:'receipt',
   pickupASAP:true,
   scheduledTime:'',
   guestName:'',
@@ -907,7 +909,7 @@ let state = {
   expenseDate:'', expenseAmount:'', expenseSupplier:'', expenseNote:'', expenseMsg:'', expenseMsgOk:false,
   staffList:[], staffListLoading:false, staffName:null,
   adminAuthed:false, adminPinValue:'', adminPinError:'', adminOrders:[], adminStats:{count:0, revenue:0, tips:[], tipsTotal:0}, adminLoading:false,
-  adminTab:'orders', adminStaffShop:1, adminStaff:[], adminStaffLoading:false, newStaffName:'',
+  adminTab:'overview', adminStaffShop:1, adminStaff:[], adminStaffLoading:false, newStaffName:'',
   newStaffPassword:'', editingStaffId:null,
   adminMenuLoading:false, newMenuName:'', newMenuCat:'coffee', newMenuPrice:'', newMenuIcon:'🍽️', adminStopCat:'coffee',
   editingMenuItemId:null, editItemName:'', editItemIcon:'', editItemPrices:{}, editItemPhoto:null,
@@ -926,7 +928,7 @@ const WORKER_URL = 'https://solncekofe-bot.foxkiss1997.workers.dev';
 const GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbztGalkZL0kCHJmw-yrwu_Rw2Vb4cc7dOLjVt33VUGlXGIK6PuzSd_iHw6sBUDOquOX3g/exec';
 const PAYMENT_RELAY_URL = 'https://solncekofe-payment-relay.onrender.com';
 const DB_URL = 'https://solncekofe-fdcad-default-rtdb.firebaseio.com';
-const STAFF_PIN = '4444';
+
 
 let CLIENT_ID = 'SK-' + (1000 + Math.floor(Math.random()*9000));
 let TELEGRAM_ID = null;
@@ -957,16 +959,17 @@ async function linkTelegramLoyalty(shortId, tgId){
 }
 async function resolveLoyaltyId(){
   const params = new URLSearchParams(window.location.search);
-  if(TELEGRAM_ID){
+  const platformId=TELEGRAM_ID||params.get('pid');
+  if(platformId){
     try{
-      const res = await fetch(DB_URL + '/pid_map/' + TELEGRAM_ID + '.json');
+      const res = await fetch(DB_URL + '/pid_map/' + platformId + '.json');
       const mapped = res.ok ? await res.json() : null;
-      if(mapped && typeof mapped==='string'){ linkTelegramLoyalty(mapped, TELEGRAM_ID); return mapped; }
+      if(mapped && typeof mapped==='string'){ linkTelegramLoyalty(mapped, platformId); return mapped; }
       const newId = randomLoyaltyId();
-      await fetch(DB_URL + '/pid_map/' + TELEGRAM_ID + '.json', {
+      await fetch(DB_URL + '/pid_map/' + platformId + '.json', {
         method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(newId)
       });
-      linkTelegramLoyalty(newId, TELEGRAM_ID);
+      linkTelegramLoyalty(newId, platformId);
       if(REFERRED_BY && REFERRED_BY !== newId){
         try{
           await fetch(DB_URL + '/guests/' + newId + '.json', {
@@ -978,7 +981,7 @@ async function resolveLoyaltyId(){
       return newId;
     }catch(e){ return randomLoyaltyId(); }
   }
-  const existing = params.get('lid');
+  const existing = params.get('lid')||params.get('id');
   if(existing) return existing;
   const id = randomLoyaltyId();
   try{
@@ -999,12 +1002,13 @@ async function initLoyalty(){
   LOYALTY_ID = await resolveLoyaltyId();
   const g = await getLoyaltyGuest(LOYALTY_ID);
   state.loyalty = Math.min(7, g.stamps || 0);
-  if(g.name){
+  if(g.name&&!state.guestDisplayName){
     state.guestDisplayName = g.name;
     if(!state.guestName) state.guestName = g.name;
   }
   if(g.contact && !state.receiptContact) state.receiptContact = g.contact;
   render();
+  if(state.screen==='card')checkWheelAvailability();
 }
 
 async function loadReferrals(){
@@ -1182,6 +1186,8 @@ function spawnConfetti(container){
 /* ---------- CART OPS ---------- */
 function openCustomize(itemId){
   const item = itemById(itemId);
+  if(!item||itemStopped(itemId)){showToast('Позиция недоступна в выбранной кофейне.');return;}
+  state.customizeReturnScreen=null;
   state.customizeItemId = itemId;
   state.customizeOpts = {size: defaultSizeFor(item), milk:'regular', syrup:'none', shot:false, qty:1};
   state.screen = 'customize';
@@ -1190,6 +1196,7 @@ function openCustomize(itemId){
 function addCustomizedToCart(){
   const item = itemById(state.customizeItemId);
   const opts = state.customizeOpts;
+  if(!item||itemStopped(item.id)){showToast('Позиция больше недоступна. Обновите меню.');return;}
   const unitPrice = calcUnitPrice(item, opts);
   const isCust = customizable(item.category);
   state.cart.push({
@@ -1200,7 +1207,7 @@ function addCustomizedToCart(){
     syrup: isCust ? SYRUPS.find(s=>s.id===opts.syrup) : null,
     shot: isCust ? opts.shot : false,
   });
-  state.screen = 'menu';
+  state.screen = state.customizeReturnScreen||'menu';state.customizeReturnScreen=null;
   render();
   showToast(`Добавлено: ${item.name} × ${opts.qty}`);
 }
@@ -1263,8 +1270,10 @@ async function placeOrder(){
     render();
     return;
   }
+  if(state.cart.some(x=>itemStopped(x.itemId))){state.checkoutError='Часть позиций недоступна в выбранной кофейне. Измените корзину.';render();return;}
   if(state.payingNow) return; // guard against double-tap
   state.checkoutError = '';
+  if(state.payMethod==='receipt'){await placePickupOrder();return;}
   const shop = SHOPS.find(s=>s.id===state.shopId);
   const localPrep = prepMinutesForCart();
   const pickupLabel = state.pickupASAP ? 'Скоро' : (state.scheduledTime || '—');
@@ -1345,6 +1354,7 @@ function newOrder(){
 }
 
 function saveOrderToStorage(){
+  if(typeof rememberLastCart==='function')rememberLastCart(state.order);
   try{ localStorage.setItem('sk_active_order', JSON.stringify(state.order)); }catch(e){}
 }
 function loadOrderFromStorage(){
@@ -1375,164 +1385,10 @@ function clearStaffSession(){
 }
 
 /* ---------- RENDER: MENU ---------- */
-function renderMenu(){
-  const items = allItems().filter(i=>i.category===state.category);
-  const orderReady = state.order && state.order.status==='accepted' && state.order.acceptedAt &&
-    (Date.now()-state.order.acceptedAt) >= state.order.prepMinutes*60000;
-  const orderWaitingAccept = state.order && state.order.status==='new';
-  const orderCancelled = state.order && state.order.status==='cancelled';
-  return `
-    <div class="screen">
-      <div class="brand">
-        <div class="brand-row">
-          <div class="brand-mark">
-            <div class="badge">${sunMark()}</div>
-            <span class="wordmark">Солнцекофе</span>
-          </div>
-          <button class="cartbtn rippleable" data-action="go-cart">
-            Корзина ${cartCount()>0 ? `<span class="dot">${cartCount()}</span>` : ''}
-          </button>
-        </div>
-        <div class="greeting">${getGreeting()}${state.guestDisplayName ? ', ' + esc(state.guestDisplayName) : ''}. <span class="mark">Закажи по пути</span></div>
-        <p class="subgreeting">Собери заказ за минуту — заберёшь его сразу, минуя очередь.</p>
-      </div>
-      ${loyaltyWidgetHTML()}
-      ${state.order && !orderCancelled ? `
-        <div class="section" style="padding-top:0;">
-          <div class="active-order-banner rippleable" data-action="back-to-status">
-            <div class="active-order-icon">${orderReady ? '✅' : (orderWaitingAccept ? '🔔' : '☕')}</div>
-            <div style="flex:1;min-width:0;">
-              <b>${orderReady ? `Заказ №${state.order.number} готов!` : (orderWaitingAccept ? `Заказ №${state.order.number} ждёт, когда его примут` : `Заказ №${state.order.number} готовится`)}</b>
-              <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">${state.order.shop.name} · нажмите, чтобы посмотреть статус</div>
-            </div>
-            <div class="arrow">→</div>
-          </div>
-        </div>
-      ` : ''}
-      <div class="tabs">
-        ${CATEGORIES.map(c=>`<div class="tab rippleable ${c.id===state.category?'active':''}" data-action="set-category" data-cat="${c.id}">${c.label}</div>`).join('')}
-      </div>
-      <div class="menu-list">
-        ${items.map((i,idx)=>{
-          const stopped = STOP_LIST.has(i.id);
-          const sizeKeys = Object.keys(i.sizes);
-          const minP = Math.min.apply(null, Object.values(i.sizes));
-          const priceLabel = sizeKeys.length>1 ? `от ${money(minP)}` : money(minP);
-          const star = i.hit ? '<span style="color:var(--amber-deep)">★</span> ' : '';
-          if(stopped){
-            return `
-          <div class="item-card fade-up" style="animation-delay:${idx*35}ms;opacity:0.45;">
-            <div class="item-icon" style="color:${iconColor(i.category)};filter:grayscale(1);">${itemThumbHTML(i)}</div>
-            <div class="item-info">
-              <h3 style="text-decoration:line-through;">${i.name}</h3>
-              <div class="item-price" style="color:var(--coral-deep);">Нет в наличии</div>
-            </div>
-          </div>
-        `;
-          }
-          return `
-          <div class="item-card fade-up rippleable" style="animation-delay:${idx*35}ms" data-action="open-customize" data-item="${i.id}">
-            <div class="item-icon" style="color:${iconColor(i.category)};">${itemThumbHTML(i)}</div>
-            <div class="item-info">
-              <h3>${star}${i.name}</h3>
-              <div class="item-price">${priceLabel}</div>
-            </div>
-            <button class="item-add rippleable" data-action="open-customize" data-item="${i.id}">+</button>
-          </div>
-        `;}).join('')}
-      </div>
-      <div style="position:sticky;bottom:0;left:0;right:0;margin-top:auto;background:var(--paper);">
-        ${cartCount()>0 ? `
-        <div style="padding:12px 18px 8px;">
-          <button class="btn-primary rippleable" data-action="go-cart">
-            <span>Корзина · ${cartCount()} ${pluralPos(cartCount())}</span>
-            <span class="sub price-pop">${money(cartTotal())}</span>
-          </button>
-        </div>` : ''}
-        ${tabBarHTML('menu')}
-      </div>
-    </div>
-  `;
-}
+function renderMenu(){return renderGlassMenu();}
 
 /* ---------- RENDER: CUSTOMIZE ---------- */
-function renderCustomize(){
-  const item = itemById(state.customizeItemId);
-  const opts = state.customizeOpts;
-  const unitPrice = calcUnitPrice(item, opts);
-  const isCust = customizable(item.category);
-  const availSizes = SIZE_ORDER.filter(k=>item.sizes[k]!=null);
-  return `
-    <div class="screen">
-      <div class="topbar">
-        <button class="iconbtn rippleable" data-action="back-to-menu">←</button>
-        <h2>Настроить напиток</h2>
-      </div>
-      <div class="cust-hero">
-        <div class="item-icon" style="color:${iconColor(item.category)};">${itemThumbHTML(item)}</div>
-        <h1>${item.name}</h1>
-      </div>
-
-      ${availSizes.length>1 ? `
-      <div class="section">
-        <div class="section-label">Размер</div>
-        <div class="segmented">
-          ${availSizes.map(k=>`
-            <div class="seg rippleable ${opts.size===k?'active':''}" data-action="set-opt" data-field="size" data-val="${k}">
-              <div class="lb">${SIZE_META[k].label}</div>
-              <div class="sb">${money(item.sizes[k])}</div>
-            </div>`).join('')}
-        </div>
-      </div>` : ''}
-
-      ${isCust ? `
-      <div class="section">
-        <div class="section-label">Молоко</div>
-        <div class="opt-list">
-          ${MILKS.map(m=>`
-            <div class="opt-row rippleable ${opts.milk===m.id?'active':''}" data-action="set-opt" data-field="milk" data-val="${m.id}">
-              <div class="opt-left"><div class="radio"></div><div class="opt-name">${m.label}</div></div>
-              <div class="opt-delta">${m.priceBySize[opts.size]>0?'+'+m.priceBySize[opts.size]+' ₽':'—'}</div>
-            </div>`).join('')}
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-label">Сироп</div>
-        <div class="opt-list">
-          ${SYRUPS.map(s=>`
-            <div class="opt-row rippleable ${opts.syrup===s.id?'active':''}" data-action="set-opt" data-field="syrup" data-val="${s.id}">
-              <div class="opt-left"><div class="radio"></div><div class="opt-name">${s.label}</div></div>
-              <div class="opt-delta">${s.delta>0?'+'+s.delta+' ₽':'—'}</div>
-            </div>`).join('')}
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="foam-row rippleable" data-action="toggle-shot">
-          <div class="foam-left"><b>Дополнительный шот эспрессо</b><span>+${EXTRA_SHOT_PRICE} ₽</span></div>
-          <div class="switch ${opts.shot?'on':''}"></div>
-        </div>
-      </div>` : ''}
-
-      <div class="section">
-        <div class="section-label" style="text-align:center;">Количество</div>
-        <div class="qty-row">
-          <button class="qty-btn rippleable" data-action="cust-qty" data-delta="-1">−</button>
-          <div class="qty-num price-pop">${opts.qty}</div>
-          <button class="qty-btn rippleable" data-action="cust-qty" data-delta="1">+</button>
-        </div>
-      </div>
-
-      <div class="stickybar">
-        <button class="btn-primary rippleable" data-action="add-customized">
-          <span>Добавить в корзину</span>
-          <span class="sub price-pop">${money(unitPrice*opts.qty)}</span>
-        </button>
-      </div>
-    </div>
-  `;
-}
+function renderCustomize(){return renderGlassCustomize();}
 
 /* ---------- RENDER: CART ---------- */
 function renderCart(){
@@ -1576,13 +1432,14 @@ function renderCart(){
         `).join('')}
       </div>
 
+      ${renderMenuPairing()}
       <div class="section">
         <div class="punch-card clickable rippleable" data-action="go-card">
           <div class="punch-top"><b>Карта лояльности</b><span>${state.loyalty} / 7</span></div>
           <div class="punch-row">
             ${Array.from({length:7}).map((_,i)=>`<div class="punch fade-up ${i<state.loyalty?'filled':''}" style="animation-delay:${i*30}ms">${i<state.loyalty?checkSVG('#fff'):''}</div>`).join('')}
           </div>
-          <div class="punch-note">${state.loyalty>=7 ? 'Следующий классический кофе (M) — подарок от нас ☀️' : `Ещё ${7-state.loyalty} классических кофе — и седьмой бесплатно`}</div>
+          <div class="punch-note">${state.loyalty>=7 ? 'Следующий классический кофе (M) — подарок от нас ☀️' : `До подарка осталось штампов: ${7-state.loyalty}`}</div>
         </div>
       </div>
 
@@ -1654,14 +1511,14 @@ function renderCard(){
           </div>
           <div class="qr-wrap"><img src="${qrSrc}" alt="QR-код карты гостя" width="240" height="240"></div>
           <div class="member-card-id">ID ${displayId}</div>
-          <div class="member-card-hint">Покажи QR-код или назови ID баристе на кассе — начислим штамп за покупку</div>
+          <div class="member-card-hint">Один QR-код для штампов, подарков и бонусов. Списание подтверждает бариста.</div>
           <div class="member-card-divider"></div>
           <div style="padding-top:16px;">
             <div class="punch-top" style="margin-bottom:11px;"><b>Штампы</b><span>${state.loyalty} / 7</span></div>
             <div class="punch-row">
               ${Array.from({length:7}).map((_,i)=>`<div class="punch fade-up ${i<state.loyalty?'filled':''}" style="animation-delay:${i*30}ms">${i<state.loyalty?checkSVG('#fff'):''}</div>`).join('')}
             </div>
-            <div class="punch-note">${state.loyalty>=7 ? 'Следующий классический кофе (M) — подарок от нас ☀️' : `Ещё ${7-state.loyalty} классических кофе — и седьмой бесплатно`}</div>
+            <div class="punch-note">${state.loyalty>=7 ? 'Следующий классический кофе (M) — подарок от нас ☀️' : `До подарка осталось штампов: ${7-state.loyalty}`}</div>
           </div>
         </div>
       </div>
@@ -1767,10 +1624,11 @@ function renderStaff(){
   return `<div class="screen ops-shell">
     <div class="topbar"><button class="iconbtn rippleable" data-action="staff-change-name">←</button><h2>☀️ СОЛНЦЕКОФЕ</h2><button class="iconbtn rippleable" data-action="staff-refresh" style="margin-left:auto">⟳</button><button class="iconbtn rippleable" data-action="staff-logout">🚪</button></div>
     <div class="ops-hero">${renderStaffShopSelector()}<div class="ops-kicker">${esc(shop.name)}</div><h1>Добрый день, ${esc(state.staffName)}!</h1><div class="shift-pill">● ${shiftText}</div></div>
-    <div class="ops-grid"><button class="ops-card green rippleable" data-action="staff-scan-qr"><span class="ops-ico">☕</span><b>Начислить штамп</b><small>Сканировать QR гостя</small></button><button class="ops-card sun rippleable" data-action="open-op" data-mode="reward"><span class="ops-ico">🎁</span><b>Погасить подарок</b><small>По ID и коду</small></button></div>
+    <div class="ops-grid"><button class="ops-card green rippleable" data-action="staff-scan-qr"><span class="ops-ico">☕</span><b>Начислить штамп</b><small>Сканировать QR гостя</small></button><button class="ops-card sun rippleable" data-action="open-op" data-mode="reward"><span class="ops-ico">🎁</span><b>Подарки и бонусы</b><small>Сканировать карту гостя</small></button></div>
     <div class="ops-grid"><button class="ops-card green rippleable" data-action="open-op" data-mode="delivery"><span class="ops-ico">📦</span><b>Поставка</b><small>Приход товара и накладная</small></button><button class="ops-card sun rippleable" data-action="open-op" data-mode="expense"><span class="ops-ico">💸</span><b>Расход</b><small>Из кассы или безнал</small></button><button class="ops-card red rippleable" data-action="open-op" data-mode="issue"><span class="ops-ico">⚠️</span><b>Проблема</b><small>Сообщить владельцу</small></button><button class="ops-card rippleable" data-action="open-op" data-mode="close"><span class="ops-ico">🌙</span><b>Закрыть смену</b><small>Деньги · чек-лист · фото</small></button></div>
     <div class="ops-wide"><div class="ops-wide-title">Сегодня</div><div class="ops-stats"><div class="ops-stat"><b>${state.todayOps.deliveries||0}</b><span>ПОСТАВОК</span></div><div class="ops-stat"><b>${state.todayOps.expenses||0}</b><span>РАСХОДОВ</span></div><div class="ops-stat"><b>${state.todayOps.issues||0}</b><span>ПРОБЛЕМ</span></div></div></div>
     <div class="ops-grid"><button class="ops-card sun rippleable" data-action="open-op" data-mode="revenue"><span class="ops-ico">📊</span><b>Отчёт по выручке</b><small>Наличные · безнал · фото</small></button><button class="ops-card green rippleable" data-action="open-op" data-mode="checklist"><span class="ops-ico">📋</span><b>Чек-листы</b><small>Открытие · в течение дня · закрытие</small></button></div>
+    <div class="ops-wide"><button class="ops-cancel" data-action="open-op" data-mode="schedule">📅 График команды</button><button class="ops-cancel" data-action="open-op" data-mode="instructions">Как работать в приложении</button></div>
     ${renderOpsSync()}${renderStaffOpForm()}
     <div class="ops-form"><h3>Ввести ID гостя вручную</h3><input class="text-input" type="text" placeholder="ID гостя" value="${esc(state.chargeIdValue||'')}" data-action="set-charge-id"><button class="ops-submit rippleable" data-action="staff-charge-loyalty">Начислить штамп</button>${state.chargeMsg?`<div class="ops-message ${state.chargeMsgOk?'ok':'bad'}">${state.chargeMsg}</div>`:''}</div>
     <div class="ops-wide"><div class="ops-wide-title">Заказы точки</div>${state.staffLoading?`<p class="ops-muted">Загружаем…</p>`:renderOrderList(state.staffOrders,true)}</div>
@@ -1782,10 +1640,12 @@ function renderStaffOpForm(){
   if(m==='checklist')return renderShiftChecklist();
   if(m==='revenue')return `<div class="ops-form" id="ops-active-form"><h3>Отчёт по выручке</h3>${renderOpsLocation()}<label class="hint">Дата отчёта<input class="text-input" type="date" aria-label="Дата отчёта" data-action="set-report-date" value="${esc(state.reportDate||todayKey())}"></label><label class="hint">Наличные, ₽<input class="text-input" type="number" min="0" inputmode="decimal" data-action="set-report-cash" value="${esc(state.reportCash)}" aria-label="Наличные, ₽"></label><label class="hint">Безналичные, ₽<input class="text-input" type="number" min="0" inputmode="decimal" data-action="set-report-cashless" value="${esc(state.reportCashless)}" aria-label="Безналичные, ₽"></label>${renderOpsPhotos('report','Фото отчёта по выручке')}${renderOpsAuth()}<button class="ops-submit" data-action="submit-revenue-report" ${state.opsSaving||state.opsPhotoLoading?'disabled':''}>${state.opsSaving?'Отправляем…':'Отправить отчёт'}</button>${state.reportMsg?`<div class="ops-message ${state.reportMsgOk?'ok':'bad'}">${esc(state.reportMsg)}</div>`:''}<button class="ops-cancel" data-action="close-op">Закрыть</button></div>`;
 
-  if(m==='reward') return `<div class="ops-form" id="ops-active-form"><h3>🎁 Погасить подарок</h3><div class="hint">Код одноразовый. После погашения повторно использовать его нельзя.</div><input class="text-input" style="margin-top:10px" type="text" placeholder="ID гостя" value="${esc(state.redeemGuestId||'')}" data-action="set-redeem-guest-id"><input class="text-input" style="margin-top:8px" type="text" placeholder="Код подарка" value="${esc(state.redeemVoucherId||'')}" data-action="set-redeem-voucher-id"><button class="ops-submit rippleable" data-action="staff-redeem-voucher">Подтвердить выдачу</button>${state.redeemMsg?`<div class="ops-message ${state.redeemMsgOk?'ok':'bad'}">${state.redeemMsg}</div>`:''}<button class="ops-cancel rippleable" data-action="close-op">Закрыть</button></div>`;
+  if(m==='reward')return renderTeamLoyalty();
+  if(m==='schedule')return renderTeamSchedule();
+  if(m==='instructions')return renderTeamInstructions();
   if(m==='delivery'||m==='expense'||m==='issue'){
     const delivery=m==='delivery', issue=m==='issue'; const title=delivery?'📦 Новая поставка':issue?'⚠️ Сообщить о проблеме':'💸 Новый расход';
-    return `<div class="ops-form" id="ops-active-form"><h3>${title}</h3>${renderOpsLocation()}${!issue?`<input class="text-input" type="number" inputmode="decimal" placeholder="Сумма, ₽" value="${esc(state.opAmount)}" data-action="set-op-amount">`:''}<input class="text-input" style="margin-top:8px" type="text" placeholder="${delivery?'Поставщик':issue?'Что произошло?':'На что потратили'}" value="${esc(state.opParty)}" data-action="set-op-party">${!issue?`<select class="ops-select" data-action="set-op-payment"><option value="cash" ${state.opPayment==='cash'?'selected':''}>Из кассы</option><option value="cashless" ${state.opPayment==='cashless'?'selected':''}>Безналичные</option><option value="manager" ${state.opPayment==='manager'?'selected':''}>Оплатил управляющий</option></select>`:''}<input class="text-input" style="margin-top:8px" type="text" placeholder="Комментарий (необязательно)" value="${esc(state.opNote)}" data-action="set-op-note">${delivery?`<input class="text-input" style="margin-top:8px" placeholder="Что привезли" value="${esc(state.opGoods||'')}" data-action="set-op-goods">`:''}${renderOpsPhotos('report',issue?'Фото проблемы':delivery?'Накладные / фото поставки':'Чек / фото расхода')}${renderOpsAuth()}<button class="ops-submit rippleable" data-action="save-operation" ${state.opsSaving||state.opsPhotoLoading?'disabled':''}>Сохранить</button>${state.opMsg?`<div class="ops-message ${state.opMsgOk?'ok':'bad'}">${state.opMsg}</div>`:''}<button class="ops-cancel rippleable" data-action="close-op">Отмена</button></div>`;
+    return `<div class="ops-form" id="ops-active-form"><h3>${title}</h3>${renderOpsLocation()}${!issue?`<input class="text-input" type="number" inputmode="decimal" placeholder="Сумма, ₽" value="${esc(state.opAmount)}" data-action="set-op-amount">`:''}<input class="text-input" style="margin-top:8px" type="text" placeholder="${delivery?'Поставщик':issue?'Что произошло?':'На что потратили'}" value="${esc(state.opParty)}" data-action="set-op-party">${!issue?`<select class="ops-select" data-action="set-op-payment"><option value="cash" ${state.opPayment==='cash'?'selected':''}>Из кассы</option><option value="cashless" ${state.opPayment==='cashless'?'selected':''}>Безналичные</option><option value="manager" ${state.opPayment==='manager'?'selected':''}>Оплатил управляющий</option></select>`:''}<input class="text-input" style="margin-top:8px" type="text" placeholder="Комментарий (необязательно)" value="${esc(state.opNote)}" data-action="set-op-note">${delivery?`<input class="text-input" style="margin-top:8px" placeholder="Что привезли" value="${esc(state.opGoods||'')}" data-action="set-op-goods">`:''}${!issue?renderOperationDetails(delivery):''}${renderOpsPhotos('report',issue?'Фото проблемы':delivery?'Накладные / фото поставки':'Чек / фото расхода')}${renderOpsAuth()}<button class="ops-submit rippleable" data-action="save-operation" ${state.opsSaving||state.opsPhotoLoading?'disabled':''}>Сохранить</button>${state.opMsg?`<div class="ops-message ${state.opMsgOk?'ok':'bad'}">${state.opMsg}</div>`:''}<button class="ops-cancel rippleable" data-action="close-op">Отмена</button></div>`;
   }
   if(m==='close') return `<div class="ops-form" id="ops-active-form"><h3>🌙 Закрытие смены</h3>${renderOpsLocation()}<div class="hint">1. Деньги</div><div class="ops-row"><input class="text-input" type="number" inputmode="decimal" placeholder="Наличные ₽" value="${esc(state.shiftCash)}" data-action="set-shift-cash"><input class="text-input" type="number" inputmode="decimal" placeholder="Безнал ₽" value="${esc(state.shiftCashless)}" data-action="set-shift-cashless"></div><input class="text-input" style="margin-top:8px" type="number" inputmode="decimal" placeholder="Фактически денег в кассе, ₽" value="${esc(state.shiftActual)}" data-action="set-shift-actual"><div class="hint" style="margin-top:14px">2. Чек-лист</div>${getChecklistItems('close').map(x=>`<label class="checkline"><input type="checkbox" data-action="shift-check" data-key="${x[0]}" ${state.shiftChecks[x[0]]?'checked':''}><span>${esc(x[1])}</span></label>${x[2]?renderOpsPhotos(x[0],'Фото: '+x[1]):''}`).join('')}${renderOpsPhotos('closing','3. Фото закрытой точки')}${renderOpsPhotos('revenue','4. Фото отчёта по выручке / терминала')}${renderOpsAuth()}<button class="ops-submit rippleable" data-action="close-shift" ${state.opsSaving||state.opsPhotoLoading?'disabled':''}>Закрыть смену</button>${state.shiftMsg?`<div class="ops-message ${state.shiftMsgOk?'ok':'bad'}">${state.shiftMsg}</div>`:''}<button class="ops-cancel rippleable" data-action="close-op">Отмена</button></div>`;
   return '';
@@ -1817,16 +1677,19 @@ function renderAdmin(){
       </div>
       <div class="section">
         <div class="tabs">
+          <div class="tab ${state.adminTab==='overview'?'active':''} rippleable" data-action="admin-set-tab" data-tab="overview">Обзор</div>
           <div class="tab ${state.adminTab==='orders'?'active':''} rippleable" data-action="admin-set-tab" data-tab="orders">Заказы</div>
           <div class="tab ${state.adminTab==='staff'?'active':''} rippleable" data-action="admin-set-tab" data-tab="staff">Сотрудники</div>
           <div class="tab ${state.adminTab==='menu'?'active':''} rippleable" data-action="admin-set-tab" data-tab="menu">Меню</div>
           <div class="tab ${state.adminTab==='posts'?'active':''} rippleable" data-action="admin-set-tab" data-tab="posts">Посты</div>
           <div class="tab ${state.adminTab==='wheel'?'active':''} rippleable" data-action="admin-set-tab" data-tab="wheel">Колесо</div>
           <div class="tab ${state.adminTab==='checklists'?'active':''} rippleable" data-action="admin-set-tab" data-tab="checklists">Чек-листы</div>
+          <div class="tab ${state.adminTab==='schedule'?'active':''} rippleable" data-action="admin-set-tab" data-tab="schedule">График</div>
+          <div class="tab ${state.adminTab==='loyalty'?'active':''} rippleable" data-action="admin-set-tab" data-tab="loyalty">Подарки / бонусы</div>
           <div class="tab ${state.adminTab==='reports'?'active':''} rippleable" data-action="admin-set-tab" data-tab="reports">Отчёты</div>
         </div>
       </div>
-      ${state.adminTab==='checklists' ? renderAdminChecklists() : state.adminTab==='orders' ? renderAdminOrdersTab() : state.adminTab==='staff' ? renderAdminStaffTab() : state.adminTab==='menu' ? renderAdminMenuTab() : state.adminTab==='posts' ? renderAdminPostsTab() : state.adminTab==='reports' ? renderAdminReportsTab() : renderAdminWheelTab()}
+      ${state.adminTab==='overview' ? renderTeamOverview() : state.adminTab==='schedule' ? renderTeamSchedule() : state.adminTab==='loyalty' ? renderTeamLoyalty() : state.adminTab==='checklists' ? renderAdminChecklists() : state.adminTab==='orders' ? renderAdminOrdersTab() : state.adminTab==='staff' ? renderAdminStaffTab() : state.adminTab==='menu' ? renderAdminMenuTab() : state.adminTab==='posts' ? renderAdminPostsTab() : state.adminTab==='reports' ? renderAdminReportsTab() : renderAdminWheelTab()}
     </div>
   `;
 }
@@ -1841,7 +1704,7 @@ function renderAdminReportsTab(){
         <div class="seg rippleable ${view==='suppliers'?'active':''}" data-action="set-reports-view" data-view="suppliers"><div class="lb" style="font-size:12px;">Поставщики</div></div>
       </div>
     </div>
-    ${state.reportsLoading ? `<div class="section"><p class="empty-note">Считаем…</p></div>` : renderReportsView(view)}
+    ${state.reportsError?`<p class="section pin-error" role="status">${esc(state.reportsError)}</p>`:''}${state.reportsLoading&&!state.reportsAgg ? `<div class="section"><p class="empty-note">Считаем…</p></div>` : renderReportsView(view)}
     <div class="section">
       <button class="btn-ghost rippleable" data-action="admin-refresh-reports" style="margin-bottom:8px;">⟳ Обновить данные</button>
       <button class="btn-primary rippleable" data-action="export-reports-csv" ${state.reportsExporting ? 'disabled' : ''}>
@@ -1878,7 +1741,7 @@ function renderReportsView(view){
         <div class="order-card">
           <div class="order-head"><b>${formatPeriodLabel(r.period, view)}</b><span style="font-family:var(--font-mono);font-weight:700;">${money(r.total)}</span></div>
           <div class="order-meta">Наличные: <b>${money(r.cash)}</b> · Безнал: <b>${money(r.cashless)}</b></div>
-          <div class="order-meta">Расходы: <b>${money(r.expense)}</b> · Прибыль: <b style="color:${r.profit>=0?'var(--mint-deep)':'var(--coral-deep)'};">${money(r.profit)}</b></div>
+          <div class="order-meta">Расходы: <b>${money(r.expense)}</b> · Выручка минус расходы: <b style="color:${r.profit>=0?'var(--mint-deep)':'var(--coral-deep)'};">${money(r.profit)}</b></div>
         </div>`).join('') : `<p class="empty-note">Пока нет отчётов по этой точке.</p>`}
     </div>`;
   }).join('');
@@ -1905,11 +1768,11 @@ function isoWeekStartClient(d){
 function ymd(d){ return d.toISOString().slice(0,10); }
 
 async function loadAdminReports(){
-  state.reportsLoading = true; render();
+  state.reportsLoading = true;state.reportsError='';render();
   try{
     const [revRes, expRes] = await Promise.all([
-      fetch(DB_URL + '/revenue_reports.json'),
-      fetch(DB_URL + '/expense_reports.json'),
+      fetchFinancialReports('revenue_reports'),
+      fetchFinancialReports('expense_reports'),
     ]);
     const revObj = revRes.ok ? await revRes.json() : null;
     const expObj = expRes.ok ? await expRes.json() : null;
@@ -1975,7 +1838,7 @@ async function loadAdminReports(){
 
     state.reportsAgg = { weekly: finalize(weekly), monthly: finalize(monthly), suppliers: suppliersOut };
   }catch(e){
-    state.reportsAgg = { weekly:{}, monthly:{}, suppliers:{} };
+    state.reportsError='Не удалось обновить отчёты. Показаны последние загруженные данные.';
   }
   state.reportsLoading = false; render();
 }
@@ -1989,8 +1852,8 @@ async function exportReportsCSV(){
   state.reportsExporting = true; state.reportsExportMsg=''; render();
   try{
     const [revRes, expRes] = await Promise.all([
-      fetch(DB_URL + '/revenue_reports.json'),
-      fetch(DB_URL + '/expense_reports.json'),
+      fetchFinancialReports('revenue_reports'),
+      fetchFinancialReports('expense_reports'),
     ]);
     const revObj = revRes.ok ? await revRes.json() : null;
     const expObj = expRes.ok ? await expRes.json() : null;
@@ -2172,7 +2035,7 @@ function renderAdminMenuTab(){
     </div>
 
     <div class="section">
-      <div class="section-label">Весь ассортимент — цены и наличие</div>
+      <div class="section-label">Весь ассортимент — цены и наличие</div><label class="hint">Наличие для кофейни<select class="ops-select" data-action="menu-admin-stock-shop"><option value="0" ${!state.adminStockShop?'selected':''}>Обе точки</option>${SHOPS.map(x=>`<option value="${x.id}" ${state.adminStockShop===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
       <div class="segmented" style="flex-wrap:wrap;">
         ${CATEGORIES.map(c=>`
           <div class="seg rippleable ${state.adminStopCat===c.id?'active':''}" data-action="admin-set-stop-cat" data-cat="${c.id}" style="flex:none;padding:8px 12px;">
@@ -2181,7 +2044,7 @@ function renderAdminMenuTab(){
       </div>
       <div style="margin-top:10px;">
         ${allItems().filter(i=>i.category===state.adminStopCat).map(i=>{
-          const stopped = STOP_LIST.has(i.id);
+          const stopped=state.adminStockShop?itemStopped(i.id,state.adminStockShop):STOP_LIST.has(i.id);
           const priceLabel = Object.entries(i.sizes).map(([sz,p])=>`${sz.toUpperCase()} ${money(p)}`).join(' · ');
           if(state.editingMenuItemId === i.id){
             return `
@@ -2215,7 +2078,7 @@ function renderAdminMenuTab(){
               <div style="${stopped?'text-decoration:line-through;':''}">${i.icon} <b>${esc(i.name)}</b></div>
               <div class="order-meta">${priceLabel}</div>
             </div>
-            <button class="iconbtn rippleable" data-action="admin-edit-item" data-id="${i.id}">✎</button>
+            <button class="iconbtn rippleable" data-action="admin-edit-item" data-id="${i.id}" aria-label="Изменить ${esc(i.name)}">✎</button><button class="ops-cancel seasonal-toggle" data-action="menu-seasonal" data-id="${i.id}" aria-pressed="${!!i.seasonal}">${i.seasonal?'В сезонном':'В сезонное'}</button>
             <div class="switch ${!stopped?'on':''} rippleable" data-action="admin-toggle-stop" data-id="${i.id}"></div>
           </div>`;
         }).join('') || `<p class="empty-note">В этой категории пока нет позиций.</p>`}
@@ -2380,11 +2243,14 @@ async function loadStaffOrders(silent){
   if(!silent){ state.staffLoading = true; render(); }
   try{
     const res = await fetch(DB_URL + '/orders.json');
-    const obj = res.ok ? await res.json() : null;
+    if(!res.ok)throw Error('Не удалось обновить заказы.');
+    const obj = await res.json();
     if(shop!==state.staffShop||name!==state.staffName)return;
     const all = obj ? Object.keys(obj).map(id=>Object.assign({id}, obj[id])) : [];
-    state.staffOrders = all.filter(o=>o.shopId===state.staffShop && o.status!=='done' && o.status!=='cancelled').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-  }catch(e){ if(!silent&&shop===state.staffShop&&name===state.staffName) state.staffOrders = []; }
+    const nextOrders = all.filter(o=>o.shopId===state.staffShop && o.status!=='done' && o.status!=='cancelled').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    if(silent && JSON.stringify(nextOrders)===JSON.stringify(state.staffOrders))return;
+    state.staffOrders=nextOrders;
+  }catch(e){ if(!silent&&shop===state.staffShop&&name===state.staffName) showToast('Не удалось обновить заказы. Показаны последние загруженные.'); }
   if(shop===state.staffShop&&name===state.staffName){state.staffLoading=false;render();}
 }
 
@@ -2573,8 +2439,8 @@ function scanLoyaltyQr(){
       if(text){
         let id = text.trim();
         if(id.toLowerCase().startsWith('solncekofe:')) id = id.slice('solncekofe:'.length);
-        state.chargeIdValue = id.toUpperCase();
-        chargeLoyaltyById();
+        try{state.chargeIdValue=parseGuestQr(id);state.chargeMsg='Карта '+state.chargeIdValue+' найдена. Проверьте покупку и нажмите «Начислить штамп».';state.chargeMsgOk=true;}catch(e){state.chargeMsg=e.message;state.chargeMsgOk=false;}
+        render();
       }
       tgWebApp.closeScanQrPopup();
       return true;
@@ -2750,8 +2616,8 @@ async function rewardReferrer(referrerId, friendId){
     let justRewarded = false;
     if(stamps >= LOYALTY_GOAL){ stamps = 0; justRewarded = true; }
     await fetch(DB_URL + '/guests/' + referrerId + '.json', {
-      method:'PUT', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(Object.assign({}, refData, { stamps, justRewarded, lastStampAt: Date.now(), reminded:false }))
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ stamps, justRewarded, lastStampAt: Date.now(), reminded:false })
     });
     await fetch(DB_URL + '/guests/' + friendId + '.json', {
       method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ referralRewarded: true })
@@ -2774,8 +2640,8 @@ async function awardStamps(id, count){
   const justRewarded = completions > 0;
   const stamps = total % LOYALTY_GOAL;
   await fetch(DB_URL + '/guests/' + id + '.json', {
-    method:'PUT', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(Object.assign({}, data, { stamps, justRewarded, lastStampAt: Date.now(), reminded:false }))
+    method:'PATCH', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ stamps, justRewarded, lastStampAt: Date.now(), reminded:false })
   });
   if(justRewarded){
     for(let i=0;i<completions;i++){
@@ -2814,52 +2680,10 @@ async function addBonusSpin(guestId){
   }catch(e){}
 }
 
-async function chargeLoyaltyById(){
-  const id = (state.chargeIdValue||'').trim().toUpperCase();
-  if(!id){ state.chargeMsg='Введите ID гостя.'; state.chargeMsgOk=false; render(); return; }
-  try{
-    const result = await awardStamps(id, 1);
-    state.chargeMsg = result.justRewarded
-      ? `🎉 Карта заполнена! Гостю выдан код на бесплатный кофе — попросите его показать карту (раздел «Мои призы»), там будет код для погашения.`
-      : `Готово! У гостя ${id} теперь ${result.stamps} из ${LOYALTY_GOAL} чашек.`;
-    state.chargeMsgOk = true;
-  }catch(e){
-    state.chargeMsg = 'Не удалось начислить — проверьте связь.';
-    state.chargeMsgOk = false;
-  }
-  state.chargeIdValue = '';
-  if(LOYALTY_ID && id===LOYALTY_ID){ initLoyalty(); }
-  render();
-}
+async function chargeLoyaltyById(){return teamAwardStamp();}
 
 async function redeemVoucher(){
-  const guestId = (state.redeemGuestId||'').trim().toUpperCase();
-  const voucherId = (state.redeemVoucherId||'').trim().toUpperCase();
-  if(!guestId || !voucherId){ state.redeemMsg='Укажите ID гостя и код приза.'; state.redeemMsgOk=false; render(); return; }
-  try{
-    const res = await fetch(DB_URL + '/guests/' + guestId + '/vouchers/' + voucherId + '.json');
-    const voucher = await res.json();
-    if(!voucher){
-      state.redeemMsg = 'Такой приз не найден — проверьте ID гостя и код.';
-      state.redeemMsgOk = false;
-    } else if(voucher.redeemed){
-      state.redeemMsg = 'Этот приз уже был погашен ранее.';
-      state.redeemMsgOk = false;
-    } else {
-      await fetch(DB_URL + '/guests/' + guestId + '/vouchers/' + voucherId + '.json', {
-        method:'PATCH', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ redeemed:true, redeemedAt: Date.now(), redeemedBy: state.staffName || null, redeemedShopId: state.staffShop || null })
-      });
-      await logAudit('voucher_redeemed',{guestId,voucherId,label:voucher.label});
-      state.redeemMsg = `✓ Погашено: «${voucher.label}»`;
-      state.redeemMsgOk = true;
-      state.redeemVoucherId = '';
-    }
-  }catch(e){
-    state.redeemMsg = 'Не удалось проверить — попробуйте ещё раз.';
-    state.redeemMsgOk = false;
-  }
-  render();
+  state.opMode='reward';render();
 }
 
 async function acceptOrder(id){
@@ -2920,19 +2744,13 @@ function renderCheckout(){
       <div class="section">
         <div class="section-label">Email или телефон для чека</div>
         <input class="text-input" type="text" inputmode="email" placeholder="Куда прислать электронный чек" value="${esc(state.receiptContact||'')}" data-action="set-receipt-contact">
-        <div class="hint" style="margin-top:6px;">Нужно по закону — чек за покупку придёт сюда автоматически.</div>
+        <div class="hint" style="margin-top:6px;">Для связи по заказу и отправки чека кофейней.</div>
         ${state.checkoutError ? `<div class="pin-error" style="margin-top:6px;">${state.checkoutError}</div>` : ''}
       </div>
 
       <div class="section">
         <div class="section-label">Способ оплаты</div>
-        <div class="order-card" style="display:flex;align-items:center;gap:12px;">
-          <div class="pico" style="font-size:22px;">🔒</div>
-          <div>
-            <div style="font-weight:700;">Картой, SberPay или по СБП</div>
-            <div class="order-meta" style="margin-top:2px;">Выберете способ на защищённой странице банка после нажатия «Оплатить» — мы не храним и не видим данные карты.</div>
-          </div>
-        </div>
+        <div class="segmented"><button class="seg ${state.payMethod==='receipt'?'active':''}" data-action="set-pay" data-pay="receipt">При получении</button><button class="seg ${state.payMethod==='link'?'active':''}" data-action="set-pay" data-pay="link">По ссылке</button></div><p class="hint">${state.payMethod==='receipt'?'Оплатите на кассе, когда заберёте заказ.':'Откроется защищённая страница банка. Если ссылка недоступна, выберите оплату при получении.'}</p>
       </div>
 
       <div class="section">
@@ -2960,7 +2778,7 @@ function renderCheckout(){
 
       <div class="stickybar">
         <button class="btn-primary rippleable" data-action="pay" ${(!shopStatus(state.shopId).open || state.payingNow) ? 'disabled' : ''}>
-          <span>${state.payingNow ? 'Открываем оплату…' : (shopStatus(state.shopId).open ? 'Оплатить' : 'Точка закрыта')}</span><span class="sub price-pop">${money(cartTotal()+tipAmount())}</span>
+          <span>${state.payingNow ? 'Отправляем…' : (shopStatus(state.shopId).open ? (state.payMethod==='receipt'?'Заказать · оплата при получении':'Перейти к оплате') : 'Точка закрыта')}</span><span class="sub price-pop">${money(cartTotal()+tipAmount())}</span>
         </button>
       </div>
     </div>
@@ -2983,7 +2801,7 @@ function renderStatus(){
         </div>
         <div class="waiting-accept">
           <div style="font-size:56px;text-align:center;margin-bottom:14px;">💸</div>
-          <div class="waiting-text">Заказ №${o.number} отменён, деньги возвращаются на карту — обычно это занимает от нескольких минут до нескольких рабочих дней, в зависимости от банка.</div>
+          <div class="waiting-text">Заказ №${o.number} отменён.${o.paid?' Уточните статус возврата у кофейни.':' Оплата не списывалась приложением.'}</div>
         </div>
         <div class="stickybar">
           <button class="btn-primary rippleable" data-action="new-order"><span>Оформить новый заказ</span><span class="sub">→</span></button>
@@ -3047,24 +2865,8 @@ function renderStatus(){
 
 /* ---------- ICONS ---------- */
 function tabBarHTML(active){
-  const stampCount = state.loyalty || 0;
-  return `
-    <div class="tabbar">
-      <button class="tab-item rippleable ${active==='menu'?'active':''}" data-action="tab-go-menu">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9Z"/><path d="M17 10h1.5a2.5 2.5 0 0 1 0 5H17"/></svg>
-        <span>Меню</span>
-      </button>
-      <button class="tab-item rippleable ${active==='card'?'active':''}" style="position:relative;" data-action="tab-go-card">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18"/></svg>
-        <span>Карта</span>
-        ${stampCount>0 ? `<div class="tab-badge">${stampCount}</div>` : ''}
-      </button>
-      <button class="tab-item rippleable ${active==='orders'?'active':''}" data-action="tab-go-orders">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12v4l2 14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2l2-14V2Z"/><path d="M6 8h12"/></svg>
-        <span>Заказы</span>
-      </button>
-    </div>
-  `;
+ const tabs=[['menu','coffee','Меню'],['card','credit-card','Карта'],['orders','receipt','Заказы'],['profile','user','Профиль']];
+ return `<nav class="tabbar" aria-label="Основная навигация">${tabs.map(([id,icon,label])=>`<button class="tab-item ${active===id?'active':''}" data-action="tab-go-${id}" ${active===id?'aria-current="page"':''}>${menuIcon(icon)}<span>${label}</span></button>`).join('')}</nav>`;
 }
 
 function loyaltyWidgetHTML(){
@@ -3072,7 +2874,7 @@ function loyaltyWidgetHTML(){
   const n = Math.min(goal, state.loyalty || 0);
   const r = 20, circ = 2*Math.PI*r;
   const offset = circ * (1 - n/goal);
-  const note = n>=goal ? 'Готово — следующий кофе бесплатно ☀️' : `Ещё ${goal-n} ${n===goal-1?'чашка':'чашки'} — и восьмая бесплатно`;
+  const note = n>=goal ? 'Готово — следующий кофе бесплатно ☀️' : `До подарка осталось штампов: ${goal-n}`;
   return `
     <div class="loyalty-widget rippleable" data-action="go-card">
       <div class="ring-wrap">
@@ -3156,13 +2958,15 @@ function render(){
   if(state.screen==='menu') html = renderMenu();
   else if(state.screen==='customize') html = renderCustomize();
   else if(state.screen==='cart') html = renderCart();
+  else if(state.screen==='profile') html=renderGlassProfile();
   else if(state.screen==='card') html = renderCard();
   else if(state.screen==='orders') html = renderOrders();
   else if(state.screen==='checkout') html = renderCheckout();
   else if(state.screen==='status') html = renderStatus();
   else if(state.screen==='staff') html = renderStaff();
   else if(state.screen==='admin') html = renderAdmin();
-  app.innerHTML = html;
+  if(typeof updateStableApp==='function') updateStableApp(app,html,state.screen);
+  else app.innerHTML = html;
 
   if(state.screen==='status'){
     initStatusTicker();
@@ -3370,18 +3174,20 @@ document.addEventListener('click', (e)=>{
   else if(action==='submit-revenue-report'){ submitRevenueReport(); }
   else if(action==='submit-expense-report'){ submitExpenseReport(); }
   else if(action==='open-op'){ state.opMode=el.dataset.mode; state.opMsg=''; state.shiftMsg=''; render(); requestAnimationFrame(()=>{ const f=document.getElementById('ops-active-form'); if(f) f.scrollIntoView({behavior:'smooth',block:'start'}); }); }
-  else if(action==='close-op'){ state.opMode=null; render(); }
+  else if(action==='close-op'){ if(typeof teamUI!=='undefined'&&teamUI.busy)return;state.opMode=null; render(); }
   else if(action==='save-operation'){ saveOperation(); }
   else if(action==='close-shift'){ closeShift(); }
   else if(action==='save-checklist'){ submitShiftChecklist(); }
   else if(action==='export-reports-csv'){ exportReportsCSV(); }
   else if(action==='staff-scan-qr'){ scanLoyaltyQr(); }
-  else if(action==='admin-refresh'){ loadAdminOrders(); }
+  else if(action==='admin-refresh'){ if(state.adminTab==='overview')loadTeamOverview();else loadAdminOrders(); }
   else if(action==='admin-set-tab'){
     state.adminTab = el.dataset.tab;
-    if(state.adminTab==='staff') loadAdminStaff();
+    if(state.adminTab==='overview')loadTeamOverview();
+    else if(state.adminTab==='staff') loadAdminStaff();
     else if(state.adminTab==='posts') loadAdminPosts();
     else if(state.adminTab==='reports') loadAdminReports();
+    else if(state.adminTab==='schedule'){render();teamLoadSchedule();}
     else if(state.adminTab==='checklists'){state.opsConfigDraft=null;loadChecklistConfig();}
     else render();
   }
@@ -3516,6 +3322,7 @@ async function loadExtraMenu(){
   }catch(e){ /* ignore, menu just stays with built-in items */ }
   await loadMenuOverrides();
   await loadStopList();
+  await loadShopAvailability();
   render();
 }
 
@@ -3566,7 +3373,7 @@ async function saveMenuItemEdit(id){
   if(!name || !Object.keys(sizes).length) return;
   try{
     await fetch(DB_URL + '/menu_overrides/' + id + '.json', {
-      method:'PUT', headers:{'Content-Type':'application/json'},
+      method:'PATCH', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ name, icon, sizes, photo: state.editItemPhoto || null })
     });
   }catch(e){}
@@ -3575,20 +3382,7 @@ async function saveMenuItemEdit(id){
   await loadExtraMenu();
 }
 
-async function toggleStopItem(itemId){
-  const stopped = STOP_LIST.has(itemId);
-  try{
-    if(stopped){
-      await fetch(DB_URL + '/stoplist/' + itemId + '.json', { method:'DELETE' });
-    } else {
-      await fetch(DB_URL + '/stoplist/' + itemId + '.json', {
-        method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(true)
-      });
-    }
-  }catch(e){}
-  await loadStopList();
-  render();
-}
+async function toggleStopItem(itemId){return setMenuAvailability(itemId);}
 
 /* ---------- PAYMENT RETURN ---------- */
 let paymentConfirmTimer = null;
@@ -3659,12 +3453,14 @@ function checkPaymentReturn(){
 }
 
 /* ---------- INIT ---------- */
+initMenuPreferences();
 initOpsV3();
 const operationsEntry = new URLSearchParams(location.search).get('screen');
 if(operationsEntry === 'staff' || operationsEntry === 'admin'){
   state.screen = operationsEntry;
   render();
 } else {
+if(operationsEntry==='card')state.screen='card';
 const cameFromPayment = checkPaymentReturn();
 if(!cameFromPayment){
   (function restoreActiveOrder(){
