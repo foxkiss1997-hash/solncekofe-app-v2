@@ -21,5 +21,11 @@ try{
  assert.equal(w.document.querySelectorAll('[data-pay="receipt"]').length,1);assert.equal(w.document.querySelectorAll('[data-pay="link"]').length,1);
  assert.equal(evaluate("parseGuestQr('solncekofe:ABCD')"),'ABCD');assert.equal(evaluate("parseGuestQr('ABCD')"),'ABCD');assert.throws(()=>evaluate("parseGuestQr('https://example.com/hack')"));
  console.log('PASS: owner overview/schedule/loyalty, guest card, checkout and QR compatibility');
+ evaluate("Object.assign(state,{screen:'staff',staffShop:1,staffName:'Анна',opMode:'schedule'});Object.assign(teamUI,{calendarMonth:'2026-10',calendarDate:'2026-10-20',scheduleKey:'Анна:1',schedule:{rows:[],staff:[],myRows:[{name:'Анна',shopId:2,date:'2026-10-20',start:'10:00',end:'18:00',status:'approved'},{name:'Анна',shopId:1,date:'2026-10-21',start:'08:00',end:'16:00',status:'pending'}]}});render();");
+ assert.equal(w.document.querySelectorAll('.calendar-day').length,31);assert.match(w.document.querySelector('.schedule-day-detail').textContent,/На работу/);assert.match(w.document.querySelector('.schedule-day-detail').textContent,/Нагатинская/);
+ w.document.querySelector('[data-date="2026-10-21"]').click();assert.match(w.document.querySelector('.schedule-day-detail').textContent,/ещё не утверждена/);assert.equal(w.document.querySelector('[data-date="2026-10-21"]').classList.contains('work'),false);
+ w.document.querySelector('[data-date="2026-10-22"]').click();assert.match(w.document.querySelector('.schedule-day-detail').textContent,/Выходить по графику не требуется/);
+ evaluate("teamUI.calendarMonth='2026-12';moveScheduleMonth(1)");assert.equal(evaluate('teamUI.calendarMonth'),'2027-01');assert.equal(w.document.querySelectorAll('.calendar-day').length,31);
+ console.log('PASS: personal month calendar distinguishes approved shifts, pending requests and unassigned days across both shops');
  console.log('DOM smoke tests passed. Browser layout and Telegram hardware camera still require device verification.');
 }finally{w.close();}

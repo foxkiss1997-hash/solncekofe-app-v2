@@ -115,3 +115,11 @@ test('a first authenticated stamp creates a new card atomically and retries do n
  x.run('handleLoyalty_',req);x.run('handleLoyalty_',req);
  assert.equal(x.db.guests.NEWCARD.stamps,1);assert.equal(x.db.guests.NEWCARD.bonusBalance,0);assert.equal(x.writes.length,1);
 });
+
+test('personal calendar combines own shifts across shops without exposing other employees at the other shop',()=>{
+ const x=setup();x.put('/ops_v3/schedule/1',{one:{name:'Анна',date:'2026-10-20',start:'08:00',end:'16:00',status:'approved'}});
+ x.put('/ops_v3/schedule/2',{two:{name:'Анна',date:'2026-10-21',start:'10:00',end:'18:00',status:'pending'},other:{name:'Борис',date:'2026-10-22',start:'08:00',end:'16:00',status:'approved'},cancelled:{name:'Анна',date:'2026-10-23',start:'08:00',end:'16:00',status:'cancelled'}});
+ x.writes.length=0;const result=schedule(x,{...x.staff,action:'listSchedule'});
+ assert.equal(result.myRows.length,2);assert.deepEqual(Array.from(result.myRows,r=>r.shopId),[1,2]);assert.ok(result.myRows.every(r=>r.name==='Анна'));assert.equal(x.writes.length,0);
+ assert.throws(()=>schedule(x,{...x.staff,auth:{password:'bad'},action:'listSchedule'}),/Пароль/);
+});
