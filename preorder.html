@@ -2169,7 +2169,7 @@ function renderOrderList(orders, withActions){
         <div class="order-status ${o.status==='done'?'done':''}" style="${o.status==='cancelled'?'color:var(--coral-deep);background:var(--coral-soft);':''}">${o.status==='done' ? 'Готов' : (o.status==='cancelled' ? 'Отменён (возврат)' : (o.status==='accepted' ? 'В работе' : 'Новый — не принят'))}</div>
       </div>
       <div class="order-items">${(o.itemsText||'').replace(/\n/g,'<br>')}</div>
-      <div class="order-meta">Итого: <b>${money(o.total||0)}</b>${o.tip ? ` (из них чаевые ${money(o.tip)})` : ''} · ${o.payMethod||''} · ${o.pickup||''}</div>
+      <div class="order-meta">Итого: <b>${money(o.total||0)}</b>${o.tip ? ` (из них чаевые ${money(o.tip)})` : ''} · ${esc(o.payMethodLabel||o.payMethod||'')} · ${o.pickup||''}</div>
       ${withActions && o.status==='accepted' && o.acceptedAt ?
         `<div class="order-timer" id="timer-${o.id}">…</div>`
         : (o.status==='accepted' && o.prepMinutes ? `<div class="order-meta">Готовность: <b>~${o.prepMinutes} мин</b> с момента принятия</div>` : '')
