@@ -28,8 +28,15 @@ try{
  evaluate("teamUI.calendarMonth='2026-12';moveScheduleMonth(1)");assert.equal(evaluate('teamUI.calendarMonth'),'2027-01');assert.equal(w.document.querySelectorAll('.calendar-day').length,31);
  console.log('PASS: personal month calendar distinguishes approved shifts, pending requests and unassigned days across both shops');
  evaluate("teamUI.calendarMonth='2026-10';teamUI.calendarDate='2026-10-20';teamUI.schedule.teamRows=[{name:'Анна',shopId:2,date:'2026-10-20',start:'10:00',end:'18:00',status:'approved'},{name:'Иван',shopId:2,date:'2026-10-20',start:'12:00',end:'21:00',status:'approved'},{name:'Мария',shopId:2,date:'2026-10-20',start:'18:00',end:'21:00',status:'approved'},{name:'Борис',shopId:1,date:'2026-10-20',start:'08:00',end:'21:00',status:'approved'},{name:'Черновик',shopId:2,date:'2026-10-20',start:'08:00',end:'21:00',status:'pending'}];render();");
- const coworkers=w.document.querySelector('.shift-coworkers').textContent;assert.match(coworkers,/Иван/);assert.match(coworkers,/12:00–18:00/);assert.doesNotMatch(coworkers,/Мария|Борис|Черновик/);
+ assert.equal(w.document.querySelector('.shift-coworkers'),null);
  const team=w.document.querySelector('.day-team').textContent;assert.match(team,/Мария/);assert.match(team,/Борис/);assert.doesNotMatch(team,/Черновик/);
- console.log('PASS: coworkers require overlapping hours at the same shop; day roster includes approved shifts at both shops');
+ evaluate("teamUI.schedule.rows=[{id:'c'.repeat(32),revision:'a'.repeat(32),date:'2027-01-20',start:'08:00',end:'16:00',name:'Борис',status:'approved'},{id:'d'.repeat(32),revision:'b'.repeat(32),date:'2027-01-21',start:'08:00',end:'16:00',name:'',status:'open'}];render();");
+ w.document.querySelectorAll('[data-action="team-shift-select"]').forEach(x=>x.click());
+ assert.equal(evaluate('shiftSelection().length'),2);assert.match(w.document.querySelector('.shift-selection').textContent,/Замена: Борис/);assert.match(w.document.querySelector('[data-action="team-selection-submit"]').textContent,/\(2\)/);
+ w.document.querySelector('[data-action="team-selection-remove"]').click();assert.equal(evaluate('shiftSelection().length'),1);
+ evaluate("teamUI.schedule.rows[0].swap={from:'Борис',to:'Анна',direction:'incoming',status:'requested'};render();");
+ assert.equal(w.document.querySelectorAll('[data-action="team-shift-accept-swap"]').length,0);
+ evaluate("state.staffName='Борис';teamUI.scheduleKey='Борис:1';render();");assert.equal(w.document.querySelectorAll('[data-action="team-shift-accept-swap"]').length,1);
+ console.log('PASS: multiple shifts selected together; only the current holder can approve an incoming request');
  console.log('DOM smoke tests passed. Browser layout and Telegram hardware camera still require device verification.');
 }finally{w.close();}

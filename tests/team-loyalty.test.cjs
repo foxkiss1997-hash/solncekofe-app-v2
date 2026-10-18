@@ -78,15 +78,16 @@ test('seventh staff stamp atomically creates gift, spin and history without touc
  const req={...x.staff,action:'awardStamp',guestId:'ABCD',operationId:op};x.run('handleLoyalty_',req);x.run('handleLoyalty_',req);
  assert.equal(x.db.guests.ABCD.stamps,0);assert.equal(x.db.guests.ABCD.bonusSpins,3);assert.equal(x.db.guests.ABCD.vouchers.OLD.redeemed,true);assert.equal(Object.keys(x.db.guests.ABCD.vouchers).length,3);assert.equal(x.writes.length,1);
 });
-test('shift replacement needs the target employee and then owner; assignment stays until final approval',()=>{
+test('replacement is final after the other employee OR the owner agrees',()=>{
+ for(const byOwner of [false,true]){
  const x=setup();schedule(x,{...x.owner,action:'saveShift',shiftId,operationId:op,date:'2026-10-20',start:'08:00',end:'16:00',name:'Анна'});
  schedule(x,{...x.staff,action:'requestSwap',targetName:'Борис',shiftId,operationId:giftOp,revision:op});
  assert.equal(x.db.ops_v3.schedule[1][shiftId].name,'Анна');
- assert.throws(()=>schedule(x,{...x.owner,action:'approveSwap',shiftId,operationId:'d'.repeat(32),revision:giftOp}),/второй сотрудник/);
- assert.throws(()=>schedule(x,{...x.staff,action:'acceptSwap',shiftId,operationId:'d'.repeat(32),revision:giftOp}),/другому/);
- schedule(x,{shopId:1,submittedBy:'Борис',auth:{password:'other'},action:'acceptSwap',shiftId,operationId:'d'.repeat(32),revision:giftOp});
- schedule(x,{...x.owner,action:'approveSwap',shiftId,operationId:'e'.repeat(32),revision:'d'.repeat(32)});
- assert.equal(x.db.ops_v3.schedule[1][shiftId].name,'Борис');
+ assert.throws(()=>schedule(x,{...x.staff,action:'acceptSwap',shiftId,operationId:'d'.repeat(32),revision:giftOp}),/второй участник/);
+ const actor=byOwner?x.owner:{shopId:1,submittedBy:'Борис',auth:{password:'other'}};
+ schedule(x,{...actor,action:byOwner?'approveSwap':'acceptSwap',shiftId,operationId:'d'.repeat(32),revision:giftOp});
+ assert.equal(x.db.ops_v3.schedule[1][shiftId].name,'Борис');assert.equal(x.db.ops_v3.schedule[1][shiftId].swap.status,'approved');
+ }
 });
 test('owner overview prefers current operations revenue; test view never reads production revenue',()=>{
  const x=setup();x.put('/ops_v3/revenue_reports/1/2026-10-19',{cash:100,cashless:200});x.put('/revenue_reports/1/2026-10-19',{cash:1,cashless:1});x.ctx.req=x.owner;
@@ -128,4 +129,49 @@ test('shared team schedule exposes approved shift times without drafts or intern
  const x=setup();x.put('/ops_v3/schedule/2',{approved:{name:'Борис',date:'2026-10-20',start:'12:00',end:'21:00',status:'approved',password:'private-value',history:{secret:'private-value'},internalNote:'private-value'},pending:{name:'Мария',date:'2026-10-20',start:'08:00',end:'16:00',status:'pending'},cancelled:{name:'Анна',date:'2026-10-20',start:'08:00',end:'16:00',status:'cancelled'}});
  const result=schedule(x,{...x.staff,action:'listSchedule'});
  assert.equal(result.teamRows.length,1);assert.equal(result.teamRows[0].name,'Борис');assert.equal(result.teamRows[0].shopId,2);assert.ok(!JSON.stringify(result.teamRows).includes('private-value'));assert.ok(!JSON.stringify(result.teamRows).includes('Мария'));
+});
+
+test('batch submits free and occupied slots atomically and retries survive later approval',()=>{
+ const x=setup(),busy='d'.repeat(32),free='e'.repeat(32);
+ schedule(x,{...x.owner,action:'saveShift',shiftId:busy,operationId:op,date:'2026-10-21',start:'08:00',end:'16:00',name:'Борис'});
+ const req={...x.staff,action:'requestShifts',operationId:giftOp,items:[{shiftId:free,date:'2026-10-20',start:'08:00',end:'16:00'},{shiftId:busy,revision:op}]};
+ x.writes.length=0;const result=schedule(x,req);assert.equal(result.rows.length,2);assert.equal(x.writes.length,1);
+ assert.equal(x.db.ops_v3.schedule[1][free].status,'pending');assert.equal(x.db.ops_v3.schedule[1][busy].name,'Борис');
+ const own=schedule(x,{...x.staff,action:'listSchedule'}).myRows;assert.equal(own.length,2);assert.ok(own.every(r=>r.status==='pending'));assert.equal(own.find(r=>r.id===busy).requestType,'transfer');
+ assert.throws(()=>schedule(x,{...x.staff,action:'acceptSwap',shiftId:busy,operationId:'f'.repeat(32),revision:giftOp}),/второй участник/);
+ schedule(x,{shopId:1,submittedBy:'Борис',auth:{password:'other'},action:'acceptSwap',shiftId:busy,operationId:'f'.repeat(32),revision:giftOp});
+ assert.equal(x.db.ops_v3.schedule[1][busy].name,'Анна');
+ const count=x.writes.length;assert.equal(schedule(x,req).replayed,true);assert.equal(x.writes.length,count);
+});
+test('one stale selected slot rejects the entire batch; no partial requests',()=>{
+ const x=setup();x.put('/ops_v3/schedule/1/'+shiftId,{date:'2026-10-20',start:'08:00',end:'16:00',name:'Борис',status:'approved',revision:op});x.writes.length=0;
+ assert.throws(()=>schedule(x,{...x.staff,action:'requestShifts',operationId:giftOp,items:[{shiftId:'e'.repeat(32),date:'2026-10-21',start:'08:00',end:'16:00'},{shiftId,revision:'wrong'}]}),/изменена/);
+ assert.equal(x.writes.length,0);assert.equal(Object.keys(x.db.ops_v3.schedule[1]).length,1);
+});
+test('one employee occupies a point at a time; adjacent shifts allowed',()=>{
+ const x=setup();schedule(x,{...x.owner,action:'saveShift',shiftId,operationId:op,date:'2026-10-20',start:'08:00',end:'16:00',name:'Анна'});
+ const req={...x.owner,action:'saveShift',shiftId:'e'.repeat(32),operationId:giftOp,date:'2026-10-20',start:'12:00',end:'21:00',name:'Борис'};
+ assert.throws(()=>schedule(x,req),/один человек/);schedule(x,{...req,start:'16:00'});
+ assert.equal(Object.keys(x.db.ops_v3.schedule[1]).length,2);
+});
+test('a transfer can be declined and competing proposals cannot overwrite consent',()=>{
+ const x=setup();schedule(x,{...x.owner,action:'saveShift',shiftId,operationId:op,date:'2026-10-20',start:'08:00',end:'16:00',name:'Борис'});
+ schedule(x,{...x.staff,action:'requestShift',shiftId,operationId:giftOp,revision:op});
+ assert.throws(()=>schedule(x,{...x.staff,action:'requestShift',shiftId,operationId:'d'.repeat(32),revision:giftOp}),/уже есть заявка/);
+ schedule(x,{...x.owner,action:'rejectSwap',shiftId,operationId:'e'.repeat(32),revision:giftOp});assert.equal(x.db.ops_v3.schedule[1][shiftId].name,'Борис');
+ assert.throws(()=>schedule(x,{...x.owner,action:'approveSwap',shiftId,operationId:'f'.repeat(32),revision:'e'.repeat(32)}),/Нет действующей/);
+});
+test('a replacement cannot put the employee in two shops at once',()=>{
+ const x=setup();schedule(x,{...x.owner,shopId:2,action:'saveShift',shiftId:'e'.repeat(32),operationId:op,date:'2026-10-20',start:'08:00',end:'16:00',name:'Анна'});
+ schedule(x,{...x.owner,action:'saveShift',shiftId,operationId:op,date:'2026-10-20',start:'08:00',end:'16:00',name:'Борис'});
+ schedule(x,{...x.staff,action:'requestShift',shiftId,operationId:giftOp,revision:op});
+ assert.throws(()=>schedule(x,{...x.owner,action:'approveSwap',shiftId,operationId:'f'.repeat(32),revision:giftOp}),/уже есть смена/);
+ assert.equal(x.db.ops_v3.schedule[1][shiftId].name,'Борис');
+});
+
+test('overlapping selections and past dates fail without writes; test batches remain isolated',()=>{
+ const x=setup(),items=[{shiftId:'d'.repeat(32),date:'2026-10-20',start:'08:00',end:'16:00'},{shiftId:'e'.repeat(32),date:'2026-10-20',start:'12:00',end:'21:00'}];
+ assert.throws(()=>schedule(x,{...x.staff,action:'requestShifts',operationId:op,items}),/уже есть смена/);assert.equal(x.writes.length,0);
+ assert.throws(()=>schedule(x,{...x.staff,action:'requestShifts',operationId:op,items:[{...items[0],date:'2026-10-18'}]}),/прошедшую/);
+ x.ctx.req={...x.staff,action:'requestShifts',operationId:op,items:[items[0]]};vm.runInContext("handleSchedule_(req,'/ops_v3_test',props)",x.ctx);assert.ok(x.db.ops_v3_test.schedule[1]);assert.equal(x.db.ops_v3,undefined);
 });
