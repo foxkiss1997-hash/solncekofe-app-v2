@@ -78,6 +78,20 @@ function scheduleDayState(rows,date){
  const day=rows.filter(x=>x.date===date);return day.some(x=>x.status==='approved')?'work':day.some(x=>x.status==='pending')?'pending':'off';
 }
 function scheduleDateLabel(date){return new Date(date+'T12:00:00Z').toLocaleDateString('ru-RU',{day:'numeric',month:'long',weekday:'long',timeZone:'UTC'});}
+function scheduleTeamRows(data){return (data.teamRows||data.rows.map(x=>({...x,shopId:teamShop()}))).filter(x=>x.status==='approved'&&x.name);}
+function shiftCoworkers(data,row){
+ return scheduleTeamRows(data).filter(x=>x.name!==row.name&&x.shopId===row.shopId&&x.date===row.date&&x.start<row.end&&row.start<x.end).map(x=>({...x,togetherStart:x.start>row.start?x.start:row.start,togetherEnd:x.end<row.end?x.end:row.end})).sort((a,b)=>a.togetherStart.localeCompare(b.togetherStart)||a.name.localeCompare(b.name));
+}
+function renderShiftCoworkers(data,row){
+ if(row.status!=='approved')return '';
+ if(!data.teamRows&&row.shopId!==teamShop())return '<small>Обновите график, чтобы увидеть состав смены на другой точке.</small>';
+ const people=shiftCoworkers(data,row);
+ return `<div class="shift-coworkers"><b>С вами на смене</b>${people.length?people.map(x=>`<div><span>${esc(x.name)}</span><small>вместе ${esc(x.togetherStart)}–${esc(x.togetherEnd)}</small></div>`).join(''):'<p>Других сотрудников в это время не назначено.</p>'}</div>`;
+}
+function renderDayTeam(data,date){
+ const rows=scheduleTeamRows(data).filter(x=>x.date===date).sort((a,b)=>a.start.localeCompare(b.start)||a.name.localeCompare(b.name));
+ return `<section class="day-team" aria-label="Кто работает в этот день"><h4>Кто работает в этот день</h4>${rows.length?SHOPS.filter(shop=>rows.some(x=>x.shopId===shop.id)).map(shop=>`<div class="day-team-shop"><b>${esc(shop.name)}</b>${rows.filter(x=>x.shopId===shop.id).map(x=>`<div class="day-team-person"><span>${esc(x.name)}${x.name===state.staffName?' · вы':''}</span><span>${esc(x.start)}–${esc(x.end)}</span></div>`).join('')}</div>`).join(''):'<p>Утверждённых смен на этот день пока нет.</p>'}</section>`;
+}
 function renderPersonalSchedule(data){
  const rows=personalScheduleRows(data),today=todayKey(),month=teamUI.calendarMonth||today.slice(0,7),selected=teamUI.calendarDate||today;
  const [year,m]=month.split('-').map(Number),first=new Date(Date.UTC(year,m-1,1)),offset=(first.getUTCDay()+6)%7,days=new Date(Date.UTC(year,m,0)).getUTCDate();
@@ -85,7 +99,7 @@ function renderPersonalSchedule(data){
  const shop=row=>esc(SHOPS.find(x=>x.id===row.shopId)?.name||'Кофейня');
  return `<section class="personal-schedule" aria-label="Мой график"><h3>Мой график</h3><p class="hint">${esc(state.staffName)} · обе кофейни</p><div class="next-shift">${upcoming?`Ближайшая смена: <b>${esc(scheduleDateLabel(upcoming.date))}</b><span>${esc(upcoming.start)}–${esc(upcoming.end)} · ${shop(upcoming)}</span>`:'Предстоящих утверждённых смен пока нет.'}</div>
  <div class="schedule-month"><button class="ops-cancel" data-action="team-calendar-prev" aria-label="Предыдущий месяц">‹</button><b>${first.toLocaleDateString('ru-RU',{month:'long',year:'numeric',timeZone:'UTC'}).replace(' г.','')}</b><button class="ops-cancel" data-action="team-calendar-next" aria-label="Следующий месяц">›</button></div><div class="schedule-legend"><span class="work">Работа</span><span class="pending">Заявка</span><span>Нет смены</span></div><div class="schedule-calendar">${['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(x=>`<span class="weekday">${x}</span>`).join('')}${'<span aria-hidden="true"></span>'.repeat(offset)}${Array.from({length:days},(_,i)=>{const date=month+'-'+String(i+1).padStart(2,'0'),kind=scheduleDayState(rows,date),label=kind==='work'?'Работа':kind==='pending'?'Заявка':'Нет смены';return `<button class="calendar-day ${kind} ${date===selected?'selected':''} ${date===today?'today':''}" data-action="team-calendar-day" data-date="${date}" aria-pressed="${date===selected}" aria-label="${esc(scheduleDateLabel(date))}: ${label}"><b>${i+1}</b><span>${kind==='work'?'Смена':kind==='pending'?'Заявка':'—'}</span></button>`;}).join('')}</div>
- <div class="schedule-day-detail" aria-live="polite"><h4>${esc(scheduleDateLabel(selected))}</h4>${dayRows.length?dayRows.map(row=>`<div class="my-shift-detail"><b>${row.status==='approved'?'На работу':'Заявка — ещё не утверждена'}</b><span>${esc(row.start)}–${esc(row.end)} · ${shop(row)}</span>${row.swap&&row.swap.status!=='approved'?'<small>Замена ещё не утверждена. Действует исходная смена.</small>':''}</div>`).join(''):'<b>Выходить по графику не требуется: смена не назначена.</b>'}${status==='pending'?'<p class="hint">Дождитесь утверждения владельца. Заявка ещё не является рабочей сменой.</p>':''}</div><p class="hint">Показаны назначенные смены. Владелец может дополнить график — обновляйте его перед выходом.</p></section>`;
+ <div class="schedule-day-detail" aria-live="polite"><h4>${esc(scheduleDateLabel(selected))}</h4>${dayRows.length?dayRows.map(row=>`<div class="my-shift-detail"><b>${row.status==='approved'?'На работу':'Заявка — ещё не утверждена'}</b><span>${esc(row.start)}–${esc(row.end)} · ${shop(row)}</span>${row.swap&&row.swap.status!=='approved'?'<small>Замена ещё не утверждена. Действует исходная смена.</small>':''}${renderShiftCoworkers(data,row)}</div>`).join(''):'<b>Выходить по графику не требуется: смена не назначена.</b>'}${status==='pending'?'<p class="hint">Дождитесь утверждения владельца. Заявка ещё не является рабочей сменой.</p>':''}</div>${renderDayTeam(data,selected)}<p class="hint">Показаны назначенные смены. Владелец может дополнить график — обновляйте его перед выходом.</p></section>`;
 }
 function moveScheduleMonth(delta){
  const [year,month]=(teamUI.calendarMonth||todayKey().slice(0,7)).split('-').map(Number),next=new Date(Date.UTC(year,month-1+delta,1));
