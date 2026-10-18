@@ -1,6 +1,6 @@
 const fs=require('fs');
 let html=fs.readFileSync('preorder.html','utf8');
-html=html.replace('<head>','<head><script src="preview-fixtures.js?v=calendar2"></script>');
+html=html.replace('<head>','<head><script src="preview-fixtures.js?v=coworkers1"></script>');
 html=html.replace('<script src="https://telegram.org/js/telegram-web-app.js"></script>','');
 html=html.replace('/* ---------- INIT ---------- */',`/* ---------- INIT ---------- */
 if(window.SOLNCE_PREVIEW){sendOpsRequest=window.previewRequest;window.previewSetup(state,typeof teamUI!=='undefined'?teamUI:null);}
