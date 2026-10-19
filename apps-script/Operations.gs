@@ -294,10 +294,15 @@ function runFrostedReadinessCheck(){
   const payload={apiVersion:3,nonce,mode:'production',returnOrigin:OPS_ALLOWED_ORIGINS[0],action,shopId:1,guestId:'QA_RELEASE_20261018',orderId:'00000000000000000000000000000000',items:[],auth:{admin:true,password:p.getProperty('ADMIN_PASSWORD')}};
   let body=UrlFetchApp.fetch(endpoint,{method:'post',payload:{payload:JSON.stringify(payload)},muteHttpExceptions:true}).getContentText();
   for(let i=0;i<6;i++)body=body.replace(/\\x([0-9a-f]{2})/gi,(_,h)=>String.fromCharCode(parseInt(h,16))).replace(/\\u([0-9a-f]{4})/gi,(_,h)=>String.fromCharCode(parseInt(h,16))).replace(/\\\//g,'/').replace(/\\\\/g,'\\').replace(/\\"/g,'"');
-  const match=body.match(/window\.top\.postMessage\((\{[\s\S]*?\}),/);if(!match)throw Error('Нет подтверждения: '+action);
-  const ack=JSON.parse(match[1]);if(ack.nonce!==nonce)throw Error('Неверное подтверждение: '+action);
+  const ack=readOpsReadinessAck_(body,OPS_ALLOWED_ORIGINS[0]);if(ack.nonce!==nonce)throw Error('Неверное подтверждение: '+action);
   const good=['listSchedule','listPayroll'].includes(action)?ack.ok===true:action==='loyaltyLookup'?(ack.ok===true||ack.error==='Карта не найдена.'):ack.error==='Проверьте состав заказа.';
   if(!good)throw Error('Обработчик не готов: '+action);result[action]=true;
  }
  console.log(JSON.stringify({handlers:result,telegramTokenConfigured:!!p.getProperty('TELEGRAM_BOT_TOKEN'),productionWrites:0}));
+}
+
+function readOpsReadinessAck_(body,origin){
+ const marker='window.top.postMessage(',start=body.indexOf(marker),end=body.indexOf(','+JSON.stringify(origin)+');',start);
+ if(start<0||end<0)throw Error('Нет подтверждения рабочего обработчика.');
+ return JSON.parse(body.slice(start+marker.length,end));
 }
