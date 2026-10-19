@@ -61,11 +61,13 @@ function selectStaffShop(value){
   const shop=Number(value);if(shop===state.staffShop)return true;
   if(![1,2].includes(shop)||state.opMode||state.opsSaving||state.checklistSaving||state.opsPhotoLoading||opsQueueBusy||state.staffListLoading){render();return false;}
   Object.assign(state,{staffShop:shop,staffName:null,reportPassword:'',staffPinValue:'',staffPinError:'',staffOrders:[],staffLoading:false,staffList:[],opsPending:0,opsSyncMessage:'',todayOps:{deliveries:0,expenses:0,issues:0},shiftOpenedAt:null,shiftChecks:emptyShiftChecks(),opAmount:'',opParty:'',opGoods:'',opNote:'',opMsg:'',shiftCash:'',shiftCashless:'',shiftActual:'',shiftMsg:'',reportDate:'',reportCash:'',reportCashless:'',reportMsg:'',opPayment:'cash',chargeIdValue:'',chargeMsg:'',redeemGuestId:'',redeemVoucherId:'',redeemMsg:''});
-  clearStaffSession();render();return true;
+  clearStaffSession();state.staffRestoreError='';render();return true;
 }
-function renderOpsAuth(){return state.reportPassword?'':`<label class="hint">Для отправки отчёта подтвердите личный пароль<input class="text-input" type="password" autocomplete="off" placeholder="Личный пароль сотрудника" data-action="ops-report-password"></label>`;}
+function renderOpsAuth(){return hasStaffAuth()?'':`<label class="hint">Для отправки отчёта подтвердите личный пароль<input class="text-input" type="password" autocomplete="off" placeholder="Личный пароль сотрудника" data-action="ops-report-password"></label>`;}
 function renderOpsSync(){return `<div class="ops-wide"><div class="hint">${OPS_V3_TEST_MODE?'Тестовая версия · ':''}${state.opsPending||0} отчётов ожидают отправки в таблицу</div><button class="ops-cancel" data-action="ops-retry" ${opsQueueBusy?'disabled':''}>Повторить отправку</button>${state.opsSyncMessage?`<div class="hint">${esc(state.opsSyncMessage)}</div>`:''}</div>`;}
 function sendOpsRequest(body,password,admin=false){
+  if(!admin&&state.staffSessionToken&&!OPS_V3_TEST_MODE)return staffSessionOperation(body);
+
   if(!REPORTS_WEBHOOK_URL)return Promise.reject(Error('Интеграция ещё не подключена. Отчёт сохранён на устройстве.'));
   return new Promise((resolve,reject)=>{
     const nonce=opsId(),frame=document.createElement('iframe'),form=document.createElement('form');frame.name='ops-'+nonce;frame.hidden=true;form.hidden=true;form.method='POST';form.action=REPORTS_WEBHOOK_URL;form.target=frame.name;
@@ -85,7 +87,7 @@ async function adminPasswordLoginV3(){
 }
 async function updateOpsPending(){try{state.opsPending=(await opsStore('queue','readonly',s=>s.getAll())).filter(x=>x.shopId===state.staffShop&&x.submittedBy===state.staffName).length;}catch(e){state.opsSyncMessage='Не удалось открыть очередь на устройстве.';}}
 async function retryOpsQueue(){
-  if(opsQueueBusy)return;if(!state.reportPassword){state.opsSyncMessage='Введите личный пароль в форме отчёта для повторной отправки.';render();return;}
+  if(opsQueueBusy)return;if(!hasStaffAuth()){state.opsSyncMessage='Введите личный пароль в форме отчёта для повторной отправки.';render();return;}
   const identity=[state.staffShop,state.staffName].join(':'),password=state.reportPassword;opsQueueBusy=true;render();
   try{const rows=await opsStore('queue','readonly',s=>s.getAll());for(const row of rows.filter(x=>[x.shopId,x.submittedBy].join(':')===identity)){
     await sendOpsRequest({action:'submitReport',report:row},password);await opsStore('queue','readwrite',s=>s.delete(row.reportId));
@@ -163,4 +165,4 @@ document.addEventListener('change',e=>{const el=e.target.closest('[data-action]'
   else if(a==='checklist-stage')queueMicrotask(()=>restoreOpsPhotos());
 });
 
-window.addEventListener('online',()=>{if(state.reportPassword)retryOpsQueue();});
+window.addEventListener('online',()=>{if(hasStaffAuth())retryOpsQueue();});

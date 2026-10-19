@@ -101,7 +101,7 @@ document.addEventListener('click',e=>{const el=e.target.closest('[data-action]')
 
 /* Staff stock controls are scoped to the authenticated employee's coffee shop. */
 let availabilityRefreshPromise=null,availabilityRefreshTimer=null;
-function stockIdentity(){return JSON.stringify([state.staffShop,state.staffName,state.reportPassword]);}
+function stockIdentity(){return JSON.stringify([state.staffShop,state.staffName,state.staffSessionToken||state.reportPassword]);}
 async function refreshMenuAvailability(repaint=true){
  if(!availabilityRefreshPromise)availabilityRefreshPromise=(async()=>{
   try{
@@ -145,11 +145,11 @@ function renderStaffStock(){
 }
 async function staffSetAvailability(id){
  const identity=stockIdentity(),shopId=state.staffShop;
- if(state.screen!=='staff'||!state.staffName||!state.reportPassword||![1,2].includes(shopId)||!state.staffStockReady||state.staffStockIdentity!==identity||state.staffStockBusy||STOP_LIST.has(id)||!itemById(id))return;
+ if(state.screen!=='staff'||!state.staffName||!hasStaffAuth()||![1,2].includes(shopId)||!state.staffStockReady||state.staffStockIdentity!==identity||state.staffStockBusy||STOP_LIST.has(id)||!itemById(id))return;
  const expectedStopped=shopStopLists[shopId]?.[id]===true,stopped=!expectedStopped;
  const request={};state.staffStockRequest=request;state.staffStockBusy=id;state.staffStockMessage='';render();
  try{
-  const data=await paymentJson(PAYMENT_RELAY_URL+'/set-menu-availability',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({shopId,submittedBy:state.staffName,auth:{password:state.reportPassword},itemId:id,stopped,expectedStopped})},20000);
+  const data=await paymentJson(PAYMENT_RELAY_URL+'/set-menu-availability',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({shopId,submittedBy:state.staffName,auth:{password:state.reportPassword},sessionToken:state.staffSessionToken||undefined,itemId:id,stopped,expectedStopped})},20000);
   if(!data||data.ok!==true||data.shopId!==shopId||data.itemId!==id||data.stopped!==stopped)throw Error(data?.error||'Сервер не подтвердил изменение.');
   shopStopLists[shopId]??={};if(stopped)shopStopLists[shopId][id]=true;else delete shopStopLists[shopId][id];
   if(data.globalStopped)STOP_LIST.add(id);
