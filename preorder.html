@@ -683,8 +683,8 @@
 
 .ops-photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.ops-photo-grid img{width:100%;height:120px;object-fit:cover;border-radius:12px}.ops-photos{margin:12px 0}.ops-check-editor{margin:14px 0;padding:12px;border:1px solid #33443a;border-radius:15px}.ops-check-editor.archived{opacity:.55}.admin-sun .tabs{overflow-x:auto;display:flex}.admin-sun .tab{flex-shrink:0}
 </style>
-<link rel="stylesheet" href="unified.css?v=20261018-approvals2">
-<link rel="stylesheet" href="frosted-glass.css?v=20261018-approvals2">
+<link rel="stylesheet" href="unified.css?v=20261018-payroll1">
+<link rel="stylesheet" href="frosted-glass.css?v=20261018-payroll1">
 </head>
 <body>
   <div class="shell">
@@ -692,11 +692,11 @@
     <div id="app"></div>
   </div>
 
-<script src="operations-v3.js?v=20261018-approvals2"></script>
-<script src="stable-ui.js?v=20261018-approvals2"></script>
-<script src="team-loyalty.js?v=20261018-approvals2"></script>
-<script src="menu-photos.js?v=20261018-approvals2"></script>
-<script src="menu-experience.js?v=20261018-approvals2"></script>
+<script src="operations-v3.js?v=20261018-payroll1"></script>
+<script src="stable-ui.js?v=20261018-payroll1"></script>
+<script src="team-loyalty.js?v=20261018-payroll1"></script>
+<script src="menu-photos.js?v=20261018-payroll1"></script>
+<script src="menu-experience.js?v=20261018-payroll1"></script>
 <script>
 /* ---------- DATA (menu: Солнцекофе, Yandex Eda) ---------- */
 const CATEGORIES = [
@@ -1628,7 +1628,7 @@ function renderStaff(){
     <div class="ops-grid"><button class="ops-card green rippleable" data-action="open-op" data-mode="delivery"><span class="ops-ico">📦</span><b>Поставка</b><small>Приход товара и накладная</small></button><button class="ops-card sun rippleable" data-action="open-op" data-mode="expense"><span class="ops-ico">💸</span><b>Расход</b><small>Из кассы или безнал</small></button><button class="ops-card red rippleable" data-action="open-op" data-mode="issue"><span class="ops-ico">⚠️</span><b>Проблема</b><small>Сообщить владельцу</small></button><button class="ops-card rippleable" data-action="open-op" data-mode="close"><span class="ops-ico">🌙</span><b>Закрыть смену</b><small>Деньги · чек-лист · фото</small></button></div>
     <div class="ops-wide"><div class="ops-wide-title">Сегодня</div><div class="ops-stats"><div class="ops-stat"><b>${state.todayOps.deliveries||0}</b><span>ПОСТАВОК</span></div><div class="ops-stat"><b>${state.todayOps.expenses||0}</b><span>РАСХОДОВ</span></div><div class="ops-stat"><b>${state.todayOps.issues||0}</b><span>ПРОБЛЕМ</span></div></div></div>
     <div class="ops-grid"><button class="ops-card sun rippleable" data-action="open-op" data-mode="revenue"><span class="ops-ico">📊</span><b>Отчёт по выручке</b><small>Наличные · безнал · фото</small></button><button class="ops-card green rippleable" data-action="open-op" data-mode="checklist"><span class="ops-ico">📋</span><b>Чек-листы</b><small>Открытие · в течение дня · закрытие</small></button></div>
-    <div class="ops-wide"><button class="ops-cancel" data-action="open-op" data-mode="schedule">📅 Мой график</button><button class="ops-cancel" data-action="open-op" data-mode="instructions">Как работать в приложении</button></div>
+    <div class="ops-wide"><button class="ops-cancel" data-action="open-op" data-mode="schedule">📅 Мой график</button><button class="ops-cancel" data-action="open-op" data-mode="payroll">💰 Моя зарплата</button><button class="ops-cancel" data-action="open-op" data-mode="instructions">Как работать в приложении</button></div>
     ${renderOpsSync()}${renderStaffOpForm()}
     <div class="ops-form"><h3>Ввести ID гостя вручную</h3><input class="text-input" type="text" placeholder="ID гостя" value="${esc(state.chargeIdValue||'')}" data-action="set-charge-id"><button class="ops-submit rippleable" data-action="staff-charge-loyalty">Начислить штамп</button>${state.chargeMsg?`<div class="ops-message ${state.chargeMsgOk?'ok':'bad'}">${state.chargeMsg}</div>`:''}</div>
     <div class="ops-wide"><div class="ops-wide-title">Заказы точки</div>${state.staffLoading?`<p class="ops-muted">Загружаем…</p>`:renderOrderList(state.staffOrders,true)}</div>
@@ -1642,6 +1642,7 @@ function renderStaffOpForm(){
 
   if(m==='reward')return renderTeamLoyalty();
   if(m==='schedule')return renderTeamSchedule();
+  if(m==='payroll')return renderTeamPayroll();
   if(m==='instructions')return renderTeamInstructions();
   if(m==='delivery'||m==='expense'||m==='issue'){
     const delivery=m==='delivery', issue=m==='issue'; const title=delivery?'📦 Новая поставка':issue?'⚠️ Сообщить о проблеме':'💸 Новый расход';
@@ -1684,12 +1685,12 @@ function renderAdmin(){
           <div class="tab ${state.adminTab==='posts'?'active':''} rippleable" data-action="admin-set-tab" data-tab="posts">Посты</div>
           <div class="tab ${state.adminTab==='wheel'?'active':''} rippleable" data-action="admin-set-tab" data-tab="wheel">Колесо</div>
           <div class="tab ${state.adminTab==='checklists'?'active':''} rippleable" data-action="admin-set-tab" data-tab="checklists">Чек-листы</div>
-          <div class="tab ${state.adminTab==='schedule'?'active':''} rippleable" data-action="admin-set-tab" data-tab="schedule">График / заявки</div>
+          <div class="tab ${state.adminTab==='schedule'?'active':''} rippleable" data-action="admin-set-tab" data-tab="schedule">График / заявки</div><div class="tab ${state.adminTab==='payroll'?'active':''} rippleable" data-action="admin-set-tab" data-tab="payroll">Зарплата</div>
           <div class="tab ${state.adminTab==='loyalty'?'active':''} rippleable" data-action="admin-set-tab" data-tab="loyalty">Подарки / бонусы</div>
           <div class="tab ${state.adminTab==='reports'?'active':''} rippleable" data-action="admin-set-tab" data-tab="reports">Отчёты</div>
         </div>
       </div>
-      ${state.adminTab==='overview' ? renderTeamOverview() : state.adminTab==='schedule' ? renderTeamSchedule() : state.adminTab==='loyalty' ? renderTeamLoyalty() : state.adminTab==='checklists' ? renderAdminChecklists() : state.adminTab==='orders' ? renderAdminOrdersTab() : state.adminTab==='staff' ? renderAdminStaffTab() : state.adminTab==='menu' ? renderAdminMenuTab() : state.adminTab==='posts' ? renderAdminPostsTab() : state.adminTab==='reports' ? renderAdminReportsTab() : renderAdminWheelTab()}
+      ${state.adminTab==='overview' ? renderTeamOverview() : state.adminTab==='schedule' ? renderTeamSchedule() : state.adminTab==='payroll' ? renderTeamPayroll() : state.adminTab==='loyalty' ? renderTeamLoyalty() : state.adminTab==='checklists' ? renderAdminChecklists() : state.adminTab==='orders' ? renderAdminOrdersTab() : state.adminTab==='staff' ? renderAdminStaffTab() : state.adminTab==='menu' ? renderAdminMenuTab() : state.adminTab==='posts' ? renderAdminPostsTab() : state.adminTab==='reports' ? renderAdminReportsTab() : renderAdminWheelTab()}
     </div>
   `;
 }
@@ -3173,14 +3174,14 @@ document.addEventListener('click', (e)=>{
   else if(action==='staff-redeem-voucher'){ redeemVoucher(); }
   else if(action==='submit-revenue-report'){ submitRevenueReport(); }
   else if(action==='submit-expense-report'){ submitExpenseReport(); }
-  else if(action==='open-op'){ state.opMode=el.dataset.mode; state.opMsg=''; state.shiftMsg=''; render(); if(state.opMode==='schedule')teamLoadSchedule(); requestAnimationFrame(()=>{ const f=document.getElementById('ops-active-form'); if(f) f.scrollIntoView({behavior:'smooth',block:'start'}); }); }
+  else if(action==='open-op'){ state.opMode=el.dataset.mode; state.opMsg=''; state.shiftMsg=''; render(); if(state.opMode==='schedule')teamLoadSchedule();else if(state.opMode==='payroll')loadTeamPayroll(); requestAnimationFrame(()=>{ const f=document.getElementById('ops-active-form'); if(f) f.scrollIntoView({behavior:'smooth',block:'start'}); }); }
   else if(action==='close-op'){ if(typeof teamUI!=='undefined'&&teamUI.busy)return;state.opMode=null; render(); }
   else if(action==='save-operation'){ saveOperation(); }
   else if(action==='close-shift'){ closeShift(); }
   else if(action==='save-checklist'){ submitShiftChecklist(); }
   else if(action==='export-reports-csv'){ exportReportsCSV(); }
   else if(action==='staff-scan-qr'){ scanLoyaltyQr(); }
-  else if(action==='admin-refresh'){ if(state.adminTab==='overview')loadTeamOverview();else if(state.adminTab==='schedule')teamLoadSchedule();else loadAdminOrders(); }
+  else if(action==='admin-refresh'){ if(state.adminTab==='overview')loadTeamOverview();else if(state.adminTab==='schedule')teamLoadSchedule();else if(state.adminTab==='payroll')loadTeamPayroll();else loadAdminOrders(); }
   else if(action==='admin-set-tab'){
     state.adminTab = el.dataset.tab;
     if(state.adminTab==='overview')loadTeamOverview();
@@ -3188,6 +3189,7 @@ document.addEventListener('click', (e)=>{
     else if(state.adminTab==='posts') loadAdminPosts();
     else if(state.adminTab==='reports') loadAdminReports();
     else if(state.adminTab==='schedule'){render();teamLoadSchedule();}
+    else if(state.adminTab==='payroll'){render();loadTeamPayroll();}
     else if(state.adminTab==='checklists'){state.opsConfigDraft=null;loadChecklistConfig();}
     else render();
   }

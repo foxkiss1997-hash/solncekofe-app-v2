@@ -230,3 +230,87 @@ test('mixed new shifts and replacements are confirmed together, and review test 
  x.put('/ops_v3_test/schedule',x.db.ops_v3.schedule);x.writes.length=0;x.ctx.req={...x.owner,action:'approveShifts',operationId:'f'.repeat(32),items:[busy,custom].map(shiftId=>({shiftId,revision:giftOp}))};vm.runInContext("handleSchedule_(req,'/ops_v3_test',props)",x.ctx);
  assert.equal(x.db.ops_v3_test.schedule[1][busy].name,'Анна');assert.equal(x.db.ops_v3_test.schedule[1][custom].status,'approved');assert.equal(x.db.ops_v3.schedule[1][busy].name,'Борис');assert.equal(x.db.ops_v3.schedule[1][custom].status,'pending');assert.equal(x.writes.length,1);
 });
+
+function privatePay(x){
+ const ledgers={},entries=[];
+ x.ctx.payStore=(props,root)=>{const store=ledgers[root]||(ledgers[root]={sheet:{},current:{},operations:{}});return store;};
+ x.ctx.payAppend=(store,event)=>{const e=copy(event);store.operations[e.operationId]=e;store.current[e.key]=e;entries.push(e);};
+ vm.runInContext('teamPayrollStore_=payStore;teamPayrollAppend_=payAppend;',x.ctx);
+ return {ledgers,entries};
+}
+function pastShift(x,id=shiftId,date='2026-10-18',name='Анна',shopId=1){return schedule(x,{...x.owner,shopId,action:'saveShift',shiftId:id,operationId:op,date,start:'08:00',end:'21:00',name}).row;}
+function worked(x,id=shiftId,operationId=giftOp,shopId=1,revision=op){return schedule(x,{...x.owner,shopId,action:'confirmWorkedShift',shiftId:id,operationId,revision});}
+test('payroll weeks run Monday to Sunday, including month and year boundaries',()=>{
+ const x=setup();for(const [date,start,end]of [['2026-10-19','2026-10-19','2026-10-25'],['2026-10-25','2026-10-19','2026-10-25'],['2026-10-26','2026-10-26','2026-11-01'],['2027-01-01','2026-12-28','2027-01-03']]){
+ x.ctx.anchor=date;const week=vm.runInContext('teamPayrollWeek_(anchor)',x.ctx);assert.equal(week.start,start);assert.equal(week.end,end);assert.equal(week.payDate,end);
+ }
+});
+test('five confirmed worked shifts earn 21000 on Sunday; planned and pending shifts earn nothing',()=>{
+ const x=setup(),p=privatePay(x);for(let i=0;i<5;i++){const id=String(i+1).repeat(32);pastShift(x,id,'2026-10-'+(12+i));worked(x,id,(i+6).toString(16).repeat(32));}
+ pastShift(x,'f'.repeat(32),'2026-10-17');x.writes.length=0;
+ const data=schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-18'});assert.equal(data.count,5);assert.equal(data.amount,21000);assert.equal(data.week.payDate,'2026-10-18');assert.equal(p.entries.length,5);assert.equal(x.writes.length,0);assert.equal(data.awaiting,undefined);
+ assert.ok(!JSON.stringify(x.db.ops_v3.schedule).includes('4200'));assert.ok(!JSON.stringify(x.db.ops_v3.schedule).includes('attendance'));
+});
+test('only administrator confirms completed work, ignores client amounts, and cannot count a future shift',()=>{
+ const x=setup(),p=privatePay(x);pastShift(x);
+ assert.throws(()=>schedule(x,{...x.staff,action:'confirmWorkedShift',shiftId,operationId:giftOp,revision:op,amount:999999}),/администратор/);
+ schedule(x,{...x.owner,action:'confirmWorkedShift',shiftId,operationId:giftOp,revision:op,amount:999999,rate:1});assert.equal(p.entries[0].attendance.amount,4200);
+ pastShift(x,'d'.repeat(32),'2026-10-20');assert.throws(()=>worked(x,'d'.repeat(32),'e'.repeat(32)),/не закончилась/);
+ assert.throws(()=>schedule(x,{...x.staff,auth:{password:'bad'},action:'listPayroll'}),/Пароль/);assert.equal(p.entries.length,1);
+});
+test('weekly earnings combine own work at both points without exposing another employee payroll',()=>{
+ const x=setup();privatePay(x);pastShift(x,shiftId,'2026-10-16');worked(x);pastShift(x,'d'.repeat(32),'2026-10-18','Анна',2);worked(x,'d'.repeat(32),'e'.repeat(32),2);pastShift(x,'f'.repeat(32),'2026-10-17','Борис');worked(x,'f'.repeat(32),'1'.repeat(32));
+ const staff=schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-18'}),owner=schedule(x,{...x.owner,action:'listPayroll',date:'2026-10-18'});
+ assert.equal(staff.amount,8400);assert.equal(staff.rows.length,2);assert.ok(staff.rows.every(r=>r.name==='Анна'));assert.deepEqual(Array.from(staff.rows,r=>r.shopId),[1,2]);assert.ok(!JSON.stringify(staff).includes('Борис'));assert.equal(owner.amount,12600);assert.equal(owner.totals.length,2);
+});
+test('worked-shift confirmation and reversal are idempotent, audited and freeze schedule changes',()=>{
+ const x=setup(),p=privatePay(x);pastShift(x);worked(x);worked(x);assert.equal(p.entries.length,1);
+ assert.throws(()=>worked(x,shiftId,'d'.repeat(32)),/уже учтена/);
+ for(const action of ['saveShift','cancelShift','requestSwap'])assert.throws(()=>schedule(x,{...x.owner,action,shiftId,operationId:'d'.repeat(32),revision:op,date:'2026-10-18',start:'08:00',end:'21:00',name:'Борис'}),/начислена зарплата/);
+ const reverse={...x.owner,action:'reverseWorkedShift',shiftId,operationId:'e'.repeat(32),revision:op,reason:'Ошибка назначения'};
+ assert.throws(()=>schedule(x,{...reverse,reason:''}),/причину/);schedule(x,reverse);schedule(x,reverse);assert.equal(p.entries.length,2);assert.equal(p.entries[1].attendance.status,'reversed');
+ const data=schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-18'});assert.equal(data.amount,0);assert.equal(data.count,0);assert.equal(data.rows[0].reason,'Ошибка назначения');
+ worked(x);assert.equal(p.entries.length,2);assert.equal(schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-18'}).amount,0);
+ assert.throws(()=>schedule(x,{...reverse,reason:'Другая причина'}),/ID операции/);
+});
+test('payroll rejects stale confirmations and unresolved replacements; records survive schedule deletion',()=>{
+ const x=setup(),p=privatePay(x);pastShift(x);
+ assert.throws(()=>worked(x,shiftId,giftOp,1,'old'),/изменена/);assert.equal(p.entries.length,0);
+ x.db.ops_v3.schedule[1][shiftId].swap={from:'Анна',to:'Борис',status:'requested'};assert.throws(()=>worked(x),/замену/);delete x.db.ops_v3.schedule[1][shiftId].swap;worked(x);delete x.db.ops_v3.schedule[1][shiftId];
+ assert.equal(schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-18'}).amount,4200);
+});
+test('test payroll ledger remains separate and does not write production schedules or payroll',()=>{
+ const x=setup(),p=privatePay(x);pastShift(x);x.put('/ops_v3_test/schedule',x.db.ops_v3.schedule);x.writes.length=0;x.ctx.req={...x.owner,action:'confirmWorkedShift',shiftId,revision:op,operationId:giftOp};vm.runInContext("handleSchedule_(req,'/ops_v3_test',props)",x.ctx);
+ assert.equal(p.entries.length,1);assert.ok(p.ledgers['/ops_v3_test'].current['1:'+shiftId]);assert.equal(Object.keys(p.ledgers['/ops_v3'].current).length,0);assert.equal(x.writes.length,0);
+});
+test('Moscow shift end controls same-day confirmation and the shared script lock covers payroll writes',()=>{
+ const x=setup();privatePay(x);schedule(x,{...x.owner,action:'saveShift',shiftId,operationId:op,date:'2026-10-19',start:'08:00',end:'13:00',name:'Анна'});assert.throws(()=>worked(x),/не закончилась/);
+ schedule(x,{...x.owner,action:'saveShift',shiftId,operationId:'d'.repeat(32),revision:op,date:'2026-10-19',start:'08:00',end:'11:00',name:'Анна'});
+ let locked=false;x.ctx.LockService={getScriptLock:()=>({waitLock(){locked=true;},releaseLock(){locked=false;}})};x.ctx.payAppend=(store,event)=>{assert.equal(locked,true);store.operations[event.operationId]=copy(event);store.current[event.key]=copy(event);};vm.runInContext('teamPayrollAppend_=payAppend;',x.ctx);
+ x.ctx.req={...x.owner,action:'confirmWorkedShift',shiftId,operationId:giftOp,revision:'d'.repeat(32)};vm.runInContext("handleTeamRequest_(req,'/ops_v3',props)",x.ctx);assert.equal(locked,false);
+});
+test('private payroll storage is lazy, rejects public sharing and isolates production from tests',()=>{
+ const x=setup();x.ctx.propertyMap={};x.ctx.privateProps={getProperty:k=>x.ctx.propertyMap[k]};x.ctx.created=0;x.ctx.SpreadsheetApp={create(){x.ctx.created++;throw Error('unexpected create');}};
+ vm.runInContext("teamPayrollStore_(privateProps,'/ops_v3',false)",x.ctx);assert.equal(x.ctx.created,0);
+ x.ctx.propertyMap.PAYROLL_SPREADSHEET_ID='prod';x.ctx.propertyMap.PAYROLL_TEST_SPREADSHEET_ID='prod';assert.throws(()=>vm.runInContext("teamPayrollStore_(privateProps,'/ops_v3_test',false)",x.ctx),/отдельная/);
+ x.ctx.DriveApp={Access:{PRIVATE:'private'},getFileById:()=>({getSharingAccess:()=> 'public'})};assert.throws(()=>vm.runInContext("teamPayrollStore_(privateProps,'/ops_v3',false)",x.ctx),/закрыта/);
+});
+
+test('private spreadsheet persists append-only payroll and retries after a lost flush acknowledgement do not double-count',()=>{
+ const x=setup(),properties={ADMIN_PASSWORD:'owner'},cells=[];let sheet=null,created=0,failFlush=true;
+ const fakeSheet={appendRow(row){cells.push(copy(row));},setFrozenRows(){},getLastRow:()=>cells.length,getRange(row,col,height=1,width=1){return {getValue:()=>cells[row-1]?.[col-1],getValues:()=>cells.slice(row-1,row-1+height).map(x=>x.slice(col-1,col-1+width))};}};
+ const book={getId:()=> 'private-payroll',getSheetByName:()=>sheet,insertSheet(){return sheet=fakeSheet;}};
+ x.ctx.props={getProperty:k=>properties[k]};x.ctx.PropertiesService={getScriptProperties:()=>({setProperty:(k,v)=>{properties[k]=v;}})};
+ x.ctx.SpreadsheetApp={create(){created++;return book;},openById(id){assert.equal(id,'private-payroll');return book;},flush(){if(failFlush){failFlush=false;throw Error('lost acknowledgement');}}};
+ x.ctx.DriveApp={Access:{PRIVATE:'private'},getFileById:()=>({getSharingAccess:()=> 'private'})};
+ pastShift(x);const empty=schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-18'});assert.equal(empty.amount,0);assert.equal(created,0);
+ assert.throws(()=>worked(x),/lost acknowledgement/);assert.equal(created,1);assert.equal(properties.PAYROLL_SPREADSHEET_ID,'private-payroll');assert.equal(cells.length,2);
+ worked(x);assert.equal(cells.length,2);assert.equal(schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-18'}).amount,4200);
+ schedule(x,{...x.owner,action:'reverseWorkedShift',shiftId,operationId:'d'.repeat(32),revision:op,reason:'Исправление ошибки'});
+ assert.equal(cells.length,3);assert.equal(cells[1][9],4200);assert.equal(cells[2][9],-4200);assert.equal(schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-18'}).amount,0);assert.ok(!JSON.stringify(cells).includes('password'));assert.ok(!JSON.stringify(x.db.ops_v3.schedule).includes('4200'));
+});
+
+test('readiness reads nested payroll week and employee data without truncating the acknowledgement',()=>{
+ const x=setup();x.ctx.html='<script>window.top.postMessage('+JSON.stringify({ok:true,week:{start:'2026-10-19',end:'2026-10-25'},rows:[{name:'Анна',amount:4200}]})+',"https://foxkiss1997-hash.github.io");</script>';
+ const ack=vm.runInContext('readOpsReadinessAck_(html,"https://foxkiss1997-hash.github.io")',x.ctx);assert.equal(ack.ok,true);assert.equal(ack.week.end,'2026-10-25');assert.equal(ack.rows[0].amount,4200);
+});

@@ -87,9 +87,77 @@ function teamDate_(date){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(date||'')||new Date(date+'T12:00:00Z').toISOString().slice(0,10)!==date)throw Error('Некорректная дата.');return date;
 }
 function teamTime_(value){if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(value||''))throw Error('Некорректное время.');return value;}
+// Weekly shift earnings: only administrator-confirmed work counts toward earnings.
+const TEAM_SHIFT_RATE_=4200;
+function teamPayrollWeek_(date){
+ const anchor=teamDate_(date),d=new Date(anchor+'T12:00:00Z'),offset=(d.getUTCDay()+6)%7;
+ d.setUTCDate(d.getUTCDate()-offset);const start=d.toISOString().slice(0,10);d.setUTCDate(d.getUTCDate()+6);
+ const end=d.toISOString().slice(0,10);return {start,end,payDate:end};
+}
+function teamShiftEnded_(row){
+ const end=new Date(row.date+'T'+row.end+':00+03:00').getTime();return Number.isFinite(end)&&end<=Date.now();
+}
+function teamPayrollStore_(props,root,create){
+ if(!['/ops_v3','/ops_v3_test'].includes(root))throw Error('Некорректный раздел начислений.');
+ const property=root==='/ops_v3'?'PAYROLL_SPREADSHEET_ID':'PAYROLL_TEST_SPREADSHEET_ID';let id=props.getProperty(property);
+ if(root==='/ops_v3_test'&&id&&id===props.getProperty('PAYROLL_SPREADSHEET_ID'))throw Error('Для теста нужна отдельная зарплатная таблица.');
+ if(!id&&!create)return {sheet:null,current:{},operations:{}};
+ if(!id){const book=SpreadsheetApp.create(root==='/ops_v3'?'Солнцекофе — зарплата (закрыто)':'Солнцекофе — ТЕСТ зарплаты');id=book.getId();PropertiesService.getScriptProperties().setProperty(property,id);}
+ if(DriveApp.getFileById(id).getSharingAccess()!==DriveApp.Access.PRIVATE)throw Error('Зарплатная таблица должна быть закрыта от публичного доступа.');
+ const book=SpreadsheetApp.openById(id);let sheet=book.getSheetByName('Начисления');
+ if(!sheet&&create){sheet=book.insertSheet('Начисления');sheet.appendRow(['ID операции','Точка','ID смены','Дата смены','Сотрудник','Начало','Конец','Действие','Ставка, ₽','Изменение, ₽','Подтвердил','Время','Данные']);sheet.setFrozenRows(1);}
+ if(sheet&&sheet.getRange(1,13).getValue()!=='Данные')throw Error('Проверьте заголовки закрытой зарплатной таблицы.');
+ const current={},operations={};if(sheet&&sheet.getLastRow()>1)for(const row of sheet.getRange(2,13,sheet.getLastRow()-1,1).getValues()){
+  const event=JSON.parse(row[0]);if(!event||!event.operationId||!event.key||!event.attendance)throw Error('Повреждена история начислений. Проверьте закрытую таблицу.');
+  if(!['worked','reversed'].includes(event.attendance.status)||!Number.isSafeInteger(event.attendance.amount)||event.attendance.amount<=0||!Number.isSafeInteger(event.attendance.rate)||event.attendance.rate<=0)throw Error('Повреждена сумма начисления. Проверьте закрытую таблицу.');
+  operations[event.operationId]=event;current[event.key]=event;
+ }
+ return {sheet,current,operations};
+}
+function teamPayrollAppend_(store,event){
+ const a=event.attendance;store.sheet.appendRow([event.operationId,event.shopId,event.shiftId,a.date,a.name,a.start,a.end,event.action,a.rate,event.action==='confirmWorkedShift'?a.amount:-a.amount,event.actor,new Date(event.at).toISOString(),JSON.stringify(event)].map(x=>typeof x==='number'?x:sheetText_(x)));SpreadsheetApp.flush();
+}
+function teamPayrollUnlocked_(store,shopId,id){
+ if(store.current[shopId+':'+id]?.attendance.status==='worked')throw Error('По смене уже начислена зарплата. Сначала администратор должен отменить начисление с причиной.');
+}
+function teamPayrollAction_(request,root,props,actor){
+ if(!actor.admin)throw Error('Подтверждать отработанные смены может только администратор.');
+ const id=teamId_(request.shiftId),operationId=teamId_(request.operationId),shopId=request.shopId,reason=String(request.reason||'').trim(),fingerprint=JSON.stringify([request.action,shopId,id,reason]);
+ let store=teamPayrollStore_(props,root,false);const prior=store.operations[operationId];
+ if(prior){if(prior.actor!==actor.name||prior.fingerprint!==fingerprint)throw Error('ID операции уже использован.');return {row:{id,shopId},replayed:true};}
+ const old=dbRead_(root+'/schedule/'+shopId+'/'+id),previous=store.current[shopId+':'+id]?.attendance;
+ if(!old||old.status!=='approved'||!old.name)throw Error('Нужна утверждённая назначенная смена.');
+ if((old.revision||'')!==(request.revision||''))throw Error('Смена уже изменена. Обновите расчёт.');
+ let attendance;
+ if(request.action==='confirmWorkedShift'){
+  if(!teamShiftEnded_(old))throw Error('Смена ещё не закончилась. Начисление доступно после её окончания.');
+  if(previous?.status==='worked')throw Error('Эта смена уже учтена в зарплате.');
+  if(['requested','accepted'].includes(old.swap?.status))throw Error('Сначала согласуйте или отклоните замену.');
+  attendance={status:'worked',name:old.name,date:old.date,start:old.start,end:old.end,rate:TEAM_SHIFT_RATE_,amount:TEAM_SHIFT_RATE_,confirmedAt:Date.now(),confirmedBy:actor.name};
+ }else{
+  if(previous?.status!=='worked')throw Error('Нет начисления для отмены.');
+  if(reason.length<3||reason.length>240)throw Error('Укажите причину отмены от 3 до 240 символов.');
+  attendance={...previous,status:'reversed',reason,reversedAt:Date.now(),reversedBy:actor.name};
+ }
+ if(!store.sheet)store=teamPayrollStore_(props,root,true);
+ teamPayrollAppend_(store,{operationId,key:shopId+':'+id,shopId,shiftId:id,action:request.action,actor:actor.name,at:Date.now(),fingerprint,attendance,revision:old.revision||''});return {row:{id,shopId}};
+}
+function teamPayroll_(request,root,props,actor){
+ const week=teamPayrollWeek_(request.date||Utilities.formatDate(new Date(),'Europe/Moscow','yyyy-MM-dd')),rows=[],awaiting=[],store=teamPayrollStore_(props,root,false),schedules={1:dbRead_(root+'/schedule/1')||{},2:dbRead_(root+'/schedule/2')||{}};
+ for(const event of Object.values(store.current)){
+  const work=event.attendance;if(work.date<week.start||work.date>week.end||(!actor.admin&&work.name!==actor.name))continue;
+  rows.push({id:event.shiftId,shopId:event.shopId,name:work.name,date:work.date,start:work.start,end:work.end,status:work.status,rate:work.rate,amount:work.status==='worked'?work.amount:0,originalAmount:work.amount,confirmedAt:work.confirmedAt,...(work.status==='reversed'?{reason:work.reason||''}:{}),...(actor.admin?{revision:schedules[event.shopId]?.[event.shiftId]?.revision||event.revision}:{})});
+ }
+ if(actor.admin)for(const shopId of [1,2])for(const [id,row]of Object.entries(schedules[shopId]))if(row.status==='approved'&&row.name&&row.date>=week.start&&row.date<=week.end&&teamShiftEnded_(row)&&store.current[shopId+':'+id]?.attendance.status!=='worked')awaiting.push({id,shopId,date:row.date,start:row.start,end:row.end,name:row.name,revision:row.revision||'',replacementPending:['requested','accepted'].includes(row.swap?.status)});
+ rows.sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start)||a.shopId-b.shopId);awaiting.sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start));
+ const totals={};for(const row of rows){if(!totals[row.name])totals[row.name]={name:row.name,count:0,amount:0};if(row.status==='worked'){totals[row.name].count++;totals[row.name].amount+=row.amount;}}
+ return {week,rate:TEAM_SHIFT_RATE_,count:rows.filter(x=>x.status==='worked').length,amount:rows.reduce((n,x)=>n+x.amount,0),rows,...(actor.admin?{awaiting,totals:Object.values(totals).sort((a,b)=>a.name.localeCompare(b.name))}:{})};
+}
 function handleSchedule_(request,root,props){
  const actor=teamActor_(request,props),shopId=request.shopId;
  if(![1,2].includes(shopId))throw Error('Выберите кофейню.');
+ if(request.action==='listPayroll')return teamPayroll_(request,root,props,actor);
+ if(['confirmWorkedShift','reverseWorkedShift'].includes(request.action))return teamPayrollAction_(request,root,props,actor);
  if(request.action==='listSchedule'){
   const rows=dbRead_(root+'/schedule/'+shopId)||{};
   const staff=dbRead_('/staff/'+shopId)||{};
@@ -100,15 +168,16 @@ function handleSchedule_(request,root,props){
    if(row.name===actor.name&&['approved','pending'].includes(row.status))myRows.push({...publicRow,...(row.swap?{swap:row.swap}:{})});
    else if(row.status==='approved'&&row.swap?.direction==='incoming'&&row.swap.to===actor.name&&['requested','accepted'].includes(row.swap.status))myRows.push({...publicRow,name:actor.name,status:'pending',requestType:'transfer',swap:row.swap});
   }
-  return {rows:Object.entries(rows).map(([id,row])=>({id,...row})).filter(x=>x.status!=='cancelled').sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start)),staff:Object.values(staff).filter(x=>x.active!==false).map(x=>String(x.name)),...(!actor.admin?{myRows,teamRows}:{})};
+  return {rows:Object.entries(rows).map(([id,row])=>{const {attendance,attendanceHistory,...visible}=row;return {id,...(actor.admin?row:visible)};}).filter(x=>x.status!=='cancelled').sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start)),staff:Object.values(staff).filter(x=>x.active!==false).map(x=>String(x.name)),...(!actor.admin?{myRows,teamRows}:{})};
  }
  if(['approveShifts','rejectShifts'].includes(request.action)){
   if(!actor.admin)throw Error('Подтверждение графика доступно только администратору.');
   const operationId=teamId_(request.operationId),items=request.items;
   if(!Array.isArray(items)||!items.length||items.length>31)throw Error('Выберите от 1 до 31 смены.');
+  const payroll=teamPayrollStore_(props,root,false);
   const snap=teamSnapshot_(root+'/schedule'),all=snap.value||{},seen={},fingerprint=JSON.stringify([request.action,items]),rows=[];
   let replay=0;
-  for(const item of items){const id=teamId_(item.shiftId);if(seen[id])throw Error('Смена выбрана дважды.');seen[id]=true;const event=all[shopId]?.[id]?.history?.[operationId];if(event){if(event.actor!==actor.name||event.batch!==fingerprint)throw Error('ID операции уже использован.');replay++;}}
+  for(const item of items){const id=teamId_(item.shiftId);teamPayrollUnlocked_(payroll,shopId,id);if(seen[id])throw Error('Смена выбрана дважды.');seen[id]=true;const event=all[shopId]?.[id]?.history?.[operationId];if(event){if(event.actor!==actor.name||event.batch!==fingerprint)throw Error('ID операции уже использован.');replay++;}}
   if(replay){if(replay!==items.length)throw Error('Неполная история подтверждения. Обновите график.');return {rows:items.map(x=>({id:x.shiftId,...all[shopId][x.shiftId]})),replayed:true};}
   for(const item of items){
    const id=item.shiftId,old=all[shopId]?.[id];
@@ -126,10 +195,11 @@ function handleSchedule_(request,root,props){
   if(actor.admin)throw Error('Используйте редактирование администратора.');
   const operationId=teamId_(request.operationId),items=request.items;
   if(!Array.isArray(items)||!items.length||items.length>31)throw Error('Выберите от 1 до 31 смены.');
+  const payroll=teamPayrollStore_(props,root,false);
   const snap=teamSnapshot_(root+'/schedule'),all=snap.value||{},seen={},fingerprint=JSON.stringify(items),rows=[];
   let replay=0;
   for(const item of items){
-   const id=teamId_(item.shiftId);if(seen[id])throw Error('Смена выбрана дважды.');seen[id]=true;
+   const id=teamId_(item.shiftId);teamPayrollUnlocked_(payroll,shopId,id);if(seen[id])throw Error('Смена выбрана дважды.');seen[id]=true;
    const old=all[shopId]?.[id],event=old?.history?.[operationId];
    if(event){if(event.actor!==actor.name||event.batch!==fingerprint)throw Error('ID операции уже использован.');replay++;}
   }
@@ -143,6 +213,7 @@ function handleSchedule_(request,root,props){
   teamComparePut_(root+'/schedule',all,snap.etag);return {rows};
  }
  const id=teamId_(request.shiftId),operationId=teamId_(request.operationId),path=root+'/schedule/'+shopId+'/'+id,snap=teamSnapshot_(path),old=snap.value;
+ teamPayrollUnlocked_(teamPayrollStore_(props,root,false),shopId,id);
  if(old?.lastOperationId===operationId){if(old.updatedBy!==actor.name)throw Error('ID операции уже использован.');return {row:{id,...old}};}
  const all={1:dbRead_(root+'/schedule/1')||{},2:dbRead_(root+'/schedule/2')||{}};
  const next=teamScheduleChange_(request,actor,old,props,shopId,all,id,'');
