@@ -24,8 +24,8 @@ test('stopping and restoring an item sends authenticated explicit intent and pre
 test('failed saves retain availability and show an error; no optimistic success',async()=>{
  const f=app();try{staff(f);f.w.fetch=async()=>reply({error:'Нет доступа'},false,403);await f.w.staffSetAvailability('cap');assert.equal(f.run('itemStopped("cap",2)'),false);assert.match(f.run('state.staffStockMessage'),/Нет доступа/);assert.equal(f.run('state.staffStockOk'),false);}finally{f.close()}
 });
-test('an employee cannot remove a global stop and unauthenticated guests cannot submit changes',async()=>{
- const f=app();try{staff(f);f.run("STOP_LIST.add('cap')");let calls=0;f.w.fetch=async()=>{calls++;return reply(null)};await f.w.staffSetAvailability('cap');assert.equal(calls,0);assert.match(f.w.renderStaffStock(),/Стоп администратора/);f.run("STOP_LIST.clear();state.screen='menu'");await f.w.staffSetAvailability('cap');assert.equal(calls,0);}finally{f.close()}
+test('an employee can restore a globally stopped item for their shop only; guests cannot submit',async()=>{
+ const f=app();try{staff(f);f.run("STOP_LIST.add('cap')");let payload;f.w.fetch=async(url,options)=>{payload=JSON.parse(options.body);return reply({ok:true,shopId:2,itemId:'cap',stopped:payload.stopped,globalStopped:true})};await f.w.staffSetAvailability('cap');assert.equal(payload.expectedStopped,true);assert.equal(payload.stopped,false);assert.equal(f.run('itemStopped("cap",2)'),false);assert.equal(f.run('itemStopped("cap",1)'),true);assert.match(f.w.renderStaffStock(),/Возвращено только на этой точке/);await f.w.staffSetAvailability('cap');assert.equal(payload.stopped,true);assert.equal(f.run('itemStopped("cap",2)'),true);f.run("state.screen='menu'");let calls=0;f.w.fetch=async()=>{calls++;return reply(null)};await f.w.staffSetAvailability('cap');assert.equal(calls,0);}finally{f.close()}
 });
 test('double taps submit one request and an identity change never updates the new shop',async()=>{
  const f=app();try{staff(f);let finish,calls=0;f.w.fetch=()=>{calls++;return new Promise(r=>finish=r)};const p=f.w.staffSetAvailability('cap');await f.w.staffSetAvailability('cap');assert.equal(calls,1);f.run("state.staffShop=1;state.staffName='Борис';state.staffStockMessage='Новый вход'");finish(reply({ok:true,shopId:2,itemId:'cap',stopped:true}));await p;assert.equal(f.run('state.staffStockMessage'),'Новый вход');assert.equal(f.run('shopStopLists[2].cap'),true);}finally{f.close()}
@@ -38,4 +38,8 @@ test('guest menu refresh updates availability without losing cart items; checkou
 });
 test('failed stock refresh preserves the last known availability and concurrent reads share a request',async()=>{
  const f=app();try{f.run('shopStopLists={1:{cap:true}}');let calls=0;f.w.fetch=async()=>{calls++;return reply(null,false,503)};await Promise.all([f.w.refreshMenuAvailability(),f.w.refreshMenuAvailability()]);assert.equal(calls,2);assert.equal(f.run('itemStopped("cap",1)'),true);}finally{f.close()}
+});
+
+test('owner setting availability for both points resets individual exceptions in one atomic update',async()=>{
+ const f=app();try{f.run("state.adminAuthed=true;state.adminStockShop=0;shopStopLists={1:{cap:false},2:{cap:true}};STOP_LIST.clear()");let payload;f.w.fetch=async(url,opts)=>{assert.match(url,/\/\.json$/);assert.equal(opts.method,'PATCH');payload=JSON.parse(opts.body);return reply(payload)};await f.w.setMenuAvailability('cap');assert.deepEqual(payload,{'stoplist/cap':true,'shop_stoplist/1/cap':null,'shop_stoplist/2/cap':null});assert.equal(f.run('itemStopped("cap",1)'),true);assert.equal(f.run('itemStopped("cap",2)'),true);await f.w.setMenuAvailability('cap');assert.equal(f.run('itemStopped("cap",1)'),false);assert.equal(f.run('itemStopped("cap",2)'),false);}finally{f.close()}
 });
