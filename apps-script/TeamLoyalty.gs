@@ -108,16 +108,18 @@ function teamPayrollStore_(props,root,create){
  if(!sheet&&create){sheet=book.insertSheet('Начисления');sheet.appendRow(['ID операции','Точка','ID смены','Дата смены','Сотрудник','Начало','Конец','Действие','Ставка, ₽','Изменение, ₽','Подтвердил','Время','Данные']);sheet.setFrozenRows(1);}
  if(sheet&&sheet.getRange(1,13).getValue()!=='Данные')throw Error('Проверьте заголовки закрытой зарплатной таблицы.');
  const current={},operations={};if(sheet&&sheet.getLastRow()>1)for(const row of sheet.getRange(2,13,sheet.getLastRow()-1,1).getValues()){
-  const event=JSON.parse(row[0]);if(!event||!event.operationId||!event.key||!event.attendance)throw Error('Повреждена история начислений. Проверьте закрытую таблицу.');
+  const event=JSON.parse(row[0]);if(event?.kind==='attendance'){if(!event.operationId||!event.detail||!Number.isSafeInteger(event.delta))throw Error('Повреждён журнал прихода.');operations[event.operationId]=event;continue;}
+  if(!event||!event.operationId||!event.key||!event.attendance)throw Error('Повреждена история начислений. Проверьте закрытую таблицу.');
   if(!['worked','reversed'].includes(event.attendance.status)||!Number.isSafeInteger(event.attendance.amount)||event.attendance.amount<=0||!Number.isSafeInteger(event.attendance.rate)||event.attendance.rate<=0)throw Error('Повреждена сумма начисления. Проверьте закрытую таблицу.');
   operations[event.operationId]=event;current[event.key]=event;
  }
  return {sheet,current,operations};
 }
 function teamPayrollAppend_(store,event){
- const a=event.attendance;store.sheet.appendRow([event.operationId,event.shopId,event.shiftId,a.date,a.name,a.start,a.end,event.action,a.rate,event.action==='confirmWorkedShift'?a.amount:-a.amount,event.actor,new Date(event.at).toISOString(),JSON.stringify(event)].map(x=>typeof x==='number'?x:sheetText_(x)));SpreadsheetApp.flush();
+ const a=event.attendance||event.detail;store.sheet.appendRow([event.operationId,event.shopId,event.shiftId,a.date,a.name,a.start,a.end,event.action,a.rate||0,event.delta??(event.action==='confirmWorkedShift'?a.amount:-a.amount),event.actor,new Date(event.at).toISOString(),JSON.stringify(event)].map(x=>typeof x==='number'?x:sheetText_(x)));SpreadsheetApp.flush();
 }
 function teamPayrollUnlocked_(store,shopId,id){
+ if(Object.values(store.operations).some(x=>x.kind==='attendance'&&x.action==='finishShiftOpening'&&x.key===shopId+':'+id))throw Error('Смена уже открыта. Изменение графика заблокировано.');
  if(store.current[shopId+':'+id]?.attendance.status==='worked')throw Error('По смене уже начислена зарплата. Сначала администратор должен отменить начисление с причиной.');
 }
 function teamPayrollAction_(request,root,props,actor){
@@ -150,12 +152,16 @@ function teamPayroll_(request,root,props,actor){
  }
  if(actor.admin)for(const shopId of [1,2])for(const [id,row]of Object.entries(schedules[shopId]))if(row.status==='approved'&&row.name&&row.date>=week.start&&row.date<=week.end&&teamShiftEnded_(row)&&store.current[shopId+':'+id]?.attendance.status!=='worked')awaiting.push({id,shopId,date:row.date,start:row.start,end:row.end,name:row.name,revision:row.revision||'',replacementPending:['requested','accepted'].includes(row.swap?.status)});
  rows.sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start)||a.shopId-b.shopId);awaiting.sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start));
+ const attendance=teamAttendanceSummary_(store,actor,week),penaltyTotal=attendance.penalties.reduce((n,x)=>n+x.amount,0);
  const totals={};for(const row of rows){if(!totals[row.name])totals[row.name]={name:row.name,count:0,amount:0};if(row.status==='worked'){totals[row.name].count++;totals[row.name].amount+=row.amount;}}
- return {week,rate:TEAM_SHIFT_RATE_,count:rows.filter(x=>x.status==='worked').length,amount:rows.reduce((n,x)=>n+x.amount,0),rows,...(actor.admin?{awaiting,totals:Object.values(totals).sort((a,b)=>a.name.localeCompare(b.name))}:{})};
+ for(const fine of attendance.penalties){if(!totals[fine.name])totals[fine.name]={name:fine.name,count:0,amount:0};totals[fine.name].amount-=fine.amount;}
+ const penaltyShifts=actor.admin?[1,2].flatMap(shopId=>Object.entries(schedules[shopId]).filter(([,r])=>r.status==='approved'&&r.name&&r.date>=week.start&&r.date<=week.end).map(([id,r])=>({id,shopId,name:r.name,date:r.date,start:r.start,end:r.end,revision:r.revision||''}))):undefined;
+ return {...attendance,...(actor.admin?{penaltyShifts}:{}),gross:rows.reduce((n,x)=>n+x.amount,0),penaltyTotal,week,rate:TEAM_SHIFT_RATE_,count:rows.filter(x=>x.status==='worked').length,amount:rows.reduce((n,x)=>n+x.amount,0)-penaltyTotal,rows,...(actor.admin?{awaiting,totals:Object.values(totals).sort((a,b)=>a.name.localeCompare(b.name))}:{})};
 }
 function handleSchedule_(request,root,props){
  const actor=teamActor_(request,props),shopId=request.shopId;
  if(![1,2].includes(shopId))throw Error('Выберите кофейню.');
+ if(['listShiftOpening','beginShiftOpening','finishShiftOpening','addShiftPenalty','reverseShiftPenalty'].includes(request.action))return teamAttendanceAction_(request,root,props,actor);
  if(request.action==='listPayroll')return teamPayroll_(request,root,props,actor);
  if(['confirmWorkedShift','reverseWorkedShift'].includes(request.action))return teamPayrollAction_(request,root,props,actor);
  if(request.action==='listSchedule'){
@@ -292,4 +298,64 @@ function teamOverview_(request,root,props){
   rows.push({shopId,revenue:revenue?Number(revenue.cash||0)+Number(revenue.cashless||0):null,expense:expenses.reduce((n,x)=>n+Number(x.amount||0),0),photoReports:photos.length,unpaidDeliveries:operations.filter(x=>x.type==='delivery'&&x.paymentStatus==='unpaid').length,issues:operations.filter(x=>x.type==='issue'&&x.status!=='resolved').length,staff:schedule.map(x=>({name:x.name,start:x.start,end:x.end})),cashDifference:revenue&&Number.isFinite(revenue.actualCash)?revenue.actualCash-Number(revenue.cash||0):null});
  }
  return {date,rows};
+}
+
+// Private, append-only attendance and penalty journal; never written to public Firebase.
+function teamLatePenalty_(milliseconds){return milliseconds>=15*60000?1000:milliseconds>=5*60000?200:0;}
+function teamAttendanceEvents_(store){return Object.values(store.operations).filter(x=>x.kind==='attendance');}
+function teamAttendanceSummary_(store,actor,week){
+ const all=teamAttendanceEvents_(store),visible=all.filter(x=>(actor.admin||x.detail.name===actor.name)&&x.detail.date>=week.start&&x.detail.date<=week.end),reversed=new Set(all.filter(x=>x.action==='reverseShiftPenalty').map(x=>x.originalId));
+ const penalties=visible.filter(x=>['finishShiftOpening','addShiftPenalty'].includes(x.action)&&x.delta<0).map(x=>({id:x.operationId,shiftId:x.shiftId,shopId:x.shopId,...x.detail,amount:reversed.has(x.operationId)?0:-x.delta,originalAmount:-x.delta,reversed:reversed.has(x.operationId),reverseReason:all.find(e=>e.action==='reverseShiftPenalty'&&e.originalId===x.operationId)?.detail.reason||'',automatic:x.action==='finishShiftOpening'}));
+ const openings=visible.filter(x=>x.action==='finishShiftOpening').map(x=>({id:x.shiftId,shopId:x.shopId,...x.detail}));
+ return {penalties,openings};
+}
+function teamAttendancePhoto_(request,props,root){
+ const data=request.photo;if(typeof data!=='string'||data.length>2400000||!/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(data))throw Error('Сделайте фото кассы камерой приложения.');
+ const bytes=Utilities.base64Decode(data.split(',')[1]);if(bytes.length<1024||bytes[0]!==-1||bytes[1]!==-40)throw Error('Не удалось прочитать снимок кассы.');
+ const folderId=props.getProperty('PHOTO_FOLDER_ID');if(!folderId)throw Error('Папка фотографий не настроена.');
+ if(root==='/ops_v3_test'&&folderId===props.getProperty('PRODUCTION_PHOTO_FOLDER_ID'))throw Error('Для теста нужна отдельная папка фото.');
+ const folder=DriveApp.getFolderById(folderId);if(folder.getSharingAccess()!==DriveApp.Access.PRIVATE)throw Error('Папка фото должна быть закрыта.');
+ const name='opening_'+request.operationId+'.jpg',files=folder.getFilesByName(name),file=files.hasNext()?files.next():folder.createFile(Utilities.newBlob(bytes,'image/jpeg',name));
+ return file.getUrl();
+}
+function teamAttendanceAction_(request,root,props,actor){
+ let store=teamPayrollStore_(props,root,false);const all=teamAttendanceEvents_(store),shopId=request.shopId;
+ if(request.action==='listShiftOpening'){
+  const date=Utilities.formatDate(new Date(),'Europe/Moscow','yyyy-MM-dd'),rows=Object.entries(dbRead_(root+'/schedule/'+shopId)||{}).filter(([,x])=>x.date===date&&x.status==='approved'&&(actor.admin||x.name===actor.name)).map(([id,x])=>({id,date:x.date,start:x.start,end:x.end,name:x.name,opened:all.find(e=>e.key===shopId+':'+id&&e.action==='finishShiftOpening')?.detail||null}));
+  return {rows,serverAt:Date.now()};
+ }
+ const id=teamId_(request.shiftId),operationId=teamId_(request.operationId),key=shopId+':'+id,reason=String(request.reason||'').trim(),fingerprint=JSON.stringify([request.action,shopId,id,request.sessionId||'',request.originalId||'',request.amount??null,reason]);
+ const prior=store.operations[operationId];if(prior){if(prior.actor!==actor.name||prior.fingerprint!==fingerprint)throw Error('ID операции уже использован.');return {row:{id,shopId},sessionId:prior.operationId,openedAt:prior.detail.openedAt,expiresAt:prior.detail.expiresAt,replayed:true};}
+ const row=dbRead_(root+'/schedule/'+shopId+'/'+id);if(request.action!=='reverseShiftPenalty'&&(!row||row.status!=='approved'||!row.name))throw Error('Нужна утверждённая смена.');
+ const detail=row?{name:row.name,date:row.date,start:row.start,end:row.end}:{},now=Date.now();let delta=0,originalId='';
+ if(['beginShiftOpening','finishShiftOpening'].includes(request.action)){
+  if(actor.admin||actor.name!==row.name)throw Error('Открыть смену может назначенный сотрудник.');
+  if(row.date!==Utilities.formatDate(new Date(),'Europe/Moscow','yyyy-MM-dd')||teamShiftEnded_(row))throw Error('Можно открыть только сегодняшнюю незавершённую смену.');
+  if(['requested','accepted'].includes(row.swap?.status))throw Error('Сначала согласуйте замену.');
+  if(all.some(x=>x.key===key&&x.action==='finishShiftOpening'))throw Error('Смена уже открыта. Обновите экран.');
+  const start=new Date(row.date+'T'+row.start+':00+03:00').getTime();if(now<start-30*60000)throw Error('Открытие доступно за 30 минут до начала смены.');
+  if(request.action==='beginShiftOpening'){
+   const pending=all.filter(x=>x.key===key&&x.action==='beginShiftOpening'&&x.detail.expiresAt>now).pop();
+   if(pending)return {row:{id,shopId},sessionId:pending.operationId,openedAt:pending.detail.openedAt,expiresAt:pending.detail.expiresAt};
+   Object.assign(detail,{openedAt:now,expiresAt:now+5*60000});
+  }else{
+   const session=store.operations[teamId_(request.sessionId)];if(!session||session.action!=='beginShiftOpening'||session.key!==key||session.actor!==actor.name||session.detail.expiresAt<now)throw Error('Время съёмки истекло. Откройте смену заново.');
+   if(session.detail.start!==row.start||session.detail.end!==row.end||session.detail.date!==row.date||session.detail.name!==row.name)throw Error('График изменился. Откройте смену заново.');
+   const lateMs=Math.max(0,session.detail.openedAt-start);Object.assign(detail,{openedAt:session.detail.openedAt,lateMinutes:Math.floor(lateMs/60000),reason:'Опоздание: '+Math.floor(lateMs/60000)+' мин.',photoUrl:teamAttendancePhoto_(request,props,root)});delta=-teamLatePenalty_(lateMs);
+  }
+ }else{
+  if(!actor.admin)throw Error('Штрафы изменяет только администратор.');
+  if(reason.length<3||reason.length>240)throw Error('Укажите причину от 3 до 240 символов.');detail.reason=reason;
+  if(request.action==='addShiftPenalty'){
+   if((row.revision||'')!==(request.revision||''))throw Error('График изменился. Обновите расчёт перед штрафом.');
+   if(!Number.isSafeInteger(request.amount)||request.amount<1||request.amount>100000)throw Error('Введите штраф от 1 до 100000 ₽ целым числом.');delta=-request.amount;
+  }else{
+   originalId=teamId_(request.originalId);const original=store.operations[originalId];
+   if(!original||original.kind!=='attendance'||original.key!==key||!['finishShiftOpening','addShiftPenalty'].includes(original.action)||original.delta>=0)throw Error('Штраф не найден.');
+   if(all.some(x=>x.action==='reverseShiftPenalty'&&x.originalId===originalId))throw Error('Штраф уже отменён.');Object.assign(detail,{name:original.detail.name,date:original.detail.date,start:original.detail.start,end:original.detail.end,reason});delta=-original.delta;
+  }
+ }
+ if(!store.sheet)store=teamPayrollStore_(props,root,true);
+ teamPayrollAppend_(store,{kind:'attendance',operationId,key,shopId,shiftId:id,action:request.action,actor:actor.name,at:now,fingerprint,detail,delta,originalId});
+ return {row:{id,shopId},sessionId:operationId,openedAt:detail.openedAt,expiresAt:detail.expiresAt};
 }
