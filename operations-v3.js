@@ -5,7 +5,7 @@ const REPORTS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbwtUCHluill
 let opsChecklistConfig = {}, opsPhotoDrafts = {}, opsQueueBusy = false;
 const OPS_STAGE_NAMES = {open:'Открытие',day:'В течение дня',close:'Закрытие'};
 function opsRoot(){ return OPS_V3_TEST_MODE ? '/ops_v3_test' : '/ops_v3'; }
-function opsId(){ return crypto.randomUUID().replace(/-/g,''); }
+function opsId(){return Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');}
 function opsDraftKey(){return [state.staffShop,state.staffName,todayKey(),state.opMode==='checklist'?state.checklistStage:state.opMode].join(':');}
 function getChecklistItems(stage,shopId=state.staffShop){
   const custom=opsChecklistConfig[shopId]?.stages?.[stage];
