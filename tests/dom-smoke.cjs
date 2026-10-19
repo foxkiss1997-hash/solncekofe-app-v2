@@ -46,6 +46,13 @@ try{
  evaluate("state.staffShop=2;render();");assert.equal(evaluate('shiftSelection().length'),0);
  evaluate("state.staffShop=1;render();");assert.equal(evaluate('shiftSelection().length'),2);
  console.log('PASS: edited multi-shift draft survives reload and remains isolated by employee and shop');
+ evaluate("state.screen='admin';state.adminAuthed=true;state.adminTab='schedule';state.teamShop=1;teamUI.scheduleKey='owner:1';teamUI.schedule={staff:['Анна'],rows:Array.from({length:8},(_,i)=>({id:String(i+1).repeat(32),date:'2027-01-'+(20+i),start:'08:00',end:'21:00',name:'Анна',status:'pending',revision:'a'.repeat(32),requestBatchId:'a'.repeat(32)}))};render();");
+ assert.equal(w.document.querySelectorAll('.approval-card').length,1);assert.match(w.document.querySelector('.approval-card').textContent,/Анна · 8 смен/);assert.equal(w.document.querySelectorAll('.approval-slot').length,8);
+ w.document.querySelector('[data-action="team-review-preview"][data-decision="approveShifts"]').click();assert.equal(evaluate('teamUI.review.items.length'),8);assert.ok(w.document.querySelector('[data-action="team-review-confirm"]'));
+ w.document.querySelector('[data-action="team-review-cancel"]').click();assert.equal(evaluate('teamUI.review'),null);
+ evaluate("state.teamShop=2;render();");assert.equal(w.document.querySelectorAll('.approval-card').length,0);
+ console.log('PASS: administrator sees eight shifts as one review card with explicit confirmation and shop isolation');
+ evaluate("Object.assign(state,{screen:'staff',staffShop:1,staffName:'Анна'});teamUI.scheduleKey='Анна:1';teamUI.schedule={rows:[],staff:[]};teamUI.busy=false;render();");
  evaluate("localStorage.removeItem(shiftDraftKey());loadShiftSelection();teamUI.schedule.rows=[];teamUI.calendarMonth='2027-01';teamUI.calendarDate='2027-01-01';render();");
  w.document.querySelector('[data-action="team-calendar-multi"]').click();
  for(const day of [20,21,22,23,24,25,26,27])w.document.querySelector('[data-date="2027-01-'+day+'"]').click();

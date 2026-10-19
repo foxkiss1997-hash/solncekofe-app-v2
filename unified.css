@@ -27,3 +27,7 @@ input,select,textarea{font-size:16px!important}button{touch-action:manipulation}
 .shift-selection>div{display:grid;grid-template-columns:1fr auto;gap:8px}.shift-selection>div>span{grid-column:1/-1;min-width:0;overflow-wrap:anywhere}.shift-selection>div>.ops-cancel{justify-self:start}
 
 .calendar-day.multi-selected{outline:3px solid #b37b30;outline-offset:-3px;background:#ffda68;color:#3f2c13}.calendar-day.multi-selected b:after{content:" ✓";font-size:10px}
+
+.schedule-approvals{margin:18px 0 24px}.approval-card{margin:12px 0;padding:14px;background:rgba(255,255,255,.55);border:1px solid rgba(153,118,74,.22);border-radius:18px}.approval-card h4{margin:0 0 10px}.approval-slot{padding:7px 0;border-top:1px solid rgba(145,119,86,.12);overflow-wrap:anywhere}.approval-slot b{font-size:13px}.approval-slot small{display:block;color:#716557;margin-top:3px}.approval-card .schedule-actions{margin-top:12px;display:grid;grid-template-columns:1fr}.schedule-approvals .ops-message{padding:12px;border-radius:14px;background:#fff0bf}
+
+.schedule-approvals{scroll-margin-top:94px}
