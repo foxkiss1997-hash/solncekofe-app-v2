@@ -49,6 +49,10 @@ window.previewSetup=function(state,team){
  const query=new URLSearchParams(location.search),role=query.get('role');state.shopId=2;
  if(query.has('fines')){const p=window.previewPayroll;p.gross=21000;p.penaltyTotal=1200;p.amount=19800;p.totals[0].amount=19800;p.penalties=[{id:'a'.repeat(32),shiftId:'1'.repeat(32),shopId:2,name:'Анна',date:'2026-10-12',amount:200,reason:'Опоздание: 7 мин.',automatic:true},{id:'b'.repeat(32),shiftId:'2'.repeat(32),shopId:2,name:'Анна',date:'2026-10-13',amount:1000,reason:'Опоздание: 20 мин.',automatic:true}];p.openings=[{id:'1'.repeat(32),shopId:2,name:'Анна',date:'2026-10-12',openedAt:Date.parse('2026-10-12T08:07:00+03:00'),lateMinutes:7}];}
 
+ if(['order-ready','order-preparing'].includes(query.get('view'))){
+  const ready=query.get('view')==='order-ready';localStorage.removeItem('sk_pending_payment');state.paymentPending=null;
+  state.screen='status';state.order={firebaseId:ready?'DEMO_READY':'DEMO_PREPARING',number:'766',status:ready?'done':'accepted',shop:{id:1,name:'Рязанский проспект',addr:'1-я Новокузьминская, 15/5'},shopId:1,pickupLabel:'Скоро',prepMinutes:6,acceptedAt:Date.now()-60000,completedBy:ready?'Анна':null,completedAt:ready?Date.now():null,placedAt:Date.now()};localStorage.setItem('sk_active_order',JSON.stringify(state.order));
+ }
  if(['payment','checkout'].includes(query.get('view'))){
   Object.assign(state,{screen:query.get('view'),shopId:1,guestName:'Демо-гость',receiptContact:'guest@example.org',cart:[{uid:'demo-cap',itemId:'cap',category:'coffee',name:'Капучино',sizeId:'m',qty:1,unitPrice:300,milk:null,syrup:null,shot:false}]});
   if(query.get('view')==='payment'){
