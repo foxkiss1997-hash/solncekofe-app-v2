@@ -399,8 +399,8 @@ async function loadShiftOpening(){
  if(teamUI.busy)return;stopShiftCamera();const identity=teamIdentity();teamUI.busy=true;teamUI.openingRows=null;teamUI.openingIdentity=identity;teamUI.openingStatus='loading';teamUI.openingError='';teamUI.message='';render();
  try{const data=await teamRequest({action:'listShiftOpening'});if(identity===teamIdentity()){
   if(!Array.isArray(data.rows))throw Error('Сервер не вернул список смен. Повторите загрузку.');
-  teamUI.openingRows=data.rows;teamUI.openingDate=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(data.serverAt||Date.now()));teamUI.openingStatus='ready';
- }}catch(e){if(identity===teamIdentity()){teamUI.openingError=e.message;teamUI.openingStatus='error';}}finally{teamUI.busy=false;render();}
+  teamUI.openingRows=data.rows;teamUI.openingDate=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(data.serverAt||Date.now()));teamUI.openingStatus='ready';applyConfirmedShiftStatus(data);
+ }}catch(e){if(identity===teamIdentity()){teamUI.openingError=e.message;teamUI.openingStatus='error';state.shiftStatus='error';}}finally{teamUI.busy=false;render();}
 }
 async function startAvailableShift(){
  if(teamUI.busy)return;
@@ -413,14 +413,16 @@ function renderShiftOpening(){
  const same=teamUI.openingIdentity===teamIdentity(),rows=same?teamUI.openingRows:null,status=same?teamUI.openingStatus:'idle',disabled=teamUI.busy?'disabled':'',shop=SHOPS.find(x=>x.id===teamShop());
  const context=`${esc(state.staffName)} · ${esc(shop?.name||'Выбранная кофейня')}${same&&teamUI.openingDate?' · '+payrollShortDate(teamUI.openingDate):''}`;
  const empty=Array.isArray(rows)&&rows.length===0;
- return `<div class="ops-form" id="ops-active-form"><h3>Открыть смену</h3><p class="hint">${context}</p><p class="hint">Сфотографируйте кассу с открытой сменой. Время фиксирует сервер при нажатии; на съёмку — 5 минут. До подтверждения сервера смена не открыта.</p><p class="hint">Опоздание: менее 5 минут — 0 ₽; с 5 минут — 200 ₽; с 15 минут — 1 000 ₽.</p>
+ return `<div class="ops-form" id="ops-active-form"><h3>${rows?.length&&rows.every(r=>r.opened)?'Смена уже открыта':'Открыть смену'}</h3><p class="hint">${context}</p>${rows?.length&&rows.every(r=>r.opened)?'<p class="hint">Смена уже открыта. Время и фото сохранены на сервере. Повторное открытие не требуется.</p>':`<p class="hint">Сфотографируйте кассу с открытой сменой. Время фиксирует сервер при нажатии; на съёмку — 5 минут. До подтверждения сервера смена не открыта.</p><p class="hint">Опоздание: менее 5 минут — 0 ₽; с 5 минут — 200 ₽; с 15 минут — 1 000 ₽.</p>`}
  ${!rows?.length?`<button class="ops-submit" data-action="shift-opening-start" ${disabled}>${status==='loading'?'Загружаем смены…':'Открыть смену · сделать фото кассы'}</button>`:''}
  ${status==='loading'?'<p class="hint" role="status">Проверяем ваш график. Дождитесь ответа сервера.</p>':status==='error'?`<p class="ops-message bad" role="alert">Не удалось загрузить смены: ${esc(teamUI.openingError||'Повторите попытку.')} Открытие пока не подтверждено.</p>`:empty?'<p class="hint">На сегодня нет вашей утверждённой смены в этой кофейне. Выберите смену в графике и дождитесь согласования. Если смена уже согласована, проверьте выбранную точку и обновите список.</p>':!rows?'<p class="hint">Нажмите кнопку, чтобы проверить график и открыть камеру для вашей смены.</p>':''}
  ${rows?.map(r=>`<div class="payroll-row"><b>${esc(r.start)}–${esc(r.end)}</b>${r.opened?`<span>Смена открыта · ${new Date(r.opened.openedAt).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'})}</span><span>Опоздание: ${r.opened.lateMinutes} мин.</span>`:`<button class="ops-submit" data-action="shift-camera-open" data-id="${r.id}" ${disabled}>Открыть смену · сделать фото кассы</button>`}</div>`).join('')||''}
  ${empty?`<button class="ops-cancel" data-action="open-op" data-mode="schedule" ${disabled}>Мой график · выбрать смену</button>`:''}<button class="ops-cancel" data-action="shift-opening-refresh" ${disabled}>Обновить список смен</button>${teamUI.message?`<p class="ops-message" role="status">${esc(teamUI.message)}</p>`:''}<button class="ops-cancel" data-action="close-op">Закрыть</button></div>`;
 }
 async function openShiftCamera(id){
- if(teamUI.busy||teamIsAdmin())return;stopShiftCamera();const identity=teamIdentity();teamUI.busy=true;teamUI.message='';render();let stream;
+ if(teamUI.busy||teamIsAdmin())return;
+ if(teamUI.openingIdentity!==teamIdentity()||teamUI.openingDate!==todayKey()||teamUI.openingStatus!=='ready'||!teamUI.openingRows?.some(r=>r.id===id&&!r.opened)){await loadShiftOpening();return;}
+ stopShiftCamera();const identity=teamIdentity();teamUI.busy=true;teamUI.message='';render();let stream;
  try{
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Камера недоступна. Откройте приложение в браузере с разрешением камеры или обратитесь к администратору.');
   // A new button attempt gets a fresh ID; retries after a lost response reuse this attempt.
@@ -472,7 +474,7 @@ window.addEventListener('pagehide',stopShiftCamera);
 // Refresh only an employee's visible calendar; preserve focus, selection and drafts.
 let staffCalendarRefreshing=false;
 if(typeof window.setInterval==='function')window.setInterval(async()=>{
- if(staffCalendarRefreshing||teamUI.busy||document.visibilityState==='hidden'||state.screen!=='staff'||state.opMode!=='schedule'||!state.staffName||!state.reportPassword)return;
+ if(staffCalendarRefreshing||teamUI.busy||document.visibilityState==='hidden'||state.screen!=='staff'||state.opMode!=='schedule'||!state.staffName||!hasStaffAuth())return;
  const identity=teamIdentity();staffCalendarRefreshing=true;
  try{const data=await teamRequest({action:'listSchedule'});if(identity===teamIdentity()&&state.screen==='staff'&&state.opMode==='schedule'&&!teamUI.busy&&JSON.stringify(data)!==JSON.stringify(teamUI.schedule)){teamUI.schedule=data;teamUI.scheduleKey=identity;render();}}catch(e){}finally{staffCalendarRefreshing=false;}
 },15000);
@@ -537,3 +539,91 @@ document.addEventListener('click',e=>{
 });
 
 function loyaltyQrData(text){return window.SolnceQR?window.SolnceQR.qrDataURL(text):'';}
+
+
+// Persistent sign-in and attendance are separate: login never opens a shift.
+function hasStaffAuth(){return !!(state.staffSessionToken||state.reportPassword);}
+async function staffSessionOperation(request){
+ const token=state.staffSessionToken;
+ let result;try{result=await paymentJson(PAYMENT_RELAY_URL+'/staff-operation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,request})},60000);}catch(e){if(e.status===401&&state.staffSessionToken===token){clearStaffSession();state.staffName=null;state.staffPinError=e.message;render();}throw e;}
+ if(result.ok!==true)throw Error(result.error||'Нет подтверждения сохранения.');return result;
+}
+function applyStaffSession(session){
+ Object.assign(state,{staffShop:session.shopId,staffName:session.name,staffSessionToken:session.token,staffSessionExpiresAt:session.expiresAt,reportPassword:'',staffPinValue:'',staffPinError:'',staffRestoreError:'',shiftOpenedAt:null,shiftStatus:'loading',shiftStatusDate:'',opMode:null,screen:'staff'});
+}
+async function loginPersistentStaff(){
+ if(state.staffListLoading||state.staffRestoring)return;
+ const shopId=state.staffShop,password=String(state.staffPinValue||'').trim();
+ if(![1,2].includes(shopId)||!password){state.staffPinError='Выберите кофейню и введите личный пароль.';render();return;}
+ const generation=state.staffSessionGeneration||0;state.staffListLoading=true;state.staffPinError='';render();
+ try{
+  const result=await paymentJson(PAYMENT_RELAY_URL+'/staff-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'login',shopId,password,telegramId:TELEGRAM_ID||undefined})},20000);
+  if(generation!==(state.staffSessionGeneration||0)||state.staffShop!==shopId)return;
+  if(result.ok!==true||!result.token||result.shopId!==shopId)throw Error(result.error||'Вход не подтверждён.');
+  applyStaffSession(result);saveStaffSession(result);loadChecklistConfig();updateOpsPending();loadStaffOrders();loadTodayOps();await refreshStaffShiftStatus();
+ }catch(e){state.staffPinError=e.message;}finally{state.staffListLoading=false;render();}
+}
+let staffRestorePromise=null,staffShiftRefreshPromise=null;
+async function enterStaffCabinet(){
+ state.screen='staff';state.staffRestoreError='';
+ const saved=loadStaffSession();
+ if(!saved){if(!state.staffSessionToken&&!state.reportPassword)state.staffName=null;render();if(state.staffName)refreshStaffShiftStatus();return false;}
+ if(staffRestorePromise)return staffRestorePromise;
+ const generation=state.staffSessionGeneration||0;state.staffRestoring=true;render();
+ staffRestorePromise=(async()=>{
+  try{
+   const result=await paymentJson(PAYMENT_RELAY_URL+'/staff-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'restore',token:saved.token})},20000);
+   if(generation!==(state.staffSessionGeneration||0))return false;
+   if(result.ok!==true||result.shopId!==saved.shopId||result.name!==saved.name)throw Error(result.error||'Сохранённый вход не подтверждён.');
+   applyStaffSession({...result,token:saved.token});state.staffRestoring=false;render();loadChecklistConfig();updateOpsPending();loadStaffOrders();loadTodayOps();await refreshStaffShiftStatus();return true;
+  }catch(e){
+   if(generation!==(state.staffSessionGeneration||0))return false;
+   state.staffName=null;state.staffSessionToken='';state.shiftOpenedAt=null;
+   if(e.status===401||/Вход истёк|Доступ изменился|Войдите под личным/.test(e.message)){try{localStorage.removeItem('sk_staff_session');}catch(_){}state.staffPinError=e.message;state.staffShop=saved.shopId;}
+   else state.staffRestoreError=e.message;
+   return false;
+  }finally{if(generation===(state.staffSessionGeneration||0)){state.staffRestoring=false;render();}staffRestorePromise=null;}
+ })();return staffRestorePromise;
+}
+function applyConfirmedShiftStatus(data){
+ const date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(data.serverAt||Date.now()));
+ const rows=data.rows.filter(r=>r.name===state.staffName||!r.name),opened=rows.filter(r=>r.opened&&Number.isFinite(Number(r.opened.openedAt)));
+ state.shiftOpenedAt=opened.length?Math.min(...opened.map(r=>Number(r.opened.openedAt))):null;
+ state.shiftStatus=opened.length?'opened':rows.length?'available':'none';state.shiftStatusDate=date;
+}
+async function refreshStaffShiftStatus(){
+ if(state.screen!=='staff'||!state.staffName||!hasStaffAuth()||teamUI.busy)return;
+ if(staffShiftRefreshPromise)return staffShiftRefreshPromise;
+ const identity=teamIdentity();state.shiftStatus='loading';render();
+ staffShiftRefreshPromise=(async()=>{
+  try{const data=await teamRequest({action:'listShiftOpening'});if(identity!==teamIdentity())return;
+   if(!Array.isArray(data.rows))throw Error('Нет подтверждения графика.');applyConfirmedShiftStatus(data);
+   teamUI.openingRows=data.rows;teamUI.openingIdentity=identity;teamUI.openingDate=state.shiftStatusDate;teamUI.openingStatus='ready';teamUI.openingError='';
+  }catch(e){if(identity===teamIdentity()){state.shiftStatus='error';teamUI.openingStatus='error';teamUI.openingError=e.message;}}
+  finally{staffShiftRefreshPromise=null;if(identity===teamIdentity())render();}
+ })();return staffShiftRefreshPromise;
+}
+function staffShiftLabel(){
+ const current=state.shiftStatusDate===todayKey();
+ if(state.shiftStatus==='loading')return 'Проверяем смену…';
+ if(state.shiftStatus==='error')return 'Статус смены не обновлён';
+ if(current&&state.shiftOpenedAt)return 'Смена открыта · '+new Date(state.shiftOpenedAt).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
+ if(current&&state.shiftStatus==='none')return 'На сегодня смена не назначена';
+ return 'Смена ещё не открыта';
+}
+function renderStaffShiftAction(){
+ if(state.opMode==='opening')return '';
+ if(state.shiftStatus==='loading')return '<button class="ops-cancel" disabled>Проверяем смену…</button>';
+ if(state.shiftStatusDate===todayKey()&&state.shiftOpenedAt)return '<button class="ops-cancel" data-action="open-op" data-mode="opening">✓ Смена открыта · посмотреть</button>';
+ if(state.shiftStatus==='error')return '<button class="ops-cancel" data-action="staff-shift-retry">Обновить статус смены</button>';
+ if(state.shiftStatusDate===todayKey()&&state.shiftStatus==='none')return '<button class="ops-cancel" data-action="open-op" data-mode="schedule">Посмотреть мой график</button>';
+ return '<button class="ops-submit" data-action="open-op" data-mode="opening">📷 Открыть смену</button>';
+}
+document.addEventListener('click',e=>{
+ const a=e.target.closest('[data-action]')?.dataset.action;
+ if(a==='staff-session-retry')enterStaffCabinet();
+ else if(a==='staff-session-reset'){clearStaffSession();state.staffRestoreError='';state.staffRestoring=false;state.staffName=null;state.staffPinValue='';render();}
+ else if(a==='staff-shift-retry')refreshStaffShiftStatus();
+});
+window.addEventListener('focus',()=>{if(state.screen==='staff'&&state.staffName)refreshStaffShiftStatus();});
+function startStaffSessionUpdates(){setInterval(()=>{if(state.screen==='staff'&&state.staffName&&!document.hidden&&state.shiftStatusDate!==todayKey())refreshStaffShiftStatus();},60000);}

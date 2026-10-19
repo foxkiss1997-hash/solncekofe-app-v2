@@ -683,8 +683,8 @@
 
 .ops-photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.ops-photo-grid img{width:100%;height:120px;object-fit:cover;border-radius:12px}.ops-photos{margin:12px 0}.ops-check-editor{margin:14px 0;padding:12px;border:1px solid #33443a;border-radius:15px}.ops-check-editor.archived{opacity:.55}.admin-sun .tabs{overflow-x:auto;display:flex}.admin-sun .tab{flex-shrink:0}
 </style>
-<link rel="stylesheet" href="unified.css?v=20261019-loyalty2">
-<link rel="stylesheet" href="frosted-glass.css?v=20261019-loyalty2">
+<link rel="stylesheet" href="unified.css?v=20261019-session2">
+<link rel="stylesheet" href="frosted-glass.css?v=20261019-session2">
 </head>
 <body>
   <div class="shell">
@@ -692,12 +692,12 @@
     <div id="app"></div>
   </div>
 
-<script src="operations-v3.js?v=20261019-loyalty2"></script>
-<script src="stable-ui.js?v=20261019-loyalty2"></script>
-<script src="assets/loyalty-qr.js?v=20261019-loyalty2"></script>
-<script src="team-loyalty.js?v=20261019-loyalty2"></script>
-<script src="menu-photos.js?v=20261019-loyalty2"></script>
-<script src="menu-experience.js?v=20261019-loyalty2"></script>
+<script src="operations-v3.js?v=20261019-session2"></script>
+<script src="stable-ui.js?v=20261019-session2"></script>
+<script src="assets/loyalty-qr.js?v=20261019-session2"></script>
+<script src="team-loyalty.js?v=20261019-session2"></script>
+<script src="menu-photos.js?v=20261019-session2"></script>
+<script src="menu-experience.js?v=20261019-session2"></script>
 <script>
 /* ---------- DATA (menu: Солнцекофе, Yandex Eda) ---------- */
 const CATEGORIES = [
@@ -1363,18 +1363,16 @@ function clearStoredOrder(){
 
 // Remembers which shop + which staff member is logged in on this device, so
 // staff don't have to re-enter their password every time the app reopens.
-function saveStaffSession(shopId, name){
-  try{ localStorage.setItem('sk_staff_session', JSON.stringify({ shopId, name })); }catch(e){}
+function saveStaffSession(session){
+ try{localStorage.setItem('sk_staff_session',JSON.stringify({token:session.token,shopId:session.shopId,name:session.name,expiresAt:session.expiresAt}));return true;}catch(e){showToast('Вход доступен сейчас, но устройство не сохранило его.');return false;}
 }
 function loadStaffSession(){
-  try{
-    const raw = localStorage.getItem('sk_staff_session');
-    if(!raw) return null;
-    return JSON.parse(raw);
-  }catch(e){ return null; }
+ try{const s=JSON.parse(localStorage.getItem('sk_staff_session')||'null');return s&&/^[a-f0-9]{64}$/.test(s.token||'')&&[1,2].includes(s.shopId)&&s.name&&s.expiresAt>Date.now()?s:null;}catch(e){return null;}
 }
 function clearStaffSession(){
-  try{ localStorage.removeItem('sk_staff_session'); }catch(e){}
+ const token=state.staffSessionToken||loadStaffSession()?.token;state.staffSessionToken='';state.staffSessionExpiresAt=0;state.staffRestoring=false;state.staffRestoreError='';state.shiftOpenedAt=null;state.shiftStatus='idle';state.shiftStatusDate='';state.staffSessionGeneration=(state.staffSessionGeneration||0)+1;
+ try{localStorage.removeItem('sk_staff_session');}catch(e){}
+ if(token)paymentJson(PAYMENT_RELAY_URL+'/staff-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout',token})}).catch(()=>{});
 }
 
 /* ---------- RENDER: MENU ---------- */
@@ -1612,15 +1610,17 @@ function renderCard(){
 
 /* ---------- RENDER: STAFF ---------- */
 function renderStaff(){
+  if(state.staffRestoring)return `<div class="screen ops-shell"><div class="ops-form"><h2>Возвращаемся в кабинет</h2><p role="status">Проверяем сохранённый вход…</p></div></div>`;
+  if(state.staffRestoreError)return `<div class="screen ops-shell"><div class="ops-form"><h2>Не удалось проверить вход</h2><p role="status">${esc(state.staffRestoreError)}</p><button class="ops-submit" data-action="staff-session-retry">Повторить проверку</button><button class="ops-cancel" data-action="staff-session-reset">Войти заново</button></div></div>`;
   if(!state.staffName){
     return `<div class="screen ops-shell"><div class="topbar"><button class="iconbtn rippleable" data-action="back-to-menu">←</button><h2>Вход сотрудника</h2></div><div class="ops-hero"><div class="ops-kicker">СОЛНЦЕКОФЕ · КОМАНДА</div><h1>Рабочий день без лишних действий</h1><div class="ops-muted">Выберите кофейню и введите личный пароль для этой точки.</div></div><div class="ops-form">${renderStaffShopSelector()}<input class="text-input" type="password" placeholder="Личный пароль" data-action="set-staff-pin" value="${esc(state.staffPinValue)}">${state.staffPinError?`<div class="ops-message bad">${state.staffPinError}</div>`:''}<button class="ops-submit rippleable" data-action="staff-pin-submit">${state.staffListLoading?'Проверяем…':'Войти →'}</button></div></div>`;
   }
   const shop=SHOPS.find(s=>s.id===state.staffShop)||{name:'Точка'};
-  const shiftText=state.shiftOpenedAt?'Смена открыта · '+new Date(state.shiftOpenedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'Рабочая смена';
+  const shiftText=staffShiftLabel();
   return `<div class="screen ops-shell">
-    <div class="topbar"><button class="iconbtn rippleable" data-action="staff-change-name">←</button><h2>☀️ СОЛНЦЕКОФЕ</h2><button class="iconbtn rippleable" data-action="staff-refresh" style="margin-left:auto">⟳</button><button class="iconbtn rippleable" data-action="staff-logout">🚪</button></div>
+    <div class="topbar"><button class="iconbtn rippleable" data-action="back-to-menu" aria-label="В меню">←</button><h2>☀️ СОЛНЦЕКОФЕ</h2><button class="iconbtn rippleable" data-action="staff-refresh" style="margin-left:auto">⟳</button><button class="iconbtn rippleable" data-action="staff-logout">🚪</button></div>
     <div class="ops-hero">${renderStaffShopSelector()}<div class="ops-kicker">${esc(shop.name)}</div><h1>Добрый день, ${esc(state.staffName)}!</h1><div class="shift-pill">● ${shiftText}</div></div>
-    <div class="ops-wide"><button class="ops-submit" data-action="open-op" data-mode="opening">📷 Открыть смену</button><button class="ops-cancel" style="margin-top:8px" data-action="open-op" data-mode="stock">⛔ Стоп-лист меню</button></div>
+    <div class="ops-wide">${renderStaffShiftAction()}<button class="ops-cancel" style="margin-top:8px" data-action="open-op" data-mode="stock">⛔ Стоп-лист меню</button></div>
     <div class="ops-grid"><button class="ops-card green rippleable" data-action="open-op" data-mode="stamp"><span class="ops-ico">☕</span><b>Начислить штамп</b><small>QR-код или ID гостя</small></button><button class="ops-card sun rippleable" data-action="open-op" data-mode="reward"><span class="ops-ico">🎁</span><b>Подарки и бонусы</b><small>Сканировать карту гостя</small></button></div>
     <div class="ops-grid"><button class="ops-card green rippleable" data-action="open-op" data-mode="delivery"><span class="ops-ico">📦</span><b>Поставка</b><small>Приход товара и накладная</small></button><button class="ops-card sun rippleable" data-action="open-op" data-mode="expense"><span class="ops-ico">💸</span><b>Расход</b><small>Из кассы или безнал</small></button><button class="ops-card red rippleable" data-action="open-op" data-mode="issue"><span class="ops-ico">⚠️</span><b>Проблема</b><small>Сообщить владельцу</small></button><button class="ops-card rippleable" data-action="open-op" data-mode="close"><span class="ops-ico">🌙</span><b>Закрыть смену</b><small>Деньги · чек-лист · фото</small></button></div>
     <div class="ops-wide"><div class="ops-wide-title">Сегодня</div><div class="ops-stats"><div class="ops-stat"><b>${state.todayOps.deliveries||0}</b><span>ПОСТАВОК</span></div><div class="ops-stat"><b>${state.todayOps.expenses||0}</b><span>РАСХОДОВ</span></div><div class="ops-stat"><b>${state.todayOps.issues||0}</b><span>ПРОБЛЕМ</span></div></div></div>
@@ -2194,49 +2194,7 @@ async function loadStaffList(){
   state.staffListLoading = false; render();
 }
 
-async function staffPasswordLogin(){
-  const selectedShop=state.staffShop;
-  if(![1,2].includes(selectedShop)){state.staffPinError='Сначала выберите кофейню.';render();return;}
-  const pass = (state.staffPinValue||'').trim();
-  if(!pass){ state.staffPinError='Введите пароль.'; render(); return; }
-  if(state.staffListLoading) return;
-  state.staffListLoading = true; render();
-
-  let match = null, matchedShop = null;
-  for(const shop of SHOPS.filter(s=>s.id===selectedShop)){
-    try{
-      const res = await fetch(DB_URL + '/staff/' + shop.id + '.json');
-      const obj = res.ok ? await res.json() : null;
-      const list = obj ? Object.keys(obj).map(id=>Object.assign({id}, obj[id])) : [];
-      const found = list.find(m => m.active!==false && (m.password||'') === pass);
-      if(found){ match = found; matchedShop = shop.id; break; }
-    }catch(e){ /* try the next shop */ }
-  }
-
-  state.staffListLoading = false;
-  if(state.staffShop!==selectedShop)return;
-  if(!match){
-    state.staffPinError = 'Пароль не подходит для выбранной кофейни. Попросите администратора добавить вас в эту точку.';
-    render();
-    return;
-  }
-  state.staffShop = matchedShop;
-  state.staffName = match.name;
-  state.staffPinError = '';
-  state.reportPassword=pass;
-  state.staffPinValue = '';
-  loadChecklistConfig();updateOpsPending();
-  saveStaffSession(state.staffShop, match.name);
-  // Auto-link this device's Telegram id to the employee, so order alerts reach them personally.
-  if(TELEGRAM_ID && match.tg !== TELEGRAM_ID){
-    try{
-      await fetch(DB_URL + '/staff/' + state.staffShop + '/' + match.id + '.json', {
-        method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ tg: TELEGRAM_ID })
-      });
-    }catch(e){}
-  }
-  loadStaffOrders();loadTodayOps();
-}
+async function staffPasswordLogin(){return loginPersistentStaff();}
 
 let staffOrdersGeneration=0;
 async function loadStaffOrders(silent){
@@ -3119,23 +3077,13 @@ document.addEventListener('click', (e)=>{
   else if(action==='new-order'){ newOrder(); }
   else if(action==='status-to-menu'){ state.screen='menu'; render(); }
   else if(action==='back-to-status'){ state.screen='status'; render(); }
-  else if(action==='go-staff'){
-    const saved = loadStaffSession();
-    if(saved && saved.shopId && saved.name){
-      state.staffShop = saved.shopId;
-      state.staffName = saved.name;
-      state.screen='staff'; state.shiftOpenedAt=Date.now(); render();
-      loadStaffOrders(); loadTodayOps();
-    } else {
-      state.screen='staff'; render();
-    }
-  }
+  else if(action==='go-staff'){ enterStaffCabinet(); }
   else if(action==='go-admin'){ state.screen='admin'; render(); }
   else if(action==='staff-pin-submit'){ staffPasswordLogin(); }
   else if(action==='admin-pin-submit'){ adminPasswordLoginV3(); }
   else if(action==='staff-change-name'){ state.reportPassword='';state.opMode=null;state.shiftChecks=emptyShiftChecks();state.staffName=null; state.staffPinValue=''; clearStaffSession(); render(); }
   else if(action==='staff-logout'){state.reportPassword='';state.opMode=null;state.shiftChecks=emptyShiftChecks();state.staffShop=null; state.staffName=null; state.staffOrders=[]; clearStaffSession(); state.screen='menu'; render(); }
-  else if(action==='staff-refresh'){ if(state.opMode==='schedule')teamLoadSchedule();loadStaffOrders(); loadTodayOps();loadChecklistConfig();updateOpsPending(); }
+  else if(action==='staff-refresh'){ refreshStaffShiftStatus(); if(state.opMode==='schedule')teamLoadSchedule();loadStaffOrders(); loadTodayOps();loadChecklistConfig();updateOpsPending(); }
   else if(action==='staff-charge-loyalty'){ chargeLoyaltyById(); }
   else if(action==='set-redeem-guest-id'){ state.redeemGuestId = el.value; }
   else if(action==='set-redeem-voucher-id'){ state.redeemVoucherId = el.value; }
@@ -3370,7 +3318,7 @@ async function paymentJson(url,options={},timeout=15000){
     const response=await fetch(url,{...options,signal:controller.signal});
     let data;
     try{data=await response.json();}catch(e){throw Error('Сервер оплаты вернул некорректный ответ. Попробуйте позже.');}
-    if(!response.ok)throw Error(typeof data?.error==='string'?data.error:'Сервис оплаты временно недоступен (код '+response.status+').');
+    if(!response.ok)throw Object.assign(Error(typeof data?.error==='string'?data.error:'Сервис временно недоступен (код '+response.status+').'),{status:response.status});
     return data;
   }finally{clearTimeout(timer);}
 }
@@ -3478,10 +3426,12 @@ initMenuPreferences();
 initOpsV3();
 startMenuAvailabilityUpdates();
 startLoyaltyUpdates();
+startStaffSessionUpdates();
 const operationsEntry = new URLSearchParams(location.search).get('screen');
 if(operationsEntry === 'staff' || operationsEntry === 'admin'){
   state.screen = operationsEntry;
   render();
+  if(operationsEntry==='staff')enterStaffCabinet();
 } else {
 if(operationsEntry==='card')state.screen='card';
 const cameFromPayment = checkPaymentReturn();
@@ -3506,6 +3456,7 @@ loadWheelPrizes();
 loadShopPhotos();
 initLoyalty();
 render();
+if(!operationsEntry&&!cameFromPayment&&loadStaffSession()&&!window.SOLNCE_PREVIEW)enterStaffCabinet();
 }
 </script>
 </body>
