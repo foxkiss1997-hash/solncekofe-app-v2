@@ -254,6 +254,52 @@ async function placePickupOrder(){
  }catch(e){state.checkoutError=e.message+' Заказ не подтверждён на этом экране. Повторная отправка использует тот же номер.';}
  finally{state.payingNow=false;render();}
 }
+function payrollKey(){return teamIdentity()+':'+(teamUI.payrollDate||todayKey());}
+async function loadTeamPayroll(){
+ if(teamUI.busy)return;const key=payrollKey();teamUI.busy=true;teamUI.message='';teamUI.payrollReview=null;render();
+ try{const data=await teamRequest({action:'listPayroll',date:teamUI.payrollDate||todayKey()});if(key===payrollKey()){teamUI.payroll=data;teamUI.payrollKey=key;}}
+ catch(e){teamUI.message=e.message;}finally{teamUI.busy=false;render();}
+}
+function movePayrollWeek(delta){
+ if(teamUI.busy)return;const date=teamUI.payrollKey===payrollKey()?teamUI.payroll.week.start:teamUI.payrollDate||todayKey(),d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+delta*7);teamUI.payrollDate=d.toISOString().slice(0,10);loadTeamPayroll();
+}
+function payrollShortDate(date){return new Date(date+'T12:00:00Z').toLocaleDateString('ru-RU',{day:'numeric',month:'long',timeZone:'UTC'});}
+function preparePayrollReview(action,id,shopId){
+ if(!teamIsAdmin()||!['confirmWorkedShift','reverseWorkedShift'].includes(action)||teamUI.payrollKey!==payrollKey())return;
+ const data=teamUI.payroll,rows=action==='confirmWorkedShift'?data.awaiting:data.rows,row=rows.find(x=>x.id===id&&x.shopId===Number(shopId));if(!row)return;
+ teamUI.payrollReason='';teamUI.payrollReview={identity:teamIdentity(),action,row:{...row}};teamUI.message='';render();
+}
+async function submitPayrollReview(){
+ const review=teamUI.payrollReview;if(teamUI.busy||!teamIsAdmin()||review?.identity!==teamIdentity())return;
+ const reason=String(teamUI.payrollReason||'').trim();if(review.action==='reverseWorkedShift'&&reason.length<3){teamUI.message='Укажите причину отмены начисления.';render();return;}
+ const body=teamOperation({action:review.action,shiftId:review.row.id,revision:review.row.revision,shopId:review.row.shopId,...(review.action==='reverseWorkedShift'?{reason}:{})}),identity=teamIdentity(),key=payrollKey();teamUI.busy=true;teamUI.message='';render();
+ try{
+  const result=await teamRequest(body);if(identity!==teamIdentity())return;if(!result.row||result.row.id!==review.row.id)throw Error('Нет подтверждения учёта смены.');
+  for(const [pendingKey,id]of teamUI.pending)if(id===body.operationId)teamUI.pending.delete(pendingKey);
+  teamUI.payrollReview=null;teamUI.payroll=null;teamUI.message='Учёт смены обновлён.';
+  try{const data=await teamRequest({action:'listPayroll',date:teamUI.payrollDate||todayKey()});if(key===payrollKey()){teamUI.payroll=data;teamUI.payrollKey=key;}}catch(e){teamUI.message+=' Обновите расчёт для проверки итоговой суммы.';}
+ }catch(e){teamUI.message=e.message+' Обновите расчёт перед повтором.';}
+ finally{teamUI.busy=false;render();}
+}
+function renderTeamPayroll(){
+ const admin=teamIsAdmin(),data=teamUI.payrollKey===payrollKey()?teamUI.payroll:null,disabled=teamUI.busy?'disabled':'',review=teamUI.payrollReview?.identity===teamIdentity()?teamUI.payrollReview:null;
+ const point=row=>esc(SHOPS.find(x=>x.id===row.shopId)?.name||'Кофейня');
+ return `<div class="ops-form payroll-form" id="ops-active-form"><h3>${admin?'Зарплата команды':'Моя зарплата'}</h3><p class="hint">${admin?'Обе кофейни':esc(state.staffName)+' · обе кофейни'} · 4 200 ₽ за отработанную смену.</p><div class="payroll-period"><button class="ops-cancel" data-action="team-payroll-prev" aria-label="Предыдущая неделя" ${disabled}>‹</button><b>${data?`${payrollShortDate(data.week.start)} — ${payrollShortDate(data.week.end)}`:'Расчёт за неделю'}</b><button class="ops-cancel" data-action="team-payroll-next" aria-label="Следующая неделя" ${disabled}>›</button></div><button class="ops-cancel" data-action="team-payroll-load" ${disabled}>${teamUI.busy?'Обновляем…':'Обновить расчёт'}</button>
+ ${data?`<section class="payroll-total" aria-label="Начислено за неделю"><span>Начислено за неделю</span><strong>${money(data.amount)}</strong><span>Отработано смен: ${data.count}</span><b>День выплаты — воскресенье, ${payrollShortDate(data.week.payDate)}</b></section><p class="hint">Период: понедельник — воскресенье. В расчёте только смены, отмеченные администратором как отработанные. Сумма показывает начисления; выплату проводит администратор.</p>${admin?`<h4>По сотрудникам</h4>${data.totals.map(x=>`<div class="payroll-person"><b>${esc(x.name)}</b><span>${x.count} смен · ${money(x.amount)}</span></div>`).join('')||'<p class="hint">Подтверждённых начислений за эту неделю пока нет.</p>'}<h4>Подтвердить отработанные смены</h4>${data.awaiting.map(row=>`<div class="payroll-row"><b>${esc(row.name)} · ${payrollShortDate(row.date)}</b><span>${esc(row.start)}–${esc(row.end)} · ${point(row)}</span>${row.replacementPending?'<p class="hint">Сначала обработайте заявку на замену в графике.</p>':`<button class="ops-submit" data-action="team-payroll-worked" data-id="${row.id}" data-shop="${row.shopId}" ${disabled}>Смена отработана · +4 200 ₽</button>`}</div>`).join('')||'<p class="hint">Закончившихся смен без подтверждения за эту неделю нет.</p>'}`:''}<h4>Начисления по сменам</h4>${data.rows.map(row=>`<div class="payroll-row"><b>${admin?esc(row.name)+' · ':''}${payrollShortDate(row.date)} · ${money(row.amount)}</b><span>${esc(row.start)}–${esc(row.end)} · ${point(row)}</span><small>${row.status==='worked'?'Отработана · '+money(row.rate)+' за смену':'Начисление отменено: '+esc(row.reason||'исправление')}</small>${admin&&row.status==='worked'?`<button class="ops-cancel" data-action="team-payroll-reverse" data-id="${row.id}" data-shop="${row.shopId}" ${disabled}>Отменить начисление с причиной</button>`:''}</div>`).join('')||'<p class="hint">Начислений за эту неделю пока нет.</p>'}`:'<p class="hint">Нажмите «Обновить расчёт», чтобы загрузить начисления.</p>'}
+ ${review?`<section class="ops-message payroll-confirm" aria-label="Подтверждение учёта смены"><b>${review.action==='confirmWorkedShift'?'Подтвердить отработанную смену и начислить 4 200 ₽?':'Отменить начисление за смену?'}</b><p>${esc(review.row.name)} · ${payrollShortDate(review.row.date)} · ${point(review.row)}</p>${review.action==='reverseWorkedShift'?`<label class="hint">Причина отмены<input class="text-input" data-action="team-payroll-reason" maxlength="240" value="${esc(teamUI.payrollReason||'')}" ${disabled}></label>`:''}<button class="ops-submit" data-action="team-payroll-confirm" ${disabled}>${review.action==='confirmWorkedShift'?'Да, смена отработана':'Подтвердить отмену начисления'}</button><button class="ops-cancel" data-action="team-payroll-cancel" ${disabled}>Назад</button></section>`:''}${teamUI.message?`<p class="ops-message" role="status">${esc(teamUI.message)}</p>`:''}${!admin?'<button class="ops-cancel" data-action="close-op">Закрыть</button>':''}</div>`;
+}
+document.addEventListener('input',e=>{if(e.target.dataset.action==='team-payroll-reason')teamUI.payrollReason=e.target.value;});
+document.addEventListener('click',e=>{
+ const el=e.target.closest('[data-action]');if(!el||teamUI.busy)return;
+ const action=el.dataset.action;
+ if(action==='team-payroll-load')loadTeamPayroll();
+ else if(action==='team-payroll-prev')movePayrollWeek(-1);
+ else if(action==='team-payroll-next')movePayrollWeek(1);
+ else if(action==='team-payroll-worked')preparePayrollReview('confirmWorkedShift',el.dataset.id,el.dataset.shop);
+ else if(action==='team-payroll-reverse')preparePayrollReview('reverseWorkedShift',el.dataset.id,el.dataset.shop);
+ else if(action==='team-payroll-confirm')submitPayrollReview();
+ else if(action==='team-payroll-cancel'){teamUI.payrollReview=null;render();}
+});
 async function loadTeamOverview(){
  if(teamUI.busy)return;teamUI.busy=true;teamUI.message='';render();
  try{const result=await teamRequest({action:'teamOverview'});if(teamIsAdmin())teamUI.overview=result;}
