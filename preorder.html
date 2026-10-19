@@ -683,8 +683,8 @@
 
 .ops-photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.ops-photo-grid img{width:100%;height:120px;object-fit:cover;border-radius:12px}.ops-photos{margin:12px 0}.ops-check-editor{margin:14px 0;padding:12px;border:1px solid #33443a;border-radius:15px}.ops-check-editor.archived{opacity:.55}.admin-sun .tabs{overflow-x:auto;display:flex}.admin-sun .tab{flex-shrink:0}
 </style>
-<link rel="stylesheet" href="unified.css?v=20261018-multidates3">
-<link rel="stylesheet" href="frosted-glass.css?v=20261018-multidates3">
+<link rel="stylesheet" href="unified.css?v=20261018-approvals2">
+<link rel="stylesheet" href="frosted-glass.css?v=20261018-approvals2">
 </head>
 <body>
   <div class="shell">
@@ -692,11 +692,11 @@
     <div id="app"></div>
   </div>
 
-<script src="operations-v3.js?v=20261018-multidates3"></script>
-<script src="stable-ui.js?v=20261018-multidates3"></script>
-<script src="team-loyalty.js?v=20261018-multidates3"></script>
-<script src="menu-photos.js?v=20261018-multidates3"></script>
-<script src="menu-experience.js?v=20261018-multidates3"></script>
+<script src="operations-v3.js?v=20261018-approvals2"></script>
+<script src="stable-ui.js?v=20261018-approvals2"></script>
+<script src="team-loyalty.js?v=20261018-approvals2"></script>
+<script src="menu-photos.js?v=20261018-approvals2"></script>
+<script src="menu-experience.js?v=20261018-approvals2"></script>
 <script>
 /* ---------- DATA (menu: Солнцекофе, Yandex Eda) ---------- */
 const CATEGORIES = [
@@ -1684,7 +1684,7 @@ function renderAdmin(){
           <div class="tab ${state.adminTab==='posts'?'active':''} rippleable" data-action="admin-set-tab" data-tab="posts">Посты</div>
           <div class="tab ${state.adminTab==='wheel'?'active':''} rippleable" data-action="admin-set-tab" data-tab="wheel">Колесо</div>
           <div class="tab ${state.adminTab==='checklists'?'active':''} rippleable" data-action="admin-set-tab" data-tab="checklists">Чек-листы</div>
-          <div class="tab ${state.adminTab==='schedule'?'active':''} rippleable" data-action="admin-set-tab" data-tab="schedule">График</div>
+          <div class="tab ${state.adminTab==='schedule'?'active':''} rippleable" data-action="admin-set-tab" data-tab="schedule">График / заявки</div>
           <div class="tab ${state.adminTab==='loyalty'?'active':''} rippleable" data-action="admin-set-tab" data-tab="loyalty">Подарки / бонусы</div>
           <div class="tab ${state.adminTab==='reports'?'active':''} rippleable" data-action="admin-set-tab" data-tab="reports">Отчёты</div>
         </div>
@@ -3180,7 +3180,7 @@ document.addEventListener('click', (e)=>{
   else if(action==='save-checklist'){ submitShiftChecklist(); }
   else if(action==='export-reports-csv'){ exportReportsCSV(); }
   else if(action==='staff-scan-qr'){ scanLoyaltyQr(); }
-  else if(action==='admin-refresh'){ if(state.adminTab==='overview')loadTeamOverview();else loadAdminOrders(); }
+  else if(action==='admin-refresh'){ if(state.adminTab==='overview')loadTeamOverview();else if(state.adminTab==='schedule')teamLoadSchedule();else loadAdminOrders(); }
   else if(action==='admin-set-tab'){
     state.adminTab = el.dataset.tab;
     if(state.adminTab==='overview')loadTeamOverview();
