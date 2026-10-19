@@ -23,3 +23,7 @@ input,select,textarea{font-size:16px!important}button{touch-action:manipulation}
 
 .shift-selection{margin:14px 0;padding:14px;border:1px solid rgba(123,93,56,.2);border-radius:16px;background:rgba(255,255,255,.5)}
 .shift-selection h4{margin:0 0 10px}.shift-selection>div{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 0}.shift-selection small{display:block;color:var(--muted);font-size:12px}.shift-selection .ops-cancel{width:auto;margin:0}.schedule-row.chosen{outline:2px solid #9b6934;outline-offset:-2px}
+
+.shift-selection>div{display:grid;grid-template-columns:1fr auto;gap:8px}.shift-selection>div>span{grid-column:1/-1;min-width:0;overflow-wrap:anywhere}.shift-selection>div>.ops-cancel{justify-self:start}
+
+.calendar-day.multi-selected{outline:3px solid #b37b30;outline-offset:-3px;background:#ffda68;color:#3f2c13}.calendar-day.multi-selected b:after{content:" ✓";font-size:10px}

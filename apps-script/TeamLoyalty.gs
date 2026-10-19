@@ -164,6 +164,12 @@ function teamScheduleChange_(request,actor,old,props,shopId,all,id,batch){
    else throw Error('Смена уже занята или заявка уже отправлена.');
   }
   else{const date=teamDate_(request.date),start=teamTime_(request.start),end=teamTime_(request.end);if(start>=end)throw Error('Проверьте время.');for(const x of Object.values(all[shopId]||{}))if((['approved','open'].includes(x.status)||x.status==='pending'&&x.name===actor.name)&&x.date===date&&start<x.end&&x.start<end)throw Error('На это время уже есть смена. Выберите её в расписании.');next={date,start,end,name:actor.name,status:'pending'};}
+ }else if(request.action==='editShiftRequest'){
+  if(actor.admin||!old||old.name!==actor.name||old.status!=='pending'||old.requestedFromOpen)throw Error('Можно изменить только свою неутверждённую заявку на новый день. Готовую смену нужно отменить и выбрать заново.');
+  const date=teamDate_(request.date),start=teamTime_(request.start),end=teamTime_(request.end);
+  if(date<Utilities.formatDate(new Date(),'Europe/Moscow','yyyy-MM-dd')||start>=end)throw Error('Выберите предстоящую дату и корректное время.');
+  for(const [otherId,x]of Object.entries(all[shopId]||{}))if(otherId!==id&&(['approved','open'].includes(x.status)||x.status==='pending'&&x.name===actor.name)&&x.date===date&&start<x.end&&x.start<end)throw Error('На это время уже есть смена. Выберите другое время.');
+  next={...old,date,start,end,status:'pending'};
  }else if(request.action==='approveShift'){
   if(!actor.admin||!old||old.status!=='pending')throw Error('Нет заявки для утверждения.');next={...old,status:'approved'};
  }else if(request.action==='cancelShift'){

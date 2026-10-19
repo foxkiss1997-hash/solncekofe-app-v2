@@ -175,3 +175,27 @@ test('overlapping selections and past dates fail without writes; test batches re
  assert.throws(()=>schedule(x,{...x.staff,action:'requestShifts',operationId:op,items:[{...items[0],date:'2026-10-18'}]}),/прошедшую/);
  x.ctx.req={...x.staff,action:'requestShifts',operationId:op,items:[items[0]]};vm.runInContext("handleSchedule_(req,'/ops_v3_test',props)",x.ctx);assert.ok(x.db.ops_v3_test.schedule[1]);assert.equal(x.db.ops_v3,undefined);
 });
+
+test('employee edits only their own custom pending request; approval, stale edits and ready slots stay protected',()=>{
+ const x=setup();schedule(x,{...x.staff,action:'requestShift',shiftId,operationId:op,date:'2026-10-20',start:'08:00',end:'16:00'});
+ const edit={...x.staff,action:'editShiftRequest',shiftId,revision:op,operationId:giftOp,date:'2026-10-21',start:'09:00',end:'18:00'};
+ assert.throws(()=>schedule(x,{...edit,submittedBy:'Борис',auth:{password:'other'}}),/свою/);
+ schedule(x,edit);assert.equal(x.db.ops_v3.schedule[1][shiftId].date,'2026-10-21');assert.equal(x.db.ops_v3.schedule[1][shiftId].status,'pending');
+ assert.throws(()=>schedule(x,{...edit,operationId:'d'.repeat(32)}),/изменена/);
+ schedule(x,{...x.owner,action:'approveShift',shiftId,operationId:'e'.repeat(32),revision:giftOp});
+ assert.throws(()=>schedule(x,{...edit,operationId:'f'.repeat(32),revision:'e'.repeat(32)}),/неутверждённую/);
+});
+test('editing a pending request cannot collide with another slot or alter an administrator slot',()=>{
+ const x=setup();schedule(x,{...x.owner,action:'saveShift',shiftId:'d'.repeat(32),operationId:op,date:'2026-10-22',start:'08:00',end:'16:00',name:'Борис'});
+ schedule(x,{...x.staff,action:'requestShift',shiftId,operationId:op,date:'2026-10-20',start:'08:00',end:'16:00'});
+ assert.throws(()=>schedule(x,{...x.staff,action:'editShiftRequest',shiftId,operationId:giftOp,revision:op,date:'2026-10-22',start:'09:00',end:'18:00'}),/уже есть смена/);
+ schedule(x,{...x.owner,action:'saveShift',shiftId:'e'.repeat(32),operationId:op,date:'2026-10-23',start:'08:00',end:'16:00',name:''});
+ schedule(x,{...x.staff,action:'requestShift',shiftId:'e'.repeat(32),operationId:giftOp,revision:op});
+ assert.throws(()=>schedule(x,{...x.staff,action:'editShiftRequest',shiftId:'e'.repeat(32),operationId:'f'.repeat(32),revision:giftOp,date:'2026-10-24',start:'09:00',end:'18:00'}),/Готовую смену/);
+});
+
+test('eight selected shifts commit as one pending batch with one database write',()=>{
+ const x=setup(),items=Array.from({length:8},(_,i)=>({shiftId:(i+1).toString(16).repeat(32),date:'2026-10-'+(20+i),start:'08:00',end:'21:00'}));
+ const req={...x.staff,action:'requestShifts',operationId:op,items};const result=schedule(x,req);
+ assert.equal(result.rows.length,8);assert.ok(result.rows.every(x=>x.status==='pending'));assert.equal(x.writes.length,1);schedule(x,req);assert.equal(x.writes.length,1);
+});
