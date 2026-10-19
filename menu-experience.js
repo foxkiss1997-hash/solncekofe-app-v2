@@ -6,7 +6,7 @@ function initMenuPreferences(){
  try{const items=JSON.parse(localStorage.getItem('sk_last_cart_v1')||'[]');if(Array.isArray(items))menuLastCart=items.slice(0,20);}catch(e){}
  try{const name=localStorage.getItem('sk_guest_name_v1');if(name){state.guestName=name;state.guestDisplayName=name;}}catch(e){}
 }
-function itemStopped(id,shop=state.shopId){return STOP_LIST.has(id)||shopStopLists[shop]?.[id]===true;}
+function itemStopped(id,shop=state.shopId){const local=shopStopLists[shop]?.[id];return local===true||(local!==false&&STOP_LIST.has(id));}
 async function loadShopAvailability(){
  try{const res=await fetch(DB_URL+'/shop_stoplist.json');if(!res.ok)throw Error();shopStopLists=await res.json()||{};}catch(e){/* Keep the last known availability. Server checks again at checkout. */}
 }
@@ -80,13 +80,16 @@ function renderMenuPairing(){
 }
 async function setMenuAvailability(id){
  if(!state.adminAuthed||state.adminStockChanging)return;
- const shop=Number(state.adminStockShop||0),global=STOP_LIST.has(id),stopped=shop?!!shopStopLists[shop]?.[id]:global;
- if(shop&&global){showToast('Позиция скрыта для обеих точек. Сначала включите её в режиме «Обе точки».');return;}
+ const shop=Number(state.adminStockShop||0),global=STOP_LIST.has(id),stopped=shop?itemStopped(id,shop):global;
  state.adminStockChanging=true;
- try{const response=await fetch(DB_URL+(shop?'/shop_stoplist/'+shop:'/stoplist')+'/'+id+'.json',{method:stopped?'DELETE':'PUT',headers:{'Content-Type':'application/json'},...(stopped?{}:{body:'true'})});if(!response.ok)throw Error('Нет подтверждения сохранения.');
-  if(shop){shopStopLists[shop]??={};if(stopped)delete shopStopLists[shop][id];else shopStopLists[shop][id]=true;}else{if(stopped)STOP_LIST.delete(id);else STOP_LIST.add(id);}
+ try{
+  const patch=shop?{['shop_stoplist/'+shop+'/'+id]:stopped?(global?false:null):true}:{['stoplist/'+id]:stopped?null:true,['shop_stoplist/1/'+id]:null,['shop_stoplist/2/'+id]:null};
+  const response=await fetch(DB_URL+'/.json',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)});if(!response.ok)throw Error('Нет подтверждения сохранения.');
+  if(shop){shopStopLists[shop]??={};if(stopped&&global)shopStopLists[shop][id]=false;else if(stopped)delete shopStopLists[shop][id];else shopStopLists[shop][id]=true;}
+  else{if(stopped)STOP_LIST.delete(id);else STOP_LIST.add(id);for(const point of [1,2])if(shopStopLists[point])delete shopStopLists[point][id];}
  }catch(e){showToast(e.message||'Не удалось изменить наличие.');}finally{state.adminStockChanging=false;render();}
 }
+
 async function toggleMenuSeasonal(id){
  if(!state.adminAuthed||state.adminStockChanging)return;const item=itemById(id);if(!item)return;
  state.adminStockChanging=true;
@@ -140,18 +143,18 @@ function renderStaffStock(){
  <button class="ops-cancel" data-action="staff-stock-refresh" ${state.staffStockLoading||state.staffStockBusy?'disabled':''}>${state.staffStockLoading?'Обновляем…':'Обновить'}</button>
  ${state.staffStockMessage?`<p class="ops-message ${state.staffStockOk?'ok':'bad'}" role="status">${esc(state.staffStockMessage)}</p>`:''}
  ${!ready?`<p class="ops-muted">${state.staffStockLoading?'Загружаем наличие…':'Наличие ещё не подтверждено. Обновите список.'}</p>`:''}
- ${items.map(item=>{const global=STOP_LIST.has(item.id),stopped=shopStopLists[state.staffShop]?.[item.id]===true;return `<div class="order-card staff-stock-item"><div class="staff-stock-photo">${itemThumbHTML(item)}</div><div><b>${esc(item.name)}</b><p class="hint">${!ready?'Проверяем наличие':global?'Общий стоп · обе точки':stopped?'В стоп-листе этой точки':'В продаже'}</p>${global?`<p class="hint">Общий стоп снимает администратор.</p>`:''}<button class="${stopped?'ops-submit':'ops-cancel'}" data-action="staff-stock-toggle" data-id="${esc(item.id)}" ${!ready||state.staffStockBusy||global?'disabled':''}>${state.staffStockBusy===item.id?'Сохраняем…':global?'Стоп администратора':stopped?'Вернуть в продажу':'В стоп-лист'}</button></div></div>`;}).join('')||'<p class="ops-muted">Ничего не найдено.</p>'}
+ ${items.map(item=>{const global=STOP_LIST.has(item.id),stopped=itemStopped(item.id,state.staffShop);return `<div class="order-card staff-stock-item"><div class="staff-stock-photo">${itemThumbHTML(item)}</div><div><b>${esc(item.name)}</b><p class="hint">${!ready?'Проверяем наличие':stopped?(global?'В стоп-листе · можно вернуть на этой точке':'В стоп-листе этой точки'):'В продаже на этой точке'}</p>${global&&!stopped?`<p class="hint">Возвращено только на этой точке. Другие кофейни не изменены.</p>`:''}<button class="${stopped?'ops-submit':'ops-cancel'}" data-action="staff-stock-toggle" data-id="${esc(item.id)}" ${!ready||state.staffStockBusy?'disabled':''}>${state.staffStockBusy===item.id?'Сохраняем…':stopped?'Вернуть в продажу':'В стоп-лист'}</button></div></div>`;}).join('')||'<p class="ops-muted">Ничего не найдено.</p>'}
  <button class="ops-cancel" data-action="close-op">Закрыть</button></div>`;
 }
 async function staffSetAvailability(id){
  const identity=stockIdentity(),shopId=state.staffShop;
- if(state.screen!=='staff'||!state.staffName||!hasStaffAuth()||![1,2].includes(shopId)||!state.staffStockReady||state.staffStockIdentity!==identity||state.staffStockBusy||STOP_LIST.has(id)||!itemById(id))return;
- const expectedStopped=shopStopLists[shopId]?.[id]===true,stopped=!expectedStopped;
+ if(state.screen!=='staff'||!state.staffName||!hasStaffAuth()||![1,2].includes(shopId)||!state.staffStockReady||state.staffStockIdentity!==identity||state.staffStockBusy||!itemById(id))return;
+ const expectedStopped=itemStopped(id,shopId),stopped=!expectedStopped;
  const request={};state.staffStockRequest=request;state.staffStockBusy=id;state.staffStockMessage='';render();
  try{
   const data=await paymentJson(PAYMENT_RELAY_URL+'/set-menu-availability',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({shopId,submittedBy:state.staffName,auth:{password:state.reportPassword},sessionToken:state.staffSessionToken||undefined,itemId:id,stopped,expectedStopped})},20000);
   if(!data||data.ok!==true||data.shopId!==shopId||data.itemId!==id||data.stopped!==stopped)throw Error(data?.error||'Сервер не подтвердил изменение.');
-  shopStopLists[shopId]??={};if(stopped)shopStopLists[shopId][id]=true;else delete shopStopLists[shopId][id];
+  shopStopLists[shopId]??={};if(stopped)shopStopLists[shopId][id]=true;else if(data.globalStopped)shopStopLists[shopId][id]=false;else delete shopStopLists[shopId][id];
   if(data.globalStopped)STOP_LIST.add(id);
   if(identity===stockIdentity()&&state.staffStockRequest===request){state.staffStockOk=true;state.staffStockMessage=stopped?'Позиция добавлена в стоп-лист этой точки.':'Позиция возвращена в продажу.';}
  }catch(e){if(identity===stockIdentity()&&state.staffStockRequest===request){state.staffStockOk=false;state.staffStockMessage=e.message||'Не удалось сохранить изменение.';await refreshMenuAvailability(false);}}
