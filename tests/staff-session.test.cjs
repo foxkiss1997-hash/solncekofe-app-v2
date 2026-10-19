@@ -42,3 +42,5 @@ test('an already opened shift cannot start the camera or send another begin oper
 test('logout removes the session, revokes its token and clears attendance display',async()=>{
  const f=app();try{setup(f);session(f);f.run("state.staffSessionToken='a'.repeat(64);state.shiftOpenedAt=123");let body;f.w.fetch=async(url,opts)=>{body=JSON.parse(opts.body);return reply({ok:true})};f.w.clearStaffSession();await Promise.resolve();assert.equal(f.w.loadStaffSession(),null);assert.equal(f.run('state.shiftOpenedAt'),null);assert.equal(body.action,'logout');assert.equal(body.token,token);}finally{f.close()}
 });
+
+test('refreshing an unchanged open shift does not repaint the button or interrupt a click',async()=>{const f=app();try{setup(f);f.run("state.staffName='Анна';state.reportPassword='pass'");f.w.sendOpsRequest=async()=>opened(f);await f.w.refreshStaffShiftStatus();f.run('state.renderCalls=0;render=()=>state.renderCalls++');await f.w.refreshStaffShiftStatus();assert.equal(f.run('state.renderCalls'),0);assert.equal(f.run('state.shiftOpenedAt'),openedAt);}finally{f.close()}});
