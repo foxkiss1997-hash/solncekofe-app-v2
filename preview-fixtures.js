@@ -49,6 +49,14 @@ window.previewSetup=function(state,team){
  const query=new URLSearchParams(location.search),role=query.get('role');state.shopId=2;
  if(query.has('fines')){const p=window.previewPayroll;p.gross=21000;p.penaltyTotal=1200;p.amount=19800;p.totals[0].amount=19800;p.penalties=[{id:'a'.repeat(32),shiftId:'1'.repeat(32),shopId:2,name:'Анна',date:'2026-10-12',amount:200,reason:'Опоздание: 7 мин.',automatic:true},{id:'b'.repeat(32),shiftId:'2'.repeat(32),shopId:2,name:'Анна',date:'2026-10-13',amount:1000,reason:'Опоздание: 20 мин.',automatic:true}];p.openings=[{id:'1'.repeat(32),shopId:2,name:'Анна',date:'2026-10-12',openedAt:Date.parse('2026-10-12T08:07:00+03:00'),lateMinutes:7}];}
 
+ if(['payment','checkout'].includes(query.get('view'))){
+  Object.assign(state,{screen:query.get('view'),shopId:1,guestName:'Демо-гость',receiptContact:'guest@example.org',cart:[{uid:'demo-cap',itemId:'cap',category:'coffee',name:'Капучино',sizeId:'m',qty:1,unitPrice:300,milk:null,syrup:null,shot:false}]});
+  if(query.get('view')==='payment'){
+   const pending={orderId:'DEMO_PAYMENT',number:'127',shop:{id:1,name:'Рязанский проспект'},total:300,pickupLabel:'Скоро',cartSnapshot:state.cart,paymentUrl:'https://example.invalid/demo-payment',startedAt:Date.now()};
+   localStorage.setItem('sk_pending_payment',JSON.stringify(pending));state.paymentPending=pending;
+   document.addEventListener('click',e=>{if(e.target.closest('[data-action=payment-open]')){e.preventDefault();e.stopImmediatePropagation();}},true);
+  }else localStorage.removeItem('sk_pending_payment');
+ }
  if(query.get('view')==='menu-cart')state.cart=[{uid:'demo-cap',itemId:'cap',category:'coffee',name:'Капучино',sizeId:'m',qty:1,unitPrice:300,milk:null,syrup:null,shot:false},{uid:'demo-latte',itemId:'latte',category:'coffee',name:'Латте',sizeId:'m',qty:1,unitPrice:320,milk:null,syrup:null,shot:false}];
  if(query.get('view')==='drink'){state.screen='customize';state.customizeItemId='cap';}
  if(role==='staff'){Object.assign(state,{opMode:query.get('view')==='payroll'?'payroll':query.get('view')==='schedule'?'schedule':null,screen:'staff',staffShop:2,staffName:'Анна',reportPassword:'preview-pass',todayOps:{deliveries:1,expenses:2,issues:0}});if(team){if(query.get('view')==='payroll'){team.payroll=window.previewPayroll;team.payrollDate='2026-10-18';team.payrollKey='Анна:2:2026-10-18';}team.schedule=window.previewSchedule;team.scheduleKey='Анна:2';if(query.get('view')==='schedule')team.calendarDate=previewToday.slice(0,8)+'20';}}

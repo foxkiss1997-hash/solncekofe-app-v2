@@ -18,7 +18,7 @@ try{
  evaluate("state.staffShop=2;render();");assert.equal(w.document.querySelectorAll('[data-action="team-confirm-gift"]').length,0);
  console.log('PASS: gift confirmation appears only after selection, stale card hidden on shop change');
  evaluate("Object.assign(state,{screen:'admin',adminAuthed:true,adminTab:'overview'});render();state.adminTab='schedule';render();state.adminTab='loyalty';render();state.screen='card';render();state.screen='checkout';render();");
- assert.equal(w.document.querySelectorAll('[data-pay="receipt"]').length,1);assert.equal(w.document.querySelectorAll('[data-pay="link"]').length,1);
+ assert.equal(w.document.querySelectorAll('[data-pay="receipt"]').length,0);assert.match(w.document.getElementById('app').textContent,/Онлайн-оплата/);assert.equal(evaluate('state.payMethod'),'link');
  assert.equal(evaluate("parseGuestQr('solncekofe:ABCD')"),'ABCD');assert.equal(evaluate("parseGuestQr('ABCD')"),'ABCD');assert.throws(()=>evaluate("parseGuestQr('https://example.com/hack')"));
  console.log('PASS: owner overview/schedule/loyalty, guest card, checkout and QR compatibility');
  evaluate("Object.assign(state,{screen:'staff',staffShop:1,staffName:'Анна',opMode:'schedule'});Object.assign(teamUI,{calendarMonth:'2026-10',calendarDate:'2026-10-20',scheduleKey:'Анна:1',schedule:{rows:[],staff:[],myRows:[{name:'Анна',shopId:2,date:'2026-10-20',start:'10:00',end:'18:00',status:'approved'},{name:'Анна',shopId:1,date:'2026-10-21',start:'08:00',end:'16:00',status:'pending'}]}});render();");
