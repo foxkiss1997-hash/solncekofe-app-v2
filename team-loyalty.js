@@ -557,7 +557,7 @@ async function loginPersistentStaff(){
  if(![1,2].includes(shopId)||!password){state.staffPinError='Выберите кофейню и введите личный пароль.';render();return;}
  const generation=state.staffSessionGeneration||0;state.staffListLoading=true;state.staffPinError='';render();
  try{
-  const result=await paymentJson(PAYMENT_RELAY_URL+'/staff-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'login',shopId,password,telegramId:TELEGRAM_ID||undefined})},20000);
+  const result=await paymentJson(PAYMENT_RELAY_URL+'/staff-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'login',shopId,password,telegramId:TELEGRAM_ID||undefined})},60000);
   if(generation!==(state.staffSessionGeneration||0)||state.staffShop!==shopId)return;
   if(result.ok!==true||!result.token||result.shopId!==shopId)throw Error(result.error||'Вход не подтверждён.');
   applyStaffSession(result);saveStaffSession(result);loadChecklistConfig();updateOpsPending();loadStaffOrders();loadTodayOps();await refreshStaffShiftStatus();
@@ -572,7 +572,7 @@ async function enterStaffCabinet(){
  const generation=state.staffSessionGeneration||0;state.staffRestoring=true;render();
  staffRestorePromise=(async()=>{
   try{
-   const result=await paymentJson(PAYMENT_RELAY_URL+'/staff-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'restore',token:saved.token})},20000);
+   const result=await paymentJson(PAYMENT_RELAY_URL+'/staff-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'restore',token:saved.token})},60000);
    if(generation!==(state.staffSessionGeneration||0))return false;
    if(result.ok!==true||result.shopId!==saved.shopId||result.name!==saved.name)throw Error(result.error||'Сохранённый вход не подтверждён.');
    applyStaffSession({...result,token:saved.token});state.staffRestoring=false;render();loadChecklistConfig();updateOpsPending();loadStaffOrders();loadTodayOps();await refreshStaffShiftStatus();return true;
