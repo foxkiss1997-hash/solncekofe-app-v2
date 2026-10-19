@@ -360,11 +360,11 @@ async function openShiftCamera(id){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Камера недоступна. Откройте приложение в браузере с разрешением камеры или обратитесь к администратору.');
   // A new button attempt gets a fresh ID; retries after a lost response reuse this attempt.
   const body={action:'beginShiftOpening',shiftId:id,operationId:opsId()},session=await teamRequest(body);
-  if(identity!==teamIdentity()||state.opMode!=='opening')return;
+  if(identity!==teamIdentity()||state.opMode!=='opening'){teamUI.busy=false;return;}
   stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:960}},audio:false});
-  if(identity!==teamIdentity()||state.opMode!=='opening'){stream.getTracks().forEach(t=>t.stop());return;}
+  if(identity!==teamIdentity()||state.opMode!=='opening'){stream.getTracks().forEach(t=>t.stop());teamUI.busy=false;return;}
   const overlay=document.createElement('section');overlay.className='shift-camera';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label','Фото кассы');overlay.innerHTML='<h3>Касса с открытой сменой</h3><p>Сфотографируйте экран кассы. Выбор из галереи отключён.</p><video autoplay playsinline muted></video><p role="status"></p><button class="ops-submit">Сделать фото и открыть смену</button><button class="ops-cancel">Отмена</button>';document.body.append(overlay);
-  const video=overlay.querySelector('video');video.srcObject=stream;await video.play();shiftCamera={overlay,stream,identity};
+  const video=overlay.querySelector('video');video.srcObject=stream;shiftCamera={overlay,stream,identity};await video.play();
   overlay.querySelector('.ops-cancel').onclick=()=>{stopShiftCamera();teamUI.busy=false;render();};
   const submit=overlay.querySelector('.ops-submit');let photo=null,request=null;
   submit.onclick=async()=>{
