@@ -38,7 +38,7 @@ function doPost(e){
       answer=saveReport_(report,root,props);
     }else if(request.action==='teamOverview'){
       answer=teamOverview_(request,root,props);
-    }else if(['loyaltyLookup','awardStamp','redeemGift','spendBonus','creditBonus','reverseLoyalty','listSchedule','saveShift','requestShift','requestShifts','approveShifts','rejectShifts','rejectShift','editShiftRequest','approveShift','cancelShift','requestSwap','acceptSwap','approveSwap','rejectSwap'].includes(request.action)){
+    }else if(['loyaltyLookup','awardStamp','redeemGift','spendBonus','creditBonus','reverseLoyalty','listSchedule','listPayroll','confirmWorkedShift','reverseWorkedShift','saveShift','requestShift','requestShifts','approveShifts','rejectShifts','rejectShift','editShiftRequest','approveShift','cancelShift','requestSwap','acceptSwap','approveSwap','rejectSwap'].includes(request.action)){
       answer=handleTeamRequest_(request,root,props);
     }else throw Error('Неизвестное действие.');
     answer={...answer,ok:true};
@@ -289,14 +289,14 @@ function runFrostedReadinessCheck(){
  runProductionReadinessCheck();
  const p=PropertiesService.getScriptProperties(),endpoint='https://script.google.com/macros/s/AKfycbwtUCHluill1Op33aDBXnCvotAmRxBnkI8Nz0D01bAOygVMmWwMtLyDdKbRGY5Vv1TE/exec';
  const result={};
- for(const action of ['listSchedule','loyaltyLookup','createPickupOrder']){
+ for(const action of ['listSchedule','listPayroll','loyaltyLookup','createPickupOrder']){
   const nonce=Utilities.getUuid().replace(/-/g,'');
   const payload={apiVersion:3,nonce,mode:'production',returnOrigin:OPS_ALLOWED_ORIGINS[0],action,shopId:1,guestId:'QA_RELEASE_20261018',orderId:'00000000000000000000000000000000',items:[],auth:{admin:true,password:p.getProperty('ADMIN_PASSWORD')}};
   let body=UrlFetchApp.fetch(endpoint,{method:'post',payload:{payload:JSON.stringify(payload)},muteHttpExceptions:true}).getContentText();
   for(let i=0;i<6;i++)body=body.replace(/\\x([0-9a-f]{2})/gi,(_,h)=>String.fromCharCode(parseInt(h,16))).replace(/\\u([0-9a-f]{4})/gi,(_,h)=>String.fromCharCode(parseInt(h,16))).replace(/\\\//g,'/').replace(/\\\\/g,'\\').replace(/\\"/g,'"');
   const match=body.match(/window\.top\.postMessage\((\{[\s\S]*?\}),/);if(!match)throw Error('Нет подтверждения: '+action);
   const ack=JSON.parse(match[1]);if(ack.nonce!==nonce)throw Error('Неверное подтверждение: '+action);
-  const good=action==='listSchedule'?ack.ok===true:action==='loyaltyLookup'?(ack.ok===true||ack.error==='Карта не найдена.'):ack.error==='Проверьте состав заказа.';
+  const good=['listSchedule','listPayroll'].includes(action)?ack.ok===true:action==='loyaltyLookup'?(ack.ok===true||ack.error==='Карта не найдена.'):ack.error==='Проверьте состав заказа.';
   if(!good)throw Error('Обработчик не готов: '+action);result[action]=true;
  }
  console.log(JSON.stringify({handlers:result,telegramTokenConfigured:!!p.getProperty('TELEGRAM_BOT_TOKEN'),productionWrites:0}));
