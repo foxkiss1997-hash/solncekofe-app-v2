@@ -683,8 +683,8 @@
 
 .ops-photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.ops-photo-grid img{width:100%;height:120px;object-fit:cover;border-radius:12px}.ops-photos{margin:12px 0}.ops-check-editor{margin:14px 0;padding:12px;border:1px solid #33443a;border-radius:15px}.ops-check-editor.archived{opacity:.55}.admin-sun .tabs{overflow-x:auto;display:flex}.admin-sun .tab{flex-shrink:0}
 </style>
-<link rel="stylesheet" href="unified.css?v=20261019-orderstatus1">
-<link rel="stylesheet" href="frosted-glass.css?v=20261019-orderstatus1">
+<link rel="stylesheet" href="unified.css?v=20261019-stock1">
+<link rel="stylesheet" href="frosted-glass.css?v=20261019-stock1">
 </head>
 <body>
   <div class="shell">
@@ -692,11 +692,11 @@
     <div id="app"></div>
   </div>
 
-<script src="operations-v3.js?v=20261019-orderstatus1"></script>
-<script src="stable-ui.js?v=20261019-orderstatus1"></script>
-<script src="team-loyalty.js?v=20261019-orderstatus1"></script>
-<script src="menu-photos.js?v=20261019-orderstatus1"></script>
-<script src="menu-experience.js?v=20261019-orderstatus1"></script>
+<script src="operations-v3.js?v=20261019-stock1"></script>
+<script src="stable-ui.js?v=20261019-stock1"></script>
+<script src="team-loyalty.js?v=20261019-stock1"></script>
+<script src="menu-photos.js?v=20261019-stock1"></script>
+<script src="menu-experience.js?v=20261019-stock1"></script>
 <script>
 /* ---------- DATA (menu: Солнцекофе, Yandex Eda) ---------- */
 const CATEGORIES = [
@@ -1291,7 +1291,7 @@ async function placeOrder(){
     shopName: shop.name,
     shopAddr: shop.addr,
     itemsText: describeCartForStaff(cartSnapshot),
-    items: cartSnapshot.map(l=>({ name:l.name, category:l.category, price:l.unitPrice, qty:l.qty })),
+    items: cartSnapshot.map(l=>({ itemId:l.itemId, name:l.name, category:l.category, price:l.unitPrice, qty:l.qty })),
     itemsCount: cartCount(),
     total,
     tip,
@@ -1418,7 +1418,7 @@ function renderCart(){
             <div class="item-icon" style="color:${iconColor(l.category)};">${itemThumbHTML(l)}</div>
             <div class="cart-line-info">
               <h4>${l.name}</h4>
-              <div class="opts">${cartLineOpts(l)}</div>
+              <div class="opts">${cartLineOpts(l)}</div>${itemStopped(l.itemId)?'<p class="pin-error">Сейчас в стоп-листе этой точки</p>':''}
             </div>
             <div class="cart-line-right">
               <div class="cart-line-price price-pop">${money(l.unitPrice*l.qty)}</div>
@@ -1479,7 +1479,7 @@ function renderCart(){
       </div>
 
       <div class="stickybar">
-        <button class="btn-primary rippleable" data-action="go-checkout">
+        <button class="btn-primary rippleable" data-action="go-checkout" ${state.cart.some(x=>itemStopped(x.itemId))?'disabled':''}>
           <span>К оплате</span><span class="sub price-pop">${money(cartTotal())}</span>
         </button>
       </div>
@@ -1624,7 +1624,7 @@ function renderStaff(){
   return `<div class="screen ops-shell">
     <div class="topbar"><button class="iconbtn rippleable" data-action="staff-change-name">←</button><h2>☀️ СОЛНЦЕКОФЕ</h2><button class="iconbtn rippleable" data-action="staff-refresh" style="margin-left:auto">⟳</button><button class="iconbtn rippleable" data-action="staff-logout">🚪</button></div>
     <div class="ops-hero">${renderStaffShopSelector()}<div class="ops-kicker">${esc(shop.name)}</div><h1>Добрый день, ${esc(state.staffName)}!</h1><div class="shift-pill">● ${shiftText}</div></div>
-    <div class="ops-wide"><button class="ops-submit" data-action="open-op" data-mode="opening">📷 Открыть смену</button></div>
+    <div class="ops-wide"><button class="ops-submit" data-action="open-op" data-mode="opening">📷 Открыть смену</button><button class="ops-cancel" style="margin-top:8px" data-action="open-op" data-mode="stock">⛔ Стоп-лист меню</button></div>
     <div class="ops-grid"><button class="ops-card green rippleable" data-action="open-op" data-mode="stamp"><span class="ops-ico">☕</span><b>Начислить штамп</b><small>QR-код или ID гостя</small></button><button class="ops-card sun rippleable" data-action="open-op" data-mode="reward"><span class="ops-ico">🎁</span><b>Подарки и бонусы</b><small>Сканировать карту гостя</small></button></div>
     <div class="ops-grid"><button class="ops-card green rippleable" data-action="open-op" data-mode="delivery"><span class="ops-ico">📦</span><b>Поставка</b><small>Приход товара и накладная</small></button><button class="ops-card sun rippleable" data-action="open-op" data-mode="expense"><span class="ops-ico">💸</span><b>Расход</b><small>Из кассы или безнал</small></button><button class="ops-card red rippleable" data-action="open-op" data-mode="issue"><span class="ops-ico">⚠️</span><b>Проблема</b><small>Сообщить владельцу</small></button><button class="ops-card rippleable" data-action="open-op" data-mode="close"><span class="ops-ico">🌙</span><b>Закрыть смену</b><small>Деньги · чек-лист · фото</small></button></div>
     <div class="ops-wide"><div class="ops-wide-title">Сегодня</div><div class="ops-stats"><div class="ops-stat"><b>${state.todayOps.deliveries||0}</b><span>ПОСТАВОК</span></div><div class="ops-stat"><b>${state.todayOps.expenses||0}</b><span>РАСХОДОВ</span></div><div class="ops-stat"><b>${state.todayOps.issues||0}</b><span>ПРОБЛЕМ</span></div></div></div>
@@ -1637,6 +1637,7 @@ function renderStaff(){
 
 function renderStaffOpForm(){
   const m=state.opMode;if(!m)return '';
+  if(m==='stock')return renderStaffStock();
   if(m==='checklist')return renderShiftChecklist();
   if(m==='revenue')return `<div class="ops-form" id="ops-active-form"><h3>Отчёт по выручке</h3>${renderOpsLocation()}<label class="hint">Дата отчёта<input class="text-input" type="date" aria-label="Дата отчёта" data-action="set-report-date" value="${esc(state.reportDate||todayKey())}"></label><label class="hint">Наличные, ₽<input class="text-input" type="number" min="0" inputmode="decimal" data-action="set-report-cash" value="${esc(state.reportCash)}" aria-label="Наличные, ₽"></label><label class="hint">Безналичные, ₽<input class="text-input" type="number" min="0" inputmode="decimal" data-action="set-report-cashless" value="${esc(state.reportCashless)}" aria-label="Безналичные, ₽"></label>${renderOpsPhotos('report','Фото отчёта по выручке')}${renderOpsAuth()}<button class="ops-submit" data-action="submit-revenue-report" ${state.opsSaving||state.opsPhotoLoading?'disabled':''}>${state.opsSaving?'Отправляем…':'Отправить отчёт'}</button>${state.reportMsg?`<div class="ops-message ${state.reportMsgOk?'ok':'bad'}">${esc(state.reportMsg)}</div>`:''}<button class="ops-cancel" data-action="close-op">Закрыть</button></div>`;
 
@@ -2764,6 +2765,7 @@ function renderCheckout(){
       </div>
 
       <div class="section">
+        ${state.cart.some(x=>itemStopped(x.itemId))?'<p class="ops-message bad" role="alert">Часть позиций в стоп-листе. Уберите их из корзины перед оплатой.</p>':''}
         <div class="section-label">Способ оплаты</div>
         <div class="ops-message"><b>Онлайн-оплата</b><p class="hint">Откроется защищённая платёжная страница. Оплата при получении недоступна.</p></div>
       </div>
@@ -2792,7 +2794,7 @@ function renderCheckout(){
       </div>
 
       <div class="stickybar">
-        <button class="btn-primary rippleable" data-action="pay" ${(!shopStatus(state.shopId).open || state.payingNow) ? 'disabled' : ''}>
+        <button class="btn-primary rippleable" data-action="pay" ${(!shopStatus(state.shopId).open || state.payingNow || state.cart.some(x=>itemStopped(x.itemId))) ? 'disabled' : ''}>
           <span>${state.payingNow ? 'Отправляем…' : (shopStatus(state.shopId).open ? 'Перейти к оплате' : 'Точка закрыта')}</span><span class="sub price-pop">${money(cartTotal()+tipAmount())}</span>
         </button>
       </div>
@@ -3156,7 +3158,7 @@ document.addEventListener('click', (e)=>{
   else if(action==='staff-redeem-voucher'){ redeemVoucher(); }
   else if(action==='submit-revenue-report'){ submitRevenueReport(); }
   else if(action==='submit-expense-report'){ submitExpenseReport(); }
-  else if(action==='open-op'){ state.opMode=el.dataset.mode; state.opMsg=''; state.shiftMsg=''; render(); if(state.opMode==='opening')loadShiftOpening();else if(state.opMode==='schedule')teamLoadSchedule();else if(state.opMode==='payroll')loadTeamPayroll(); requestAnimationFrame(()=>{ const f=document.getElementById('ops-active-form'); if(f) f.scrollIntoView({behavior:'smooth',block:'start'}); }); }
+  else if(action==='open-op'){ state.opMode=el.dataset.mode; state.opMsg=''; state.shiftMsg=''; render(); if(state.opMode==='opening')loadShiftOpening();else if(state.opMode==='stock')loadStaffStock();else if(state.opMode==='schedule')teamLoadSchedule();else if(state.opMode==='payroll')loadTeamPayroll(); requestAnimationFrame(()=>{ const f=document.getElementById('ops-active-form'); if(f) f.scrollIntoView({behavior:'smooth',block:'start'}); }); }
   else if(action==='close-op'){ if(typeof teamUI!=='undefined'&&teamUI.busy)return;state.opMode=null; render(); }
   else if(action==='save-operation'){ saveOperation(); }
   else if(action==='close-shift'){ closeShift(); }
@@ -3321,7 +3323,8 @@ async function loadMenuOverrides(){
 async function loadStopList(){
   try{
     const res = await fetch(DB_URL + '/stoplist.json');
-    const obj = res.ok ? await res.json() : null;
+    if(!res.ok)throw Error('Наличие не загружено.');
+    const obj = await res.json();
     STOP_LIST = new Set(obj ? Object.keys(obj).filter(k=>obj[k]) : []);
   }catch(e){ /* keep whatever we had */ }
 }
@@ -3483,11 +3486,12 @@ function checkPaymentReturn(){
   if(failed)state.paymentMessage='Оплата прервана. Проверим результат перед повторной попыткой. Ссылка сохранена.';
   return true;
 }
-window.addEventListener('focus',()=>{const p=readPendingPayment();if(p)startPaymentConfirmation(p.orderId);if(state.screen==='status')pollOrderStatus();});
+window.addEventListener('focus',()=>{const p=readPendingPayment();if(p)startPaymentConfirmation(p.orderId);if(state.screen==='status')pollOrderStatus();refreshMenuAvailability();});
 
 /* ---------- INIT ---------- */
 initMenuPreferences();
 initOpsV3();
+startMenuAvailabilityUpdates();
 const operationsEntry = new URLSearchParams(location.search).get('screen');
 if(operationsEntry === 'staff' || operationsEntry === 'admin'){
   state.screen = operationsEntry;

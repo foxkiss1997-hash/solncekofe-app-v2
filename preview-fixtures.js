@@ -18,6 +18,11 @@ window.fetch=async function(input,options={}){
   if(method!=='GET'){throw Error('Запись в рабочую базу отключена в демонстрации.');}
   return new Response(JSON.stringify(previewDb[url.pathname]??null),{status:200,headers:{'Content-Type':'application/json'}});
  }
+ if(url.hostname==='solncekofe-payment-relay.onrender.com'&&url.pathname==='/set-menu-availability'){
+  const b=JSON.parse(options.body||'{}');if(b.submittedBy!=='Анна'||b.auth?.password!=='preview-pass'||![1,2].includes(b.shopId))return new Response(JSON.stringify({ok:false,error:'Демонстрация: нет доступа.'}),{status:403});
+  previewDb['/shop_stoplist.json'][b.shopId]??={};if(b.stopped)previewDb['/shop_stoplist.json'][b.shopId][b.itemId]=true;else delete previewDb['/shop_stoplist.json'][b.shopId][b.itemId];
+  return new Response(JSON.stringify({ok:true,shopId:b.shopId,itemId:b.itemId,stopped:b.stopped}),{status:200,headers:{'Content-Type':'application/json'}});
+ }
  if(url.hostname.includes('workers.dev')||url.hostname.includes('onrender.com')||url.hostname.includes('script.google'))throw Error('Внешние операции отключены в демонстрации.');
  return previewNativeFetch(input,options);
 };
@@ -66,6 +71,11 @@ window.previewSetup=function(state,team){
  if(role==='staff'){Object.assign(state,{opMode:query.get('view')==='payroll'?'payroll':query.get('view')==='schedule'?'schedule':null,screen:'staff',staffShop:2,staffName:'Анна',reportPassword:'preview-pass',todayOps:{deliveries:1,expenses:2,issues:0}});if(team){if(query.get('view')==='payroll'){team.payroll=window.previewPayroll;team.payrollDate='2026-10-18';team.payrollKey='Анна:2:2026-10-18';}team.schedule=window.previewSchedule;team.scheduleKey='Анна:2';if(query.get('view')==='schedule')team.calendarDate=previewToday.slice(0,8)+'20';}}
  if(role==='staff'&&['opening','opening-empty','stamp'].includes(query.get('view'))){state.opMode=query.get('view')==='stamp'?'stamp':'opening';if(team){team.openingIdentity='Анна:2';team.openingStatus='ready';team.openingDate=previewToday;team.openingRows=query.get('view')==='opening-empty'?[]:[{id:'a'.repeat(32),date:previewToday,start:'08:00',end:'21:00',name:'Анна',opened:null}];}}
  if(role==='owner'){Object.assign(state,{screen:'admin',adminAuthed:true,adminTab:query.get('view')==='payroll'?'payroll':query.get('view')==='approvals'?'schedule':'overview',teamShop:2,adminPinValue:'preview-owner'});if(team){team.overview=window.previewOverview;if(query.get('view')==='payroll'){team.payroll=window.previewPayroll;team.payrollDate='2026-10-18';team.payrollKey='owner:2:2026-10-18';}if(query.get('view')==='approvals'){team.schedule={staff:['Анна','Иван'],rows:Array.from({length:8},(_,i)=>({id:String(i+1).repeat(32),date:'2026-11-'+String(i+1).padStart(2,'0'),start:'08:00',end:'21:00',name:'Анна',status:'pending',revision:'b'.repeat(32),requestBatchId:'b'.repeat(32)}))};team.scheduleKey='owner:2';}}}
+ if(role==='staff'&&query.get('view')==='stock'){
+  localStorage.removeItem('sk_pending_payment');localStorage.removeItem('sk_active_order');state.paymentPending=null;
+  state.staffShop=Number(query.get('point'))===1?1:2;state.screen='staff';state.opMode='stock';state.staffStockSearch='кап';state.staffStockReady=true;state.staffStockIdentity=stockIdentity();
+  previewDb['/shop_stoplist.json'][2]={cap:true};previewDb['/stoplist.json']={raf:true};STOP_LIST.add('raf');shopStopLists=previewDb['/shop_stoplist.json'];
+ }
  if(role==='owner'&&query.get('view')==='assign'){state.adminTab='schedule';state.teamShop=Number(query.get('point'))===1?1:2;Object.assign(team,{schedule:{staff:['Анна','Борис'],rows:[],teamRows:[]},scheduleKey:'owner:'+state.teamShop,adminName:'Анна',adminMonth:'2026-11',adminDraftKey:'owner:'+state.teamShop+':Анна',adminDraft:[2,3,4,5,6,7,8,9].map((day,i)=>({shiftId:String(i+1).repeat(32),revision:'',date:'2026-11-'+String(day).padStart(2,'0')}))});}
 
 };
