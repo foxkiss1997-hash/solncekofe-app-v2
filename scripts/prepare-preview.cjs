@@ -1,12 +1,12 @@
 const fs=require('fs');
 let html=fs.readFileSync('preorder.html','utf8');
-html=html.replace('<head>','<head><script src="preview-fixtures.js?v=approvals2"></script>');
+html=html.replace('<head>','<head><script src="preview-fixtures.js?v=payroll1"></script>');
 html=html.replace('<script src="https://telegram.org/js/telegram-web-app.js"></script>','');
 html=html.replace('/* ---------- INIT ---------- */',`/* ---------- INIT ---------- */
 if(window.SOLNCE_PREVIEW){sendOpsRequest=window.previewRequest;window.previewSetup(state,typeof teamUI!=='undefined'?teamUI:null);}
 `);
 html=html.replace('const operationsEntry = new URLSearchParams(location.search).get(\'screen\');',"const operationsEntry = new URLSearchParams(location.search).get('screen');");
-html=html.replace("if(operationsEntry==='card')state.screen='card';","if(operationsEntry==='card')state.screen='card';\nif(window.SOLNCE_PREVIEW&&new URLSearchParams(location.search).get('role')==='owner'){state.screen='admin';state.adminAuthed=true;state.adminTab=new URLSearchParams(location.search).get('view')==='approvals'?'schedule':'overview';}");
+html=html.replace("if(operationsEntry==='card')state.screen='card';","if(operationsEntry==='card')state.screen='card';\nif(window.SOLNCE_PREVIEW&&new URLSearchParams(location.search).get('role')==='owner'){state.screen='admin';state.adminAuthed=true;state.adminTab=new URLSearchParams(location.search).get('view')==='payroll'?'payroll':new URLSearchParams(location.search).get('view')==='approvals'?'schedule':'overview';}");
 // / is a preview, production redirect remains untouched.
 fs.writeFileSync('preview.html',html);
 console.log('Isolated preview generated');
