@@ -61,3 +61,12 @@
 Начисления хранятся в отдельной закрытой Google-таблице, создаваемой только при первом реальном подтверждении работы. В публичную ветку графика суммы и зарплатная история не записываются. Журнал неизменяемый по строкам: подтверждение +4 200, отмена −4 200 с причиной. Повтор проверяется по ID и содержанию; потеря ответа после записи не создаёт второе начисление. Пока начисление активно, изменение назначенной смены через API заблокировано. Тестовые записи используют отдельную таблицу. Чтение зарплаты не создаёт ни таблиц, ни начислений.
 
 71 тест и DOM smoke прошли: пять смен = 21 000; воскресенье и границы месяца/года, две точки, чужой сотрудник, будущая/устаревшая смена, ожидающая замена, отмена с причиной, повтор после потери ответа, закрытая таблица, изоляция теста. Chrome 390/320 px: сумма, недельный период, воскресенье, подтверждение работы; ширина/scrollWidth 375/375 и 305/305. Снимок design-evidence/weekly-payroll.jpg содержит только демоданные. Реальных начислений, выплат и новых рабочих зарплатных таблиц при проверке не создавалось.
+
+## 19 October — camera attendance and penalties
+
+- Server timestamp on begin; five-minute camera session; no completion without JPEG photo stored in private Drive folder. No gallery/file input in opening UI. Browser media stream cannot prove photo authenticity; Telegram iOS/Android physical camera verification remains outstanding.
+- Exact thresholds: <5 min zero, >=5 min 200 RUB, >=15 min 1000 RUB. Network upload time excluded after begin. Offline arrival requires administrator correction.
+- Private append-only payroll journal also stores attendance, manual fines and reasoned reversals. Firebase receives no attendance/photo/fine writes. Retries do not duplicate opening or deductions. Schedule changes blocked after opening.
+- Employee sees own records across both shops. Administrator sees photo link (Drive owner access), adds penalties to approved shifts, reverses penalties with reason; weekly amount = gross - active penalties, potentially negative before earned shifts are confirmed. No money transfers.
+- 77 unit tests and DOM smoke passed. Narrow screens 390/320 px had no horizontal overflow. Synthetic preview only; no real check-in, employee fine or payment created.
+- Backend deployment version 17. Frontend cache attendance1.
