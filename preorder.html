@@ -683,8 +683,8 @@
 
 .ops-photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.ops-photo-grid img{width:100%;height:120px;object-fit:cover;border-radius:12px}.ops-photos{margin:12px 0}.ops-check-editor{margin:14px 0;padding:12px;border:1px solid #33443a;border-radius:15px}.ops-check-editor.archived{opacity:.55}.admin-sun .tabs{overflow-x:auto;display:flex}.admin-sun .tab{flex-shrink:0}
 </style>
-<link rel="stylesheet" href="unified.css?v=20261019-payment1">
-<link rel="stylesheet" href="frosted-glass.css?v=20261019-payment1">
+<link rel="stylesheet" href="unified.css?v=20261019-orderstatus1">
+<link rel="stylesheet" href="frosted-glass.css?v=20261019-orderstatus1">
 </head>
 <body>
   <div class="shell">
@@ -692,11 +692,11 @@
     <div id="app"></div>
   </div>
 
-<script src="operations-v3.js?v=20261019-payment1"></script>
-<script src="stable-ui.js?v=20261019-payment1"></script>
-<script src="team-loyalty.js?v=20261019-payment1"></script>
-<script src="menu-photos.js?v=20261019-payment1"></script>
-<script src="menu-experience.js?v=20261019-payment1"></script>
+<script src="operations-v3.js?v=20261019-orderstatus1"></script>
+<script src="stable-ui.js?v=20261019-orderstatus1"></script>
+<script src="team-loyalty.js?v=20261019-orderstatus1"></script>
+<script src="menu-photos.js?v=20261019-orderstatus1"></script>
+<script src="menu-experience.js?v=20261019-orderstatus1"></script>
 <script>
 /* ---------- DATA (menu: Солнцекофе, Yandex Eda) ---------- */
 const CATEGORIES = [
@@ -1631,7 +1631,7 @@ function renderStaff(){
     <div class="ops-grid"><button class="ops-card sun rippleable" data-action="open-op" data-mode="revenue"><span class="ops-ico">📊</span><b>Отчёт по выручке</b><small>Наличные · безнал · фото</small></button><button class="ops-card green rippleable" data-action="open-op" data-mode="checklist"><span class="ops-ico">📋</span><b>Чек-листы</b><small>Открытие · в течение дня · закрытие</small></button></div>
     <div class="ops-wide"><button class="ops-cancel" data-action="open-op" data-mode="schedule">📅 Мой график</button><button class="ops-cancel" data-action="open-op" data-mode="payroll">💰 Моя зарплата</button><button class="ops-cancel" data-action="open-op" data-mode="instructions">Как работать в приложении</button></div>
     ${renderOpsSync()}${renderStaffOpForm()}
-    <div class="ops-wide"><div class="ops-wide-title">Заказы точки</div>${state.staffLoading?`<p class="ops-muted">Загружаем…</p>`:renderOrderList(state.staffOrders,true)}</div>
+    <div class="ops-wide"><div class="ops-wide-title">Заказы точки</div>${state.orderActionError?`<p role="alert" class="pin-error">${esc(state.orderActionError)}</p>`:''}${state.staffLoading?`<p class="ops-muted">Загружаем…</p>`:renderOrderList(state.staffOrders,true)}</div>
   </div>`;
 }
 
@@ -2179,8 +2179,8 @@ function renderOrderList(orders, withActions){
       }
       <div class="order-meta">Имя: ${o.guestName||'—'} · ID: ${o.clientId||'—'}</div>
       ${o.status==='done' && o.completedBy ? `<div class="order-meta">Закрыл: <b>${esc(o.completedBy)}</b></div>` : ''}
-      ${withActions && o.status==='new' ? `<button class="btn-primary rippleable" data-action="order-accept" data-id="${o.id}" style="margin-top:8px;"><span>Принять заказ</span><span class="sub">→</span></button>` : ''}
-      ${withActions && o.status==='accepted' ? `<button class="btn-ghost rippleable" data-action="order-done" data-id="${o.id}">Отметить готовым</button>` : ''}
+      ${withActions && o.status==='new' ? `<button class="btn-primary rippleable" data-action="order-accept" data-id="${o.id}" ${state.orderActionBusy?'disabled':''} style="margin-top:8px;"><span>Принять заказ</span><span class="sub">→</span></button>` : ''}
+      ${withActions && o.status==='accepted' ? `<button class="btn-ghost rippleable" data-action="order-done" data-id="${o.id}" ${state.orderActionBusy?'disabled':''}>Отметить готовым</button>` : ''}
       ${!withActions && o.paid && o.tbankPaymentId && !o.refunded ? `<button class="btn-ghost rippleable" data-action="order-refund" data-id="${o.id}" data-payment-id="${o.tbankPaymentId}" style="margin-top:8px;color:var(--coral-deep);">Оформить возврат</button>` : ''}
       ${!withActions && o.refunded ? `<div class="order-meta" style="color:var(--mint-deep);font-weight:700;margin-top:6px;">✓ Возврат оформлен</div>` : ''}
     </div>
@@ -2241,14 +2241,16 @@ async function staffPasswordLogin(){
   loadStaffOrders();loadTodayOps();
 }
 
+let staffOrdersGeneration=0;
 async function loadStaffOrders(silent){
+  const generation=++staffOrdersGeneration;
   const shop=state.staffShop,name=state.staffName;if(!shop||!name)return;
   if(!silent){ state.staffLoading = true; render(); }
   try{
     const res = await fetch(DB_URL + '/orders.json');
     if(!res.ok)throw Error('Не удалось обновить заказы.');
     const obj = await res.json();
-    if(shop!==state.staffShop||name!==state.staffName)return;
+    if(shop!==state.staffShop||name!==state.staffName||generation!==staffOrdersGeneration)return;
     const all = obj ? Object.keys(obj).map(id=>Object.assign({id}, obj[id])) : [];
     const nextOrders = all.filter(o=>o.shopId===state.staffShop && o.status!=='done' && o.status!=='cancelled').sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
     if(silent && JSON.stringify(nextOrders)===JSON.stringify(state.staffOrders))return;
@@ -2690,25 +2692,34 @@ async function redeemVoucher(){
   state.opMode='reward';render();
 }
 
-async function acceptOrder(id){
+async function transitionStaffOrder(id,next){
+  if(state.orderActionBusy)return;
+  const shopId=state.staffShop,name=state.staffName;
+  if(!shopId||!name)return;
+  staffOrdersGeneration++;
+  state.orderActionBusy=id;state.orderActionError='';render();
   try{
-    await fetch(DB_URL + '/orders/' + id + '.json', {
-      method:'PATCH', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({status:'accepted', acceptedAt: Date.now(), acceptedBy: state.staffName || null})
-    });
-  }catch(e){}
-  loadStaffOrders();
+    const url=DB_URL+'/orders/'+encodeURIComponent(id)+'.json';
+    const current=await fetch(url,{headers:{'X-Firebase-ETag':'true'}});
+    if(!current.ok)throw Error('Не удалось прочитать заказ. Обновите список.');
+    const order=await current.json(),etag=current.headers.get('ETag');
+    if(state.staffShop!==shopId||state.staffName!==name)return;
+    if(!order||Number(order.shopId)!==Number(shopId))throw Error('Заказ другой точки или уже удалён.');
+    if(order.status===next)return;
+    if(next==='accepted'&&order.status!=='new'||next==='done'&&order.status!=='accepted')throw Error('Статус заказа уже изменился. Обновите список.');
+    if(!etag)throw Error('Не удалось подтвердить версию заказа. Попробуйте ещё раз.');
+    const patch=next==='accepted'?{status:'accepted',acceptedAt:Date.now(),acceptedBy:name}:{status:'done',completedAt:Date.now(),completedBy:name};
+    const saved=await fetch(url,{method:'PUT',headers:{'Content-Type':'application/json','If-Match':etag},body:JSON.stringify({...order,...patch})});
+    if(!saved.ok)throw Error(saved.status===412?'Заказ изменился на другом устройстве. Обновите список.':'Не удалось сохранить статус. Попробуйте ещё раз.');
+    if(state.staffShop===shopId&&state.staffName===name){state.staffOrders=(state.staffOrders||[]).flatMap(o=>o.id!==id?[o]:next==='done'?[]:[{...o,...patch}]);}
+  }catch(e){if(state.staffShop===shopId&&state.staffName===name)state.orderActionError=e.message;}
+  finally{
+    state.orderActionBusy=null;
+    if(state.staffShop===shopId&&state.staffName===name){await loadStaffOrders(true);render();}
+  }
 }
-
-async function markOrderDone(id){
-  try{
-    await fetch(DB_URL + '/orders/' + id + '.json', {
-      method:'PATCH', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({status:'done', completedBy: state.staffName || null, completedAt: Date.now()})
-    });
-  }catch(e){}
-  loadStaffOrders();
-}
+async function acceptOrder(id){return transitionStaffOrder(id,'accepted');}
+async function markOrderDone(id){return transitionStaffOrder(id,'done');}
 
 async function refundOrder(orderId, paymentId){
   if(!confirm('Вернуть деньги гостю по этому заказу? Действие необратимо.')) return;
@@ -2795,6 +2806,7 @@ function renderStatus(){
   const confirming = o.status === 'confirming';
   const waitingAccept = o.status === 'new';
   const cancelled = o.status === 'cancelled';
+  const ready = ['done','ready'].includes(o.status);
 
   if(cancelled){
     return `
@@ -2818,7 +2830,7 @@ function renderStatus(){
     <div class="screen">
       <div class="status-top">
         <button class="iconbtn rippleable" data-action="status-to-menu" style="margin-bottom:10px;">← К меню</button>
-        <div class="status-eyebrow" id="statusEyebrow">${confirming ? 'Проверяем оплату' : (waitingAccept ? 'Ждём, когда точка примет заказ' : 'Заказ принят')}</div>
+        <div class="status-eyebrow" id="statusEyebrow">${confirming ? 'Проверяем оплату' : (waitingAccept ? 'Ждём, когда точка примет заказ' : ready ? 'Готово к выдаче' : 'Готовим ваш заказ')}</div>
       </div>
 
       ${confirming ? `
@@ -2831,9 +2843,11 @@ function renderStatus(){
           <div class="waiting-spinner"></div>
           <div class="waiting-text">Обычно это занимает не больше минуты-двух — как только точка возьмёт заказ в работу, здесь появится время готовности.</div>
         </div>
+      ` : ready ? `
+        <div class="eta-hero"><div class="eta-hero-num">Готово</div><div class="eta-hero-label">Заберите заказ в кофейне</div></div>
       ` : `
         <div class="eta-hero">
-          <div class="eta-hero-num" id="etaNum">~${o.prepMinutes}<span>мин</span></div>
+          <div class="eta-hero-num" id="etaNum">~${Number(o.prepMinutes)||6}<span>мин</span></div>
           <div class="eta-hero-label" id="etaLabel">До готовности</div>
         </div>
         <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
@@ -2842,20 +2856,20 @@ function renderStatus(){
       <div class="status-shop">${o.shop.name} · ${o.shop.addr}</div>
 
       <div class="stations">
-        <div class="station-wrap"><div class="station" id="st0"></div><div class="station-label">Принят точкой</div></div>
-        <div class="station-line" id="line0"></div>
-        <div class="station-wrap"><div class="station" id="st1"></div><div class="station-label">Готовим</div></div>
-        <div class="station-line" id="line1"></div>
-        <div class="station-wrap"><div class="station" id="st2"></div><div class="station-label">Готово к выдаче</div></div>
+        <div class="station-wrap"><div class="station ${ready||o.status==='accepted'?'done':''}" id="st0">${ready||o.status==='accepted'?checkSVG('#fff'):''}</div><div class="station-label">Принят точкой</div></div>
+        <div class="station-line ${ready?'filled':''}" id="line0"></div>
+        <div class="station-wrap"><div class="station ${ready?'done':o.status==='accepted'?'active':''}" id="st1">${ready?checkSVG('#fff'):''}</div><div class="station-label">Готовим</div></div>
+        <div class="station-line ${ready?'filled':''}" id="line1"></div>
+        <div class="station-wrap"><div class="station ${ready?'done':''}" id="st2">${ready?checkSVG('#fff'):''}</div><div class="station-label">Готово к выдаче</div></div>
       </div>
 
-      <div class="ready-block" id="readyBlock">
+      <div class="ready-block ${ready?'show':''}" id="readyBlock">
         <div class="ready-stamp"><b>ГОТОВО</b><span>забери заказ</span></div>
       </div>
 
-      <div class="flower-note" id="flowerNote">
+      <div class="flower-note ${ready?'show':''}" id="flowerNote">
         <div class="fico">🌼</div>
-        <div><b>${o.flower}</b> передаёт: заказ готов, ждём тебя на кассе!</div>
+        <div><b>${esc(o.completedBy||o.flower||'Бариста')}</b> передаёт: заказ готов, ждём тебя на кассе!</div>
       </div>
 
       <div class="demo-note">Готовим по-настоящему — обновление статуса идёт в реальном времени.</div>
@@ -3002,21 +3016,23 @@ function stopOrderStatusPolling(){
   clearInterval(orderStatusPollTimer);
   orderStatusPollTimer = null;
 }
+let orderStatusChecking=false;
 async function pollOrderStatus(){
-  if(!state.order || !state.order.firebaseId || state.screen!=='status'){ stopOrderStatusPolling(); return; }
+  if(!state.order || !state.order.firebaseId || state.screen!=='status'){stopOrderStatusPolling();return;}
+  if(orderStatusChecking)return;
+  const id=state.order.firebaseId;
+  orderStatusChecking=true;
   try{
-    const res = await fetch(DB_URL + '/orders/' + state.order.firebaseId + '.json');
-    const o = await res.json();
-    if(!o) return;
-    const wasStatus = state.order.status;
-    if(o.status) state.order.status = o.status;
-    if(o.acceptedAt) state.order.acceptedAt = o.acceptedAt;
-    if(o.prepMinutes) state.order.prepMinutes = o.prepMinutes;
-    saveOrderToStorage();
-    if(wasStatus !== state.order.status){
-      render();
+    const res=await fetch(DB_URL+'/orders/'+encodeURIComponent(id)+'.json');
+    if(!res.ok)throw Error('Не удалось обновить статус.');
+    const o=await res.json();
+    if(!o||state.order?.firebaseId!==id||state.screen!=='status')return;
+    let changed=false;
+    for(const key of ['status','acceptedAt','prepMinutes','completedAt','completedBy','refunded']){
+      if(o[key]!==undefined&&state.order[key]!==o[key]){state.order[key]=o[key];changed=true;}
     }
-  }catch(e){}
+    if(changed){saveOrderToStorage();render();}
+  }catch(e){}finally{orderStatusChecking=false;}
 }
 
 let staffTickTimer = null;
@@ -3062,62 +3078,22 @@ function tickStaffOrderTimers(){
 
 /* ---------- STATUS ANIMATION ---------- */
 function initStatusTicker(){
-  clearInterval(statusTimer);
-  if(!state.order || state.order.status !== 'accepted' || !state.order.acceptedAt) return;
-  const eyebrow = document.getElementById('statusEyebrow');
-  const etaNum = document.getElementById('etaNum');
-  const etaLabel = document.getElementById('etaLabel');
-  const progressFill = document.getElementById('progressFill');
-  const st = [document.getElementById('st0'), document.getElementById('st1'), document.getElementById('st2')];
-  const lines = [document.getElementById('line0'), document.getElementById('line1')];
-  const readyBlock = document.getElementById('readyBlock');
-  const flowerNote = document.getElementById('flowerNote');
-  if(!eyebrow || !st[0]) return;
-
-  const done = [false, false, false];
-  let confettiPlayed = false;
-  function stamp(idx){
-    if(done[idx]) return;
-    done[idx] = true;
-    st[idx].classList.remove('active');
-    st[idx].classList.add('done', 'stamp-in');
-    st[idx].innerHTML = checkSVG('#fff');
-    setTimeout(()=>st[idx].classList.remove('stamp-in'), 460);
-    if(idx>0) lines[idx-1].classList.add('filled');
-  }
-
-  const demoDuration = state.order.prepMinutes*60000;
+  clearInterval(statusTimer);statusTimer=null;
+  const order=state.order;
+  if(!order||order.status!=='accepted'||!Number.isFinite(Number(order.acceptedAt))||!Number(order.acceptedAt))return;
+  const eyebrow=document.getElementById('statusEyebrow'),etaNum=document.getElementById('etaNum'),etaLabel=document.getElementById('etaLabel'),progressFill=document.getElementById('progressFill');
+  if(!etaNum||!etaLabel)return;
+  const duration=(Number(order.prepMinutes)||6)*60000;
   function tick(){
-    const elapsed = Date.now() - state.order.acceptedAt;
-    const t = Math.min(1, elapsed / demoDuration);
-
-    if(progressFill) progressFill.style.width = (t*100) + '%';
-
-    if(!done[0]) stamp(0);
-    if(t>=0.04 && !done[1]){ st[1].classList.add('active'); }
-    if(t>=0.92 && !done[1]) stamp(1);
-    if(t>=0.92 && !done[2]) stamp(2);
-
-    if(t<0.04){ eyebrow.textContent='Заказ принят'; }
-    else if(t<0.92){ eyebrow.textContent='Готовим ваш заказ'; }
-    else { eyebrow.textContent='Готово к выдаче'; }
-
-    const remaining = Math.max(0, Math.round(state.order.prepMinutes*(1-t)));
-    if(t<0.92){
-      etaNum.innerHTML = (remaining<=0 ? '&lt;1' : `~${remaining}`) + '<span>мин</span>';
-      etaLabel.textContent = 'До готовности';
-    } else {
-      etaNum.innerHTML = 'Готово';
-      etaLabel.textContent = 'Заберите заказ';
-      readyBlock.classList.add('show');
-      flowerNote.classList.add('show');
-      if(!confettiPlayed){ confettiPlayed = true; spawnConfetti(readyBlock); }
-    }
-
-    if(t>=1){ clearInterval(statusTimer); }
+    if(state.order!==order||state.screen!=='status'||order.status!=='accepted'){clearInterval(statusTimer);statusTimer=null;return;}
+    const elapsed=Math.max(0,Date.now()-Number(order.acceptedAt)),remaining=Math.ceil(Math.max(0,duration-elapsed)/60000);
+    if(progressFill)progressFill.style.width=Math.min(95,elapsed/duration*95)+'%';
+    if(eyebrow)eyebrow.textContent='Готовим ваш заказ';
+    // Only the employee's saved status can declare readiness, never the estimate.
+    etaNum.innerHTML=remaining>0?'~'+remaining+'<span>мин</span>':'Готовим';
+    etaLabel.textContent=remaining>0?'Ориентировочно до готовности':'Нужно ещё немного времени. Сообщим, когда будет готово.';
   }
-  tick();
-  statusTimer = setInterval(tick, 150);
+  tick();statusTimer=setInterval(tick,1000);
 }
 
 /* ---------- EVENTS ---------- */
@@ -3507,7 +3483,7 @@ function checkPaymentReturn(){
   if(failed)state.paymentMessage='Оплата прервана. Проверим результат перед повторной попыткой. Ссылка сохранена.';
   return true;
 }
-window.addEventListener('focus',()=>{const p=readPendingPayment();if(p)startPaymentConfirmation(p.orderId);});
+window.addEventListener('focus',()=>{const p=readPendingPayment();if(p)startPaymentConfirmation(p.orderId);if(state.screen==='status')pollOrderStatus();});
 
 /* ---------- INIT ---------- */
 initMenuPreferences();
