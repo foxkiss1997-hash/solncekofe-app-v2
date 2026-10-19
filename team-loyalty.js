@@ -594,13 +594,14 @@ function applyConfirmedShiftStatus(data){
 async function refreshStaffShiftStatus(){
  if(state.screen!=='staff'||!state.staffName||!hasStaffAuth()||teamUI.busy)return;
  if(staffShiftRefreshPromise)return staffShiftRefreshPromise;
- const identity=teamIdentity();state.shiftStatus='loading';render();
+ const identity=teamIdentity(),before=JSON.stringify([state.shiftStatusDate,state.shiftStatus,state.shiftOpenedAt]);
+ if(state.shiftStatusDate!==todayKey()||!['opened','available','none'].includes(state.shiftStatus)){state.shiftStatus='loading';render();}
  staffShiftRefreshPromise=(async()=>{
   try{const data=await teamRequest({action:'listShiftOpening'});if(identity!==teamIdentity())return;
    if(!Array.isArray(data.rows))throw Error('Нет подтверждения графика.');applyConfirmedShiftStatus(data);
    teamUI.openingRows=data.rows;teamUI.openingIdentity=identity;teamUI.openingDate=state.shiftStatusDate;teamUI.openingStatus='ready';teamUI.openingError='';
   }catch(e){if(identity===teamIdentity()){state.shiftStatus='error';teamUI.openingStatus='error';teamUI.openingError=e.message;}}
-  finally{staffShiftRefreshPromise=null;if(identity===teamIdentity())render();}
+  finally{staffShiftRefreshPromise=null;if(identity===teamIdentity()&&before!==JSON.stringify([state.shiftStatusDate,state.shiftStatus,state.shiftOpenedAt]))render();}
  })();return staffShiftRefreshPromise;
 }
 function staffShiftLabel(){
