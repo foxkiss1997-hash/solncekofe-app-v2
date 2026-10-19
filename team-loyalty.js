@@ -347,12 +347,28 @@ async function fetchFinancialReports(type){
 let shiftCamera=null;
 function stopShiftCamera(){if(shiftCamera){shiftCamera.stream?.getTracks().forEach(t=>t.stop());shiftCamera.overlay?.remove();shiftCamera=null;}}
 async function loadShiftOpening(){
- stopShiftCamera();if(teamUI.busy)return;const identity=teamIdentity();teamUI.busy=true;teamUI.openingRows=null;teamUI.message='';render();
- try{const data=await teamRequest({action:'listShiftOpening'});if(identity===teamIdentity()){teamUI.openingRows=data.rows;teamUI.openingIdentity=identity;}}catch(e){teamUI.message=e.message;}finally{teamUI.busy=false;render();}
+ if(teamUI.busy)return;stopShiftCamera();const identity=teamIdentity();teamUI.busy=true;teamUI.openingRows=null;teamUI.openingIdentity=identity;teamUI.openingStatus='loading';teamUI.openingError='';teamUI.message='';render();
+ try{const data=await teamRequest({action:'listShiftOpening'});if(identity===teamIdentity()){
+  if(!Array.isArray(data.rows))throw Error('Сервер не вернул список смен. Повторите загрузку.');
+  teamUI.openingRows=data.rows;teamUI.openingDate=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(data.serverAt||Date.now()));teamUI.openingStatus='ready';
+ }}catch(e){if(identity===teamIdentity()){teamUI.openingError=e.message;teamUI.openingStatus='error';}}finally{teamUI.busy=false;render();}
+}
+async function startAvailableShift(){
+ if(teamUI.busy)return;
+ await loadShiftOpening();if(state.opMode!=='opening'||teamUI.openingIdentity!==teamIdentity()||teamUI.openingStatus!=='ready')return;
+ const available=teamUI.openingRows.filter(r=>!r.opened);
+ if(available.length===1)return openShiftCamera(available[0].id);
+ teamUI.message=available.length?'Выберите нужную смену ниже.':teamUI.openingRows.length?'Смена уже открыта. Повторная отметка не требуется.':'На сегодня нет вашей утверждённой смены в выбранной кофейне. Откройте «Мой график» и отправьте смену на согласование администратору.';render();
 }
 function renderShiftOpening(){
- const rows=teamUI.openingIdentity===teamIdentity()?teamUI.openingRows:null;
- return `<div class="ops-form" id="ops-active-form"><h3>Открыть смену</h3><p class="hint">Нажмите кнопку и сфотографируйте кассу с открытой сменой. Время фиксирует сервер при нажатии; на съёмку — 5 минут. До подтверждения сервера смена не открыта.</p><p class="hint">Опоздание: менее 5 минут — 0 ₽; с 5 минут — 200 ₽; с 15 минут — 1 000 ₽.</p>${rows?.map(r=>`<div class="payroll-row"><b>${esc(r.start)}–${esc(r.end)}</b>${r.opened?`<span>Смена открыта · ${new Date(r.opened.openedAt).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'})}</span><span>Опоздание: ${r.opened.lateMinutes} мин.</span>`:`<button class="ops-submit" data-action="shift-camera-open" data-id="${r.id}" ${teamUI.busy?'disabled':''}>Открыть смену · сделать фото кассы</button>`}</div>`).join('')||'<p class="hint">Утверждённых смен на сегодня нет или данные ещё загружаются.</p>'}<button class="ops-cancel" data-action="shift-opening-refresh" ${teamUI.busy?'disabled':''}>Обновить</button>${teamUI.message?`<p class="ops-message" role="status">${esc(teamUI.message)}</p>`:''}<button class="ops-cancel" data-action="close-op">Закрыть</button></div>`;
+ const same=teamUI.openingIdentity===teamIdentity(),rows=same?teamUI.openingRows:null,status=same?teamUI.openingStatus:'idle',disabled=teamUI.busy?'disabled':'',shop=SHOPS.find(x=>x.id===teamShop());
+ const context=`${esc(state.staffName)} · ${esc(shop?.name||'Выбранная кофейня')}${same&&teamUI.openingDate?' · '+payrollShortDate(teamUI.openingDate):''}`;
+ const empty=Array.isArray(rows)&&rows.length===0;
+ return `<div class="ops-form" id="ops-active-form"><h3>Открыть смену</h3><p class="hint">${context}</p><p class="hint">Сфотографируйте кассу с открытой сменой. Время фиксирует сервер при нажатии; на съёмку — 5 минут. До подтверждения сервера смена не открыта.</p><p class="hint">Опоздание: менее 5 минут — 0 ₽; с 5 минут — 200 ₽; с 15 минут — 1 000 ₽.</p>
+ ${!rows?.length?`<button class="ops-submit" data-action="shift-opening-start" ${disabled}>${status==='loading'?'Загружаем смены…':'Открыть смену · сделать фото кассы'}</button>`:''}
+ ${status==='loading'?'<p class="hint" role="status">Проверяем ваш график. Дождитесь ответа сервера.</p>':status==='error'?`<p class="ops-message bad" role="alert">Не удалось загрузить смены: ${esc(teamUI.openingError||'Повторите попытку.')} Открытие пока не подтверждено.</p>`:empty?'<p class="hint">На сегодня нет вашей утверждённой смены в этой кофейне. Выберите смену в графике и дождитесь согласования. Если смена уже согласована, проверьте выбранную точку и обновите список.</p>':!rows?'<p class="hint">Нажмите кнопку, чтобы проверить график и открыть камеру для вашей смены.</p>':''}
+ ${rows?.map(r=>`<div class="payroll-row"><b>${esc(r.start)}–${esc(r.end)}</b>${r.opened?`<span>Смена открыта · ${new Date(r.opened.openedAt).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'})}</span><span>Опоздание: ${r.opened.lateMinutes} мин.</span>`:`<button class="ops-submit" data-action="shift-camera-open" data-id="${r.id}" ${disabled}>Открыть смену · сделать фото кассы</button>`}</div>`).join('')||''}
+ ${empty?`<button class="ops-cancel" data-action="open-op" data-mode="schedule" ${disabled}>Мой график · выбрать смену</button>`:''}<button class="ops-cancel" data-action="shift-opening-refresh" ${disabled}>Обновить список смен</button>${teamUI.message?`<p class="ops-message" role="status">${esc(teamUI.message)}</p>`:''}<button class="ops-cancel" data-action="close-op">Закрыть</button></div>`;
 }
 async function openShiftCamera(id){
  if(teamUI.busy||teamIsAdmin())return;stopShiftCamera();const identity=teamIdentity();teamUI.busy=true;teamUI.message='';render();let stream;
@@ -399,7 +415,7 @@ async function submitShiftPenalty(originalId){
 }
 document.addEventListener('click',e=>{
  const el=e.target.closest('[data-action]');if(!el)return;const a=el.dataset.action;
- if(a==='shift-opening-refresh')loadShiftOpening();else if(a==='shift-camera-open')openShiftCamera(el.dataset.id);else if(a==='penalty-add')submitShiftPenalty();else if(a==='penalty-reverse')submitShiftPenalty(el.dataset.id);
+ if(a==='shift-opening-start')startAvailableShift();else if(a==='shift-opening-refresh')loadShiftOpening();else if(a==='shift-camera-open')openShiftCamera(el.dataset.id);else if(a==='penalty-add')submitShiftPenalty();else if(a==='penalty-reverse')submitShiftPenalty(el.dataset.id);
  if(['close-op','staff-logout','staff-change-name'].includes(a))stopShiftCamera();
 });
 window.addEventListener('pagehide',stopShiftCamera);

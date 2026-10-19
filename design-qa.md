@@ -70,3 +70,9 @@
 - Employee sees own records across both shops. Administrator sees photo link (Drive owner access), adds penalties to approved shifts, reverses penalties with reason; weekly amount = gross - active penalties, potentially negative before earned shifts are confirmed. No money transfers.
 - 77 unit tests and DOM smoke passed. Narrow screens 390/320 px had no horizontal overflow. Synthetic preview only; no real check-in, employee fine or payment created.
 - Backend deployment version 17. Frontend cache attendance1.
+
+## 19 October — visible opening action and scoped guest ID form
+
+- Opening entry moved to top of staff dashboard. The opening form keeps an action even when schedule is empty; action reloads authoritative schedule and starts camera only for one approved assignment. Multiple assignments retain individual camera buttons. Empty state names employee, point and server date, explains approval requirement and links to schedule. Loading and request failure now have separate messages; no fine without approved start time.
+- Guest ID and QR scanner moved into dedicated Stamp form. Manual stamp form is absent from opening, payroll, schedule, delivery, expenses and rewards. Gift/bonus ID lookup remains in its own form.
+- DOM smoke passed, including empty/loading/error opening states, manual ID presence only in stamp mode and existing mobile input/scroll stability. No live shifts, payroll or guest rewards changed.
