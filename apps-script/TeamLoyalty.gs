@@ -158,23 +158,50 @@ function teamPayroll_(request,root,props,actor){
  const penaltyShifts=actor.admin?[1,2].flatMap(shopId=>Object.entries(schedules[shopId]).filter(([,r])=>r.status==='approved'&&r.name&&r.date>=week.start&&r.date<=week.end).map(([id,r])=>({id,shopId,name:r.name,date:r.date,start:r.start,end:r.end,revision:r.revision||''}))):undefined;
  return {...attendance,...(actor.admin?{penaltyShifts}:{}),gross:rows.reduce((n,x)=>n+x.amount,0),penaltyTotal,week,rate:TEAM_SHIFT_RATE_,count:rows.filter(x=>x.status==='worked').length,amount:rows.reduce((n,x)=>n+x.amount,0)-penaltyTotal,rows,...(actor.admin?{awaiting,totals:Object.values(totals).sort((a,b)=>a.name.localeCompare(b.name))}:{})};
 }
+function teamBusinessHours_(shopId,date){
+ if(![1,2].includes(shopId))throw Error('Выберите кофейню.');
+ const weekend=[0,6].includes(new Date(teamDate_(date)+'T12:00:00Z').getUTCDay());
+ return shopId===2?(weekend?{start:'10:00',end:'22:00'}:{start:'08:00',end:'21:00'}):(weekend?{start:'09:00',end:'21:00'}:{start:'08:00',end:'20:00'});
+}
+function teamAssignShifts_(request,root,props,actor){
+ if(!actor.admin)throw Error('Назначать график может только администратор.');
+ const shopId=request.shopId,name=String(request.name||'').trim(),operationId=teamId_(request.operationId),items=request.items;
+ if(!name||!Array.isArray(items)||!items.length||items.length>31)throw Error('Выберите сотрудника и от 1 до 31 дня.');
+ const snap=teamSnapshot_(root+'/schedule'),all=snap.value||{},fingerprint=JSON.stringify(['assignShifts',shopId,name,items]),seen={},dates=new Set(),rows=[];let replay=0;
+ for(const item of items){const id=teamId_(item.shiftId);if(seen[id])throw Error('Смена выбрана дважды.');seen[id]=true;
+  const event=all[shopId]?.[id]?.history?.[operationId];if(event){if(event.actor!==actor.name||event.batch!==fingerprint)throw Error('ID операции уже использован.');replay++;}}
+ if(replay){if(replay!==items.length)throw Error('Неполная история назначения. Обновите график.');return {rows:items.map(x=>({id:x.shiftId,...all[shopId][x.shiftId]})),replayed:true};}
+ const payroll=teamPayrollStore_(props,root,false),today=Utilities.formatDate(new Date(),'Europe/Moscow','yyyy-MM-dd');
+ for(const item of items){
+  const id=item.shiftId,date=teamDate_(item.date),old=all[shopId]?.[id];if(date<today)throw Error('Нельзя назначить прошедший день.');if(dates.has(date))throw Error('Одна дата выбрана дважды.');dates.add(date);
+  teamPayrollUnlocked_(payroll,shopId,id);
+  if(old&&old.status!=='cancelled'&&(old.date!==date||old.name&&old.name!==name))throw Error('День '+date+' уже занят другим сотрудником. Измените назначение отдельно.');
+  if(old&&['requested','accepted'].includes(old.swap?.status))throw Error('Сначала обработайте замену на '+date+'.');
+  const hours=teamBusinessHours_(shopId,date);
+  for(const [otherId,x]of Object.entries(all[shopId]||{}))if(otherId!==id&&x.date===date&&['open','pending','approved'].includes(x.status)&&hours.start<x.end&&x.start<hours.end)throw Error('На '+date+' уже есть смена или заявка. Обновите график.');
+  const next=teamScheduleChange_({action:'saveShift',operationId,revision:item.revision||'',date,...hours,name},actor,old,props,shopId,all,id,fingerprint);
+  (all[shopId]||(all[shopId]={}))[id]=next;rows.push({id,...next});
+ }
+ teamComparePut_(root+'/schedule',all,snap.etag);return {rows};
+}
 function handleSchedule_(request,root,props){
  const actor=teamActor_(request,props),shopId=request.shopId;
  if(![1,2].includes(shopId))throw Error('Выберите кофейню.');
  if(['listShiftOpening','beginShiftOpening','finishShiftOpening','addShiftPenalty','reverseShiftPenalty'].includes(request.action))return teamAttendanceAction_(request,root,props,actor);
+ if(request.action==='assignShifts')return teamAssignShifts_(request,root,props,actor);
  if(request.action==='listPayroll')return teamPayroll_(request,root,props,actor);
  if(['confirmWorkedShift','reverseWorkedShift'].includes(request.action))return teamPayrollAction_(request,root,props,actor);
  if(request.action==='listSchedule'){
   const rows=dbRead_(root+'/schedule/'+shopId)||{};
   const staff=dbRead_('/staff/'+shopId)||{};
   const myRows=[],teamRows=[];
-  if(!actor.admin)for(const point of [1,2])for(const [id,row]of Object.entries(dbRead_(root+'/schedule/'+point)||{})){
+  for(const point of [1,2])for(const [id,row]of Object.entries(dbRead_(root+'/schedule/'+point)||{})){
    const publicRow={id,shopId:point,date:row.date,start:row.start,end:row.end,name:row.name,status:row.status};
    if(row.status==='approved'&&row.name)teamRows.push(publicRow);
    if(row.name===actor.name&&['approved','pending'].includes(row.status))myRows.push({...publicRow,...(row.swap?{swap:row.swap}:{})});
    else if(row.status==='approved'&&row.swap?.direction==='incoming'&&row.swap.to===actor.name&&['requested','accepted'].includes(row.swap.status))myRows.push({...publicRow,name:actor.name,status:'pending',requestType:'transfer',swap:row.swap});
   }
-  return {rows:Object.entries(rows).map(([id,row])=>{const {attendance,attendanceHistory,...visible}=row;return {id,...(actor.admin?row:visible)};}).filter(x=>x.status!=='cancelled').sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start)),staff:Object.values(staff).filter(x=>x.active!==false).map(x=>String(x.name)),...(!actor.admin?{myRows,teamRows}:{})};
+  return {rows:Object.entries(rows).map(([id,row])=>{const {attendance,attendanceHistory,...visible}=row;return {id,...(actor.admin?row:visible)};}).filter(x=>x.status!=='cancelled').sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start)),staff:Object.values(staff).filter(x=>x.active!==false).map(x=>String(x.name)),...(actor.admin?{teamRows}:{myRows,teamRows})};
  }
  if(['approveShifts','rejectShifts'].includes(request.action)){
   if(!actor.admin)throw Error('Подтверждение графика доступно только администратору.');

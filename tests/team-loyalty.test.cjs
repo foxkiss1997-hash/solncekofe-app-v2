@@ -354,3 +354,36 @@ test('admin manual penalty and cancellation are reasoned, authenticated and idem
 test('photo validation rejects uploads that cannot be a fresh camera JPEG before creating files',()=>{
  const x=setup();for(const photo of ['', 'data:image/png;base64,AAAA','data:image/jpeg;base64,%%%%','data:image/jpeg;base64,'+'A'.repeat(2400001)]){x.ctx.photoRequest={photo};assert.throws(()=>vm.runInContext("teamAttendancePhoto_(photoRequest,props,'/ops_v3')",x.ctx),/фото/);}
 });
+
+test('point business hours distinguish weekdays Saturday and Sunday in Moscow dates',()=>{
+ const x=setup();for(const [shopId,date,start,end]of [[1,'2026-10-19','08:00','20:00'],[1,'2026-10-24','09:00','21:00'],[1,'2026-10-25','09:00','21:00'],[2,'2026-10-19','08:00','21:00'],[2,'2026-10-24','10:00','22:00'],[2,'2026-10-25','10:00','22:00']]){x.ctx.shopId=shopId;x.ctx.date=date;const h=vm.runInContext('teamBusinessHours_(shopId,date)',x.ctx);assert.equal(h.start,start);assert.equal(h.end,end);}
+});
+function assignment(x,extra={}){return {...x.owner,action:'assignShifts',operationId:'f'.repeat(32),name:'Анна',items:[19,20,21,22,23,24,25,26].map((d,i)=>({shiftId:(i+1).toString(16).repeat(32),revision:'',date:'2026-10-'+d,start:'00:00',end:'01:00'})),...extra};}
+test('owner assigns eight days atomically as approved with authoritative hours; employee calendar sees them without approval',()=>{
+ const x=setup(),request=assignment(x,{shopId:2});const result=schedule(x,request);assert.equal(result.rows.length,8);assert.equal(x.writes.length,1);assert.equal(result.rows[0].status,'approved');assert.equal(result.rows[0].start,'08:00');assert.equal(result.rows[0].end,'21:00');assert.equal(result.rows[5].start,'10:00');assert.equal(result.rows[5].end,'22:00');schedule(x,request);assert.equal(x.writes.length,1);
+ const staff=schedule(x,{...x.staff,shopId:2,auth:{password:'second'},action:'listSchedule'});assert.equal(staff.myRows.length,8);assert.ok(staff.myRows.every(x=>x.status==='approved'));assert.equal(JSON.stringify(staff).includes('password'),false);
+ const opening=schedule(x,{...x.staff,shopId:2,auth:{password:'second'},action:'listShiftOpening'});assert.equal(opening.rows.length,1);assert.equal(opening.rows[0].start,'08:00');
+});
+test('batch assignment rejects staff access, past dates, duplicate dates and inactive employees without writes',()=>{
+ for(const extra of [{...setup().staff},{name:'Нет сотрудника'},{items:[{shiftId,revision:'',date:'2026-10-18'}]},{items:[{shiftId,revision:'',date:'2026-10-20'},{shiftId:op,revision:'',date:'2026-10-20'}]}]){const x=setup();assert.throws(()=>schedule(x,assignment(x,extra)));assert.equal(x.writes.length,0);}
+ const x=setup();x.db.staff[1].one.active=false;assert.throws(()=>schedule(x,assignment(x)),/найден|активен/);assert.equal(x.writes.length,0);
+});
+test('a conflict on the last selected date preserves the whole schedule and another employee assignment',()=>{
+ const x=setup();pastShift(x,'e'.repeat(32),'2026-10-26','Борис');const before=JSON.stringify(x.db.ops_v3.schedule),count=x.writes.length;assert.throws(()=>schedule(x,assignment(x)),/уже|занят/);assert.equal(x.writes.length,count);assert.equal(JSON.stringify(x.db.ops_v3.schedule),before);
+});
+test('cross-point overlaps, stale revisions and open-shift conflicts reject entire owner assignment',()=>{
+ const x=setup();pastShift(x,'e'.repeat(32),'2026-10-26','Анна',2);let count=x.writes.length;assert.throws(()=>schedule(x,assignment(x)),/уже есть смена/);assert.equal(x.writes.length,count);
+ const y=setup();pastShift(y,shiftId,'2026-10-20');count=y.writes.length;assert.throws(()=>schedule(y,assignment(y,{items:[{shiftId,revision:'',date:'2026-10-20'}]})),/изменена/);assert.equal(y.writes.length,count);
+});
+test('owner may assign an existing open slot; payroll lock protects opened shifts and batch retries survive an opened shift',()=>{
+ const x=setup(),p=privatePay(x);schedule(x,{...x.owner,action:'saveShift',shiftId,operationId:op,date:'2026-10-24',start:'09:00',end:'21:00',name:''});const req=assignment(x,{items:[{shiftId,revision:op,date:'2026-10-24'}]});schedule(x,req);const count=x.writes.length;
+ p.ledgers['/ops_v3'].operations['a'.repeat(32)]={kind:'attendance',key:'1:'+shiftId,action:'finishShiftOpening'};schedule(x,req);assert.equal(x.writes.length,count);assert.throws(()=>schedule(x,{...req,operationId:'d'.repeat(32),items:[{shiftId,revision:'f'.repeat(32),date:'2026-10-24'}]}),/уже открыта/);
+});
+test('owner assignment respects test root isolation',()=>{
+ const x=setup();x.ctx.req=assignment(x);vm.runInContext("handleSchedule_(req,'/ops_v3_test',props)",x.ctx);assert.equal(x.db.ops_v3,undefined);assert.equal(Object.keys(x.db.ops_v3_test.schedule[1]).length,8);assert.ok(x.writes.every(x=>x.startsWith('/ops_v3_test/')));
+});
+
+test('readiness unwraps Google HTML one layer at a time without corrupting batch fingerprints or quoted names',()=>{
+ const x=setup(),ack={ok:true,nonce:'a'.repeat(32),rows:[{name:'Анна "Тест"',history:{batch:JSON.stringify({name:'Анна',items:[{date:'2026-10-19'}]}),note:'C:\\report'}}]},html='<script>window.top.postMessage('+JSON.stringify(ack)+',"https://foxkiss1997-hash.github.io");</script>';
+ for(const body of [html,JSON.stringify(html),JSON.stringify(JSON.stringify(html))]){x.ctx.responseBody=body;const result=vm.runInContext('readOpsReadinessAck_(responseBody,"https://foxkiss1997-hash.github.io")',x.ctx);assert.equal(result.rows[0].history.batch,ack.rows[0].history.batch);assert.equal(result.rows[0].name,ack.rows[0].name);assert.equal(result.rows[0].history.note,ack.rows[0].history.note);}
+});

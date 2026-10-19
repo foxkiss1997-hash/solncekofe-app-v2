@@ -683,8 +683,8 @@
 
 .ops-photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.ops-photo-grid img{width:100%;height:120px;object-fit:cover;border-radius:12px}.ops-photos{margin:12px 0}.ops-check-editor{margin:14px 0;padding:12px;border:1px solid #33443a;border-radius:15px}.ops-check-editor.archived{opacity:.55}.admin-sun .tabs{overflow-x:auto;display:flex}.admin-sun .tab{flex-shrink:0}
 </style>
-<link rel="stylesheet" href="unified.css?v=20261019-opening3">
-<link rel="stylesheet" href="frosted-glass.css?v=20261019-opening3">
+<link rel="stylesheet" href="unified.css?v=20261019-admincal2">
+<link rel="stylesheet" href="frosted-glass.css?v=20261019-admincal2">
 </head>
 <body>
   <div class="shell">
@@ -692,11 +692,11 @@
     <div id="app"></div>
   </div>
 
-<script src="operations-v3.js?v=20261019-opening3"></script>
-<script src="stable-ui.js?v=20261019-opening3"></script>
-<script src="team-loyalty.js?v=20261019-opening3"></script>
-<script src="menu-photos.js?v=20261019-opening3"></script>
-<script src="menu-experience.js?v=20261019-opening3"></script>
+<script src="operations-v3.js?v=20261019-admincal2"></script>
+<script src="stable-ui.js?v=20261019-admincal2"></script>
+<script src="team-loyalty.js?v=20261019-admincal2"></script>
+<script src="menu-photos.js?v=20261019-admincal2"></script>
+<script src="menu-experience.js?v=20261019-admincal2"></script>
 <script>
 /* ---------- DATA (menu: Солнцекофе, Yandex Eda) ---------- */
 const CATEGORIES = [
@@ -3170,7 +3170,7 @@ document.addEventListener('click', (e)=>{
   else if(action==='admin-pin-submit'){ adminPasswordLoginV3(); }
   else if(action==='staff-change-name'){ state.reportPassword='';state.opMode=null;state.shiftChecks=emptyShiftChecks();state.staffName=null; state.staffPinValue=''; clearStaffSession(); render(); }
   else if(action==='staff-logout'){state.reportPassword='';state.opMode=null;state.shiftChecks=emptyShiftChecks();state.staffShop=null; state.staffName=null; state.staffOrders=[]; clearStaffSession(); state.screen='menu'; render(); }
-  else if(action==='staff-refresh'){ loadStaffOrders(); loadTodayOps();loadChecklistConfig();updateOpsPending(); }
+  else if(action==='staff-refresh'){ if(state.opMode==='schedule')teamLoadSchedule();loadStaffOrders(); loadTodayOps();loadChecklistConfig();updateOpsPending(); }
   else if(action==='staff-charge-loyalty'){ chargeLoyaltyById(); }
   else if(action==='set-redeem-guest-id'){ state.redeemGuestId = el.value; }
   else if(action==='set-redeem-voucher-id'){ state.redeemVoucherId = el.value; }

@@ -76,3 +76,11 @@
 - Opening entry moved to top of staff dashboard. The opening form keeps an action even when schedule is empty; action reloads authoritative schedule and starts camera only for one approved assignment. Multiple assignments retain individual camera buttons. Empty state names employee, point and server date, explains approval requirement and links to schedule. Loading and request failure now have separate messages; no fine without approved start time.
 - Guest ID and QR scanner moved into dedicated Stamp form. Manual stamp form is absent from opening, payroll, schedule, delivery, expenses and rewards. Gift/bonus ID lookup remains in its own form.
 - DOM smoke passed, including empty/loading/error opening states, manual ID presence only in stamp mode and existing mobile input/scroll stability. No live shifts, payroll or guest rewards changed.
+
+## 19 October — administrator assignment calendar and point hours
+
+- Administrator selects point and active employee, toggles up to 31 dates across months and reviews/assigns them in one atomic request. New assignments are approved immediately; employee calendar reads the same schedule and refreshes every 15 seconds while visible, or on manual refresh. No second employee approval.
+- Server-derived hours: Nagatinskaya weekdays 08:00–21:00, Sat/Sun 10:00–22:00; Ryazansky weekdays 08:00–20:00, Sat/Sun 09:00–21:00. New staff calendar dates use the same point/day rules; manual editing of a single existing shift remains available.
+- Other employee assignments and cross-point overlap block the entire batch. Stale revisions, duplicate days, inactive employee, past dates, payroll/attendance locks and retries covered. Selection is isolated by point/employee and reset when either changes.
+- 85 unit tests and DOM smoke passed. One eight-day assignment request tested with mixed weekdays/weekends; immediate staff calendar and check-in visibility verified in isolated server tests. No real employee schedule or payroll changed by QA. Physical browser at 390 and 320 px had no horizontal overflow.
+- Backend v19, frontend admincal2. Read-only readiness passed with productionWrites=0; the checker now unwraps Google responses without corrupting JSON batch fingerprints. Private attendance/payroll, QR loyalty and existing schedule approvals preserved.
