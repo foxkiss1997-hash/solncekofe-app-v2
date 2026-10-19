@@ -66,6 +66,10 @@ window.previewSetup=function(state,team){
    document.addEventListener('click',e=>{if(e.target.closest('[data-action=payment-open]')){e.preventDefault();e.stopImmediatePropagation();}},true);
   }else localStorage.removeItem('sk_pending_payment');
  }
+ if(['loyalty-card','gift-details','gift-qr'].includes(query.get('view'))){
+  localStorage.removeItem('sk_pending_payment');localStorage.removeItem('sk_active_order');state.paymentPending=null;state.order=null;state.screen='card';demoGuest.stamps=0;demoGuest.bonusSpins=1;
+  if(query.get('view')!=='loyalty-card'){state.guestGiftId='DEMO_GIFT';state.guestGiftStep=query.get('view')==='gift-qr'?'qr':'details';}
+ }
  if(query.get('view')==='menu-cart')state.cart=[{uid:'demo-cap',itemId:'cap',category:'coffee',name:'Капучино',sizeId:'m',qty:1,unitPrice:300,milk:null,syrup:null,shot:false},{uid:'demo-latte',itemId:'latte',category:'coffee',name:'Латте',sizeId:'m',qty:1,unitPrice:320,milk:null,syrup:null,shot:false}];
  if(query.get('view')==='drink'){state.screen='customize';state.customizeItemId='cap';}
  if(role==='staff'){Object.assign(state,{opMode:query.get('view')==='payroll'?'payroll':query.get('view')==='schedule'?'schedule':null,screen:'staff',staffShop:2,staffName:'Анна',reportPassword:'preview-pass',todayOps:{deliveries:1,expenses:2,issues:0}});if(team){if(query.get('view')==='payroll'){team.payroll=window.previewPayroll;team.payrollDate='2026-10-18';team.payrollKey='Анна:2:2026-10-18';}team.schedule=window.previewSchedule;team.scheduleKey='Анна:2';if(query.get('view')==='schedule')team.calendarDate=previewToday.slice(0,8)+'20';}}

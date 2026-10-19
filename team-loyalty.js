@@ -9,26 +9,28 @@ function teamOperation(body){
  if(!teamUI.pending.has(key))teamUI.pending.set(key,opsId());
  return {...body,operationId:teamUI.pending.get(key)};
 }
-function parseGuestQr(raw){
- let text=String(raw||'').trim();
- if(/^solncekofe:/i.test(text))text=text.slice(11);
- if(!/^[A-Z0-9_-]{4,32}$/i.test(text))throw Error('Это не QR-код карты Солнцекофе.');
- return text.toUpperCase();
+function parseLoyaltyQr(raw){
+ const text=String(raw||'').trim().replace(/^solncekofe:/i,'');
+ const match=text.match(/^([A-Z0-9_-]{4,32})(?::gift:([A-Z0-9_-]{2,40}))?$/i);
+ if(!match)throw Error('Это не QR-код карты или подарка Солнцекофе.');
+ return {guestId:match[1].toUpperCase(),voucherId:match[2]?.toUpperCase()||''};
 }
+function parseGuestQr(raw){return parseLoyaltyQr(raw).guestId;}
+
 function teamScan(){
  const tg=window.Telegram?.WebApp;
  if(typeof tg?.showScanQrPopup!=='function'){teamUI.message='Откройте мини-приложение в Telegram для сканирования или введите ID вручную.';render();return;}
  try{tg.showScanQrPopup({text:'Карта гостя: просмотр подарков и бонусов'},text=>{
-  try{teamUI.guestId=parseGuestQr(text);teamUI.guest=null;teamUI.selected='';teamLookup();}catch(e){teamUI.message=e.message;render();}
+  try{const qr=parseLoyaltyQr(text);teamUI.guestId=qr.guestId;teamUI.guest=null;teamUI.selected='';teamLookup(qr.voucherId);}catch(e){teamUI.message=e.message;render();}
   tg.closeScanQrPopup();return true;
  });}catch(e){teamUI.message='Не удалось открыть камеру. Введите ID вручную.';render();}
 }
-async function teamLookup(){
+async function teamLookup(voucherId=''){
  if(teamUI.busy)return;
  let guestId;try{guestId=parseGuestQr(teamUI.guestId);}catch(e){teamUI.message=e.message;render();return;}
  teamUI.guestId=guestId;teamUI.busy=true;teamUI.message='';teamUI.guest=null;teamUI.selected='';
  const identity=teamIdentity();render();
- try{const result=await teamRequest({action:'loyaltyLookup',guestId});if(identity!==teamIdentity()||guestId!==teamUI.guestId)return;teamUI.guest=result.guest;teamUI.lookupKey=identity+':'+guestId;}
+ try{const result=await teamRequest({action:'loyaltyLookup',guestId});if(identity!==teamIdentity()||guestId!==teamUI.guestId)return;teamUI.guest=result.guest;teamUI.lookupKey=identity+':'+guestId;if(voucherId){if(result.guest.vouchers.some(v=>v.id===voucherId))teamUI.selected=voucherId;else teamUI.message='Этот подарок уже погашен, недоступен или истёк. Обновите карту гостя.';}}
  catch(e){teamUI.message=e.message;}finally{teamUI.busy=false;render();}
 }
 async function teamMutate(action,extra={}){
@@ -37,10 +39,10 @@ async function teamMutate(action,extra={}){
  const body=teamOperation({action,guestId:teamUI.guestId,...extra}),identity=teamIdentity(),guestId=teamUI.guestId;
  teamUI.busy=true;teamUI.message='';render();
  try{const result=await teamRequest(body);if(identity!==teamIdentity()||guestId!==teamUI.guestId)return;
-  teamUI.guest=result.guest;teamUI.selected='';teamUI.amount='';teamUI.reason='';teamUI.message='Операция подтверждена сервером. История обновлена.';
+  teamUI.guest=result.guest;teamUI.selected='';teamUI.amount='';teamUI.reason='';teamUI.message=action==='redeemGift'?'Подарок выдан и погашен. Повторно использовать его нельзя.':'Операция подтверждена сервером. История обновлена.';
   for(const [key,id]of teamUI.pending)if(id===body.operationId)teamUI.pending.delete(key);
   // Another intentional operation needs a fresh lookup.
-  teamUI.lookupKey='';
+  teamUI.lookupKey=identity+':'+guestId;
  }catch(e){teamUI.message=e.message+' Перед повтором обновите карту и проверьте историю.';teamUI.lookupKey='';}
  finally{teamUI.busy=false;render();}
 }
@@ -474,3 +476,64 @@ if(typeof window.setInterval==='function')window.setInterval(async()=>{
  const identity=teamIdentity();staffCalendarRefreshing=true;
  try{const data=await teamRequest({action:'listSchedule'});if(identity===teamIdentity()&&state.screen==='staff'&&state.opMode==='schedule'&&!teamUI.busy&&JSON.stringify(data)!==JSON.stringify(teamUI.schedule)){teamUI.schedule=data;teamUI.scheduleKey=identity;render();}}catch(e){}finally{staffCalendarRefreshing=false;}
 },15000);
+
+
+// Guest state is read from one snapshot so stamps and gifts stay in sync.
+let guestLoyaltyRefresh=null,guestLoyaltyTimer=null;
+async function refreshGuestLoyalty(){
+ if(!LOYALTY_ID)return false;
+ if(guestLoyaltyRefresh)return guestLoyaltyRefresh;
+ const id=LOYALTY_ID;
+ guestLoyaltyRefresh=(async()=>{
+  try{
+   const g=await paymentJson(DB_URL+'/guests/'+encodeURIComponent(id)+'.json',{},15000)||{};
+   if(id!==LOYALTY_ID)return false;
+   const snapshot=JSON.stringify([Number(g.stamps)||0,Number(g.bonusSpins)||0,g.vouchers||{},g.name||'']);
+   const changed=state.loyaltySnapshot!==snapshot||!!state.loyaltySyncError;
+   state.loyalty=Number(g.stamps)||0;state.wheelBonusSpins=Number(g.bonusSpins)||0;state.wheelCanSpin=state.wheelBonusSpins>0;
+   state.myVouchers=Object.entries(g.vouchers||{}).filter(([,v])=>v&&typeof v==='object').map(([id,v])=>({...v,id}));
+   state.loyaltySnapshot=snapshot;state.loyaltyLoaded=true;state.loyaltySyncError='';
+   if(g.name&&!state.guestDisplayName){state.guestDisplayName=g.name;if(!state.guestName)state.guestName=g.name;}
+   if(g.contact&&!state.receiptContact)state.receiptContact=g.contact;
+   if(changed&&['card','menu','status','orders'].includes(state.screen))render();
+   return true;
+  }catch(e){
+   if(id===LOYALTY_ID){const message='Не удалось обновить карту. Сохранён последний баланс. Попробуйте ещё раз.';const changed=state.loyaltySyncError!==message;state.loyaltySyncError=message;if(changed&&state.screen==='card')render();}
+   return false;
+  }finally{guestLoyaltyRefresh=null;}
+ })();return guestLoyaltyRefresh;
+}
+function startLoyaltyUpdates(){
+ if(guestLoyaltyTimer)return;
+ guestLoyaltyTimer=setInterval(()=>{if(!document.hidden&&['menu','card','status','orders'].includes(state.screen))refreshGuestLoyalty();},10000);
+ window.addEventListener('focus',()=>{if(['menu','card','status','orders'].includes(state.screen))refreshGuestLoyalty();});
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&['menu','card','status','orders'].includes(state.screen))refreshGuestLoyalty();});
+}
+function availableGuestGifts(){return (state.myVouchers||[]).filter(v=>!v.redeemed&&(!v.expiresAt||v.expiresAt>Date.now()));}
+function loyaltyProgressNote(){
+ if(!state.loyaltyLoaded)return 'Обновляем карту…';
+ const count=availableGuestGifts().length;
+ return (count?'Подарков к получению: '+count+'. ':'')+'До следующего подарка: '+Math.max(0,7-state.loyalty)+' штампов. 1 классический кофе = 1 штамп после онлайн-оплаты.';
+}
+async function selectGuestGift(id){
+ if(!await refreshGuestLoyalty())return;
+ if(!availableGuestGifts().some(v=>v.id===id)){showToast('Подарок уже получен или недоступен. Карта обновлена.');return;}
+ state.guestGiftId=id;state.guestGiftStep='details';render();
+}
+function renderGuestGiftFlow(){
+ if(!state.guestGiftId)return '';
+ const gift=(state.myVouchers||[]).find(v=>v.id===state.guestGiftId),redeemed=gift?.redeemed,expired=gift?.expiresAt&&gift.expiresAt<=Date.now();
+ const qr=state.guestGiftStep==='qr'&&!redeemed&&!expired&&gift;
+ const data='solncekofe:'+LOYALTY_ID+':gift:'+state.guestGiftId;
+ const src=loyaltyQrData(data);
+ return `<div class="gift-flow-backdrop"><section class="gift-flow" role="dialog" aria-modal="true" aria-label="Получение подарка"><p class="eyebrow">${redeemed?'Подарок получен':qr?'Шаг 2 из 2 · Покажите бариста':'Шаг 1 из 2 · Ваш подарок'}</p><h2>${esc(gift?.label||'Подарок недоступен')}</h2>${redeemed?'<p role="status">Выдача подтверждена сотрудником. Приятного аппетита!</p>':!gift||expired?'<p>Этот подарок больше недоступен. Выберите другой в своей карте.</p>':qr?`<div class="qr-wrap"><img src="${src}" width="240" height="240" alt="QR-код выбранного подарка" data-qr-payload="${esc(data)}"></div><p class="gift-code">${esc(gift.id)}</p><p>Бариста сканирует QR, проверяет подарок и подтверждает выдачу. До подтверждения подарок остаётся на карте.</p><p class="hint" role="status">Ожидает подтверждения сотрудника</p><button class="ops-cancel" data-action="guest-refresh-loyalty">Проверить получение</button>`:'<p>Подойдите к бариста и покажите QR подарка. Сотрудник подтвердит выдачу — только тогда подарок спишется с карты.</p><button class="ops-submit" data-action="guest-show-gift-qr">Я у кассы — показать QR</button>'}<button class="ops-cancel" data-action="guest-close-gift">${redeemed?'Готово':'Вернуться к карте'}</button></section></div>`;
+}
+document.addEventListener('click',e=>{
+ const el=e.target.closest('[data-action]');if(!el)return;
+ if(el.dataset.action==='guest-select-gift')selectGuestGift(el.dataset.id);
+ else if(el.dataset.action==='guest-show-gift-qr'){if(availableGuestGifts().some(v=>v.id===state.guestGiftId)){state.guestGiftStep='qr';render();refreshGuestLoyalty();}}
+ else if(el.dataset.action==='guest-close-gift'){state.guestGiftId='';state.guestGiftStep='';render();}
+ else if(el.dataset.action==='guest-refresh-loyalty')refreshGuestLoyalty();
+});
+
+function loyaltyQrData(text){return window.SolnceQR?window.SolnceQR.qrDataURL(text):'';}
