@@ -683,8 +683,8 @@
 
 .ops-photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.ops-photo-grid img{width:100%;height:120px;object-fit:cover;border-radius:12px}.ops-photos{margin:12px 0}.ops-check-editor{margin:14px 0;padding:12px;border:1px solid #33443a;border-radius:15px}.ops-check-editor.archived{opacity:.55}.admin-sun .tabs{overflow-x:auto;display:flex}.admin-sun .tab{flex-shrink:0}
 </style>
-<link rel="stylesheet" href="unified.css?v=20261019-admincal2">
-<link rel="stylesheet" href="frosted-glass.css?v=20261019-admincal2">
+<link rel="stylesheet" href="unified.css?v=20261019-payment1">
+<link rel="stylesheet" href="frosted-glass.css?v=20261019-payment1">
 </head>
 <body>
   <div class="shell">
@@ -692,11 +692,11 @@
     <div id="app"></div>
   </div>
 
-<script src="operations-v3.js?v=20261019-admincal2"></script>
-<script src="stable-ui.js?v=20261019-admincal2"></script>
-<script src="team-loyalty.js?v=20261019-admincal2"></script>
-<script src="menu-photos.js?v=20261019-admincal2"></script>
-<script src="menu-experience.js?v=20261019-admincal2"></script>
+<script src="operations-v3.js?v=20261019-payment1"></script>
+<script src="stable-ui.js?v=20261019-payment1"></script>
+<script src="team-loyalty.js?v=20261019-payment1"></script>
+<script src="menu-photos.js?v=20261019-payment1"></script>
+<script src="menu-experience.js?v=20261019-payment1"></script>
 <script>
 /* ---------- DATA (menu: Солнцекофе, Yandex Eda) ---------- */
 const CATEGORIES = [
@@ -890,7 +890,7 @@ let state = {
   customizeOpts:{size:'m', milk:'regular', syrup:'none', shot:false, qty:1},
   loyalty:0,
   shopId:1,
-  payMethod:'receipt',
+  payMethod:'link',
   pickupASAP:true,
   scheduledTime:'',
   guestName:'',
@@ -1264,6 +1264,8 @@ async function submitOrderToStaff(order){
 }
 
 async function placeOrder(){
+  if(readPendingPayment()){resumePendingPayment();return;}
+  if(!state.cart.length)return;
   if(!shopStatus(state.shopId).open) return;
   if(!(state.receiptContact||'').trim()){
     state.checkoutError = 'Укажите email или телефон — без этого не сможем прислать чек.';
@@ -1273,9 +1275,9 @@ async function placeOrder(){
   if(state.cart.some(x=>itemStopped(x.itemId))){state.checkoutError='Часть позиций недоступна в выбранной кофейне. Измените корзину.';render();return;}
   if(state.payingNow) return; // guard against double-tap
   state.checkoutError = '';
-  if(state.payMethod==='receipt'){await placePickupOrder();return;}
+  // Online-only checkout: ignore any legacy cash-at-pickup selection.
+  state.payMethod='link';
   const shop = SHOPS.find(s=>s.id===state.shopId);
-  const localPrep = prepMinutesForCart();
   const pickupLabel = state.pickupASAP ? 'Скоро' : (state.scheduledTime || '—');
   const pickupText = state.pickupASAP ? 'как можно скорее' : ('к ' + (state.scheduledTime || '—'));
   const number = String(Math.floor(Math.random()*900)+100);
@@ -1318,32 +1320,30 @@ async function placeOrder(){
 
   let result;
   try{
-    const res = await fetch(PAYMENT_RELAY_URL + '/create-payment', {
-      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(paymentPayload)
-    });
-    result = await res.json();
+    result = await paymentJson(PAYMENT_RELAY_URL + '/create-payment', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(paymentPayload)
+    }, 75000);
+    if(!result || result.ok!==true)throw Error(String(result && result.error || 'Сервер не создал оплату.'));
+    if(!validPaymentId(result.orderId) || !safePaymentUrl(result.paymentUrl))throw Error('Сервер вернул неполную ссылку на оплату.');
+    const pending={orderId:String(result.orderId),paymentUrl:safePaymentUrl(result.paymentUrl),number,shop,pickupLabel,cartSnapshot,total,startedAt:Date.now()};
+    // Persist before offering the bank link; do not lose recovery on a WebView restart.
+    state.paymentPending=pending;
+    try{localStorage.setItem('sk_pending_payment',JSON.stringify(pending));}catch(e){
+      state.paymentMessage='Не удалось сохранить оплату на устройстве. Не закрывайте приложение до подтверждения.';
+    }
+    state.paymentMessage=state.paymentMessage||'Ссылка готова. Откройте платёжную страницу, затем вернитесь сюда.';
+    state.screen='payment';
+    startPaymentConfirmation(pending.orderId);
   }catch(e){
-    result = { ok:false, error:'Не удалось связаться с сервером оплаты.' };
-  }
-
-  state.payingNow = false;
-
-  if(!result || !result.ok){
-    state.checkoutError = (result && result.error) || 'Не получилось начать оплату — попробуйте ещё раз.';
+    state.checkoutError=e.name==='AbortError'
+      ? 'Сервер оплаты не ответил вовремя. Корзина сохранена. Если деньги уже списались, не оплачивайте повторно — свяжитесь с кофейней.'
+      : String(e.message||'Не удалось связаться с сервером оплаты. Корзина сохранена.');
+  }finally{
+    state.payingNow=false;
     render();
-    return;
   }
-
-  // Stash enough to resume once we're bounced back from the bank's payment page.
-  try{
-    localStorage.setItem('sk_pending_payment', JSON.stringify({
-      orderId: result.orderId, number, shop, pickupLabel, cartSnapshot, total, startedAt: Date.now()
-    }));
-  }catch(e){}
-
-  window.location.href = result.paymentUrl;
-  return;
 }
+
 function newOrder(){
   clearInterval(statusTimer);
   statusTimer = null;
@@ -2749,12 +2749,12 @@ function renderCheckout(){
         <div class="section-label">Email или телефон для чека</div>
         <input class="text-input" type="text" inputmode="email" placeholder="Куда прислать электронный чек" value="${esc(state.receiptContact||'')}" data-action="set-receipt-contact">
         <div class="hint" style="margin-top:6px;">Для связи по заказу и отправки чека кофейней.</div>
-        ${state.checkoutError ? `<div class="pin-error" style="margin-top:6px;">${state.checkoutError}</div>` : ''}
+        ${state.checkoutError ? `<div class="pin-error" style="margin-top:6px;">${esc(state.checkoutError)}</div>` : ''}
       </div>
 
       <div class="section">
         <div class="section-label">Способ оплаты</div>
-        <div class="segmented"><button class="seg ${state.payMethod==='receipt'?'active':''}" data-action="set-pay" data-pay="receipt">При получении</button><button class="seg ${state.payMethod==='link'?'active':''}" data-action="set-pay" data-pay="link">По ссылке</button></div><p class="hint">${state.payMethod==='receipt'?'Оплатите на кассе, когда заберёте заказ.':'Откроется защищённая страница банка. Если ссылка недоступна, выберите оплату при получении.'}</p>
+        <div class="ops-message"><b>Онлайн-оплата</b><p class="hint">Откроется защищённая платёжная страница. Оплата при получении недоступна.</p></div>
       </div>
 
       <div class="section">
@@ -2782,7 +2782,7 @@ function renderCheckout(){
 
       <div class="stickybar">
         <button class="btn-primary rippleable" data-action="pay" ${(!shopStatus(state.shopId).open || state.payingNow) ? 'disabled' : ''}>
-          <span>${state.payingNow ? 'Отправляем…' : (shopStatus(state.shopId).open ? (state.payMethod==='receipt'?'Заказать · оплата при получении':'Перейти к оплате') : 'Точка закрыта')}</span><span class="sub price-pop">${money(cartTotal()+tipAmount())}</span>
+          <span>${state.payingNow ? 'Отправляем…' : (shopStatus(state.shopId).open ? 'Перейти к оплате' : 'Точка закрыта')}</span><span class="sub price-pop">${money(cartTotal()+tipAmount())}</span>
         </button>
       </div>
     </div>
@@ -2966,6 +2966,7 @@ function render(){
   else if(state.screen==='card') html = renderCard();
   else if(state.screen==='orders') html = renderOrders();
   else if(state.screen==='checkout') html = renderCheckout();
+  else if(state.screen==='payment') html = renderPendingPayment();
   else if(state.screen==='status') html = renderStatus();
   else if(state.screen==='staff') html = renderStaff();
   else if(state.screen==='admin') html = renderAdmin();
@@ -3151,6 +3152,8 @@ document.addEventListener('click', (e)=>{
   else if(action==='set-pay'){ state.payMethod = el.dataset.pay; render(); }
   else if(action==='set-tip'){ state.tipPercent = el.dataset.val==='custom' ? 'custom' : parseInt(el.dataset.val,10); render(); }
   else if(action==='pay'){ placeOrder(); }
+  else if(action==='payment-open'){ openPendingPayment(); }
+  else if(action==='payment-check'){ const p=readPendingPayment();if(p)startPaymentConfirmation(p.orderId,true); }
   else if(action==='new-order'){ newOrder(); }
   else if(action==='status-to-menu'){ state.screen='menu'; render(); }
   else if(action==='back-to-status'){ state.screen='status'; render(); }
@@ -3390,72 +3393,121 @@ async function saveMenuItemEdit(id){
 async function toggleStopItem(itemId){return setMenuAvailability(itemId);}
 
 /* ---------- PAYMENT RETURN ---------- */
-let paymentConfirmTimer = null;
-async function pollPaymentConfirmation(orderId, deadline){
-  if(Date.now() > deadline){
-    clearInterval(paymentConfirmTimer);
-    state.checkoutError = 'Банк долго не подтверждает оплату. Если деньги списались, напишите нам в чат — мы всё проверим.';
-    state.screen = 'menu';
-    localStorage.removeItem('sk_pending_payment');
-    render();
-    return;
-  }
+let paymentConfirmTimer=null;
+let paymentChecking=false;
+let paymentGeneration=0;
+function validPaymentId(value){return /^[A-Za-z0-9_-]{1,160}$/.test(String(value||''));}
+function safePaymentUrl(value){
+  try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password?u.href:'';}catch(e){return '';}
+}
+async function paymentJson(url,options={},timeout=15000){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeout);
   try{
-    const res = await fetch(DB_URL + '/order_lookup/' + orderId + '.json');
-    const realId = await res.json();
-    if(realId){
-      clearInterval(paymentConfirmTimer);
-      const oRes = await fetch(DB_URL + '/orders/' + realId + '.json');
-      const o = await oRes.json();
-      if(o){
-        state.order = Object.assign({}, o, {
-          firebaseId: realId,
-          shop: SHOPS.find(s=>s.id===o.shopId) || { name:o.shopName, addr:o.shopAddr },
-          pickupLabel: o.pickup,
-          placedAt: o.createdAt,
-        });
-        saveOrderToStorage();
-        localStorage.removeItem('sk_pending_payment');
-        render();
-      }
-    }
-  }catch(e){}
+    const response=await fetch(url,{...options,signal:controller.signal});
+    let data;
+    try{data=await response.json();}catch(e){throw Error('Сервер оплаты вернул некорректный ответ. Попробуйте позже.');}
+    if(!response.ok)throw Error(typeof data?.error==='string'?data.error:'Сервис оплаты временно недоступен (код '+response.status+').');
+    return data;
+  }finally{clearTimeout(timer);}
+}
+function readPendingPayment(){
+  try{
+    const p=JSON.parse(localStorage.getItem('sk_pending_payment')||'null');
+    if(!p||!validPaymentId(p.orderId))return state.paymentPending||null;
+    return p;
+  }catch(e){return state.paymentPending||null;}
+}
+function renderPendingPayment(){
+  const p=state.paymentPending||readPendingPayment();
+  if(!p)return `<div class="screen"><h2>Оплата</h2><p>Не удалось восстановить оплату. Откройте приложение из бота.</p></div>`;
+  const link=safePaymentUrl(p.paymentUrl);
+  return `<div class="screen">
+    <div class="topbar"><button class="iconbtn rippleable" data-action="status-to-menu">←</button><h2>Оплата заказа</h2></div>
+    <div class="section"><div class="ops-form" style="padding:22px">
+      <div class="section-label">Заказ №${esc(p.number||'—')}</div>
+      <h2 style="margin:16px 0">${Number.isFinite(p.total)?money(p.total):'Проверяем платёж'}</h2>
+      <p>${esc(p.shop?.name||'Солнцекофе')}</p>
+      <p class="hint">${esc(state.paymentMessage||'Проверяем подтверждение оплаты.')}</p>
+      <p class="hint">Заказ поступит в работу после подтверждения оплаты. Если деньги списались, не оплачивайте повторно.</p>
+      ${link?`<button class="btn-primary rippleable" data-action="payment-open">Открыть платёжную страницу</button>`:''}
+      <button class="btn-ghost rippleable" style="margin-top:12px" data-action="payment-check" ${paymentChecking?'disabled':''}>${paymentChecking?'Проверяем…':'Я оплатил — проверить'}</button>
+    </div></div>
+  </div>`;
+}
+function openPendingPayment(){
+  const p=readPendingPayment(),url=p&&safePaymentUrl(p.paymentUrl);
+  if(!url)return;
+  const tg=window.Telegram&&window.Telegram.WebApp;
+  if(tg&&typeof tg.openLink==='function'){
+    try{tg.openLink(url);return;}catch(e){}
+  }
+  // Called directly by a click, so browsers can open the tab without a popup race.
+  const anchor=document.createElement('a');anchor.href=url;anchor.target='_blank';anchor.rel='noopener noreferrer';
+  document.body.appendChild(anchor);anchor.click();anchor.remove();
+}
+function resumePendingPayment(){
+  const p=readPendingPayment();if(!p)return false;
+  state.paymentPending=p;state.screen='payment';
+  state.paymentMessage='Продолжите оплату по сохранённой ссылке или проверьте её результат.';
+  startPaymentConfirmation(p.orderId);
+  render();return true;
+}
+function startPaymentConfirmation(orderId,manual=false){
+  if(paymentChecking){if(manual){state.paymentMessage='Проверяем подтверждение оплаты…';render();}return;}
+  clearInterval(paymentConfirmTimer);
+  const generation=++paymentGeneration,deadline=Date.now()+90000;
+  if(manual)state.paymentMessage='Проверяем подтверждение оплаты…';
+  paymentConfirmTimer=setInterval(()=>pollPaymentConfirmation(orderId,deadline,generation),3000);
+  pollPaymentConfirmation(orderId,deadline,generation);
+}
+async function pollPaymentConfirmation(orderId,deadline,generation=paymentGeneration){
+  if(generation!==paymentGeneration||paymentChecking)return;
+  if(Date.now()>deadline){
+    clearInterval(paymentConfirmTimer);paymentConfirmTimer=null;
+    state.paymentMessage='Подтверждение пока не получено. Ссылка и заказ сохранены — можно проверить ещё раз.';
+    if(state.screen==='payment')render();return;
+  }
+  paymentChecking=true;
+  try{
+    const realId=await paymentJson(DB_URL+'/order_lookup/'+encodeURIComponent(orderId)+'.json');
+    if(typeof realId!=='string'||!validPaymentId(realId)){state.paymentMessage='Подтверждение оплаты пока не получено. Если уже оплатили, подождите немного и проверьте ещё раз.';return;}
+    const o=await paymentJson(DB_URL+'/orders/'+encodeURIComponent(realId)+'.json');
+    // A redirect or lookup entry alone is not a payment confirmation.
+    if(generation!==paymentGeneration)return;
+    if(!o||o.paid!==true){state.paymentMessage='Подтверждение оплаты пока не получено. Проверим снова автоматически.';return;}
+    const pending=readPendingPayment();
+    if(!pending||String(pending.orderId)!==String(orderId))return;
+    if(pending.shop&&Number(o.shopId)!==Number(pending.shop.id))throw Error('Точка заказа не совпала. Обратитесь в кофейню.');
+    state.order=Object.assign({},o,{firebaseId:realId,shop:SHOPS.find(s=>s.id===o.shopId)||{name:o.shopName,addr:o.shopAddr},pickupLabel:o.pickup,placedAt:o.createdAt});
+    saveOrderToStorage();
+    localStorage.removeItem('sk_pending_payment');state.paymentPending=null;
+    // Preserve any items added while the guest was paying for the previous cart.
+    if(JSON.stringify(state.cart)===JSON.stringify(pending.cartSnapshot))state.cart=[];
+    clearInterval(paymentConfirmTimer);paymentConfirmTimer=null;paymentGeneration++;
+    if(['payment','checkout'].includes(state.screen))state.screen='status';
+    render();
+  }catch(e){
+    state.paymentMessage='Не удалось проверить платёж. Заказ сохранён. Попробуйте проверить ещё раз.';
+  }finally{
+    paymentChecking=false;
+    if(state.screen==='payment')render();
+  }
 }
 function checkPaymentReturn(){
-  const params = new URLSearchParams(window.location.search);
-  const paidOrderId = params.get('paid');
-  const failed = params.get('failed');
-  if(!paidOrderId && !failed) return false;
-
-  // Clean the URL so a refresh doesn't repeat this.
-  try{
-    const url = new URL(window.location.href);
-    url.searchParams.delete('paid'); url.searchParams.delete('failed');
-    window.history.replaceState({}, '', url);
-  }catch(e){}
-
-  if(failed){
-    state.checkoutError = 'Оплата не прошла — попробуйте ещё раз.';
-    state.screen = 'menu';
-    localStorage.removeItem('sk_pending_payment');
-    return true;
+  const params=new URLSearchParams(window.location.search),paid=params.get('paid'),failed=params.get('failed');
+  if(!paid&&!failed)return resumePendingPayment();
+  try{const url=new URL(window.location.href);url.searchParams.delete('paid');url.searchParams.delete('failed');window.history.replaceState({},'',url);}catch(e){}
+  const pending=readPendingPayment();
+  if(!pending || (paid&&String(pending.orderId)!==paid)){
+    state.checkoutError='Откройте приложение из того же Telegram, где оформляли заказ, чтобы проверить оплату.';
+    state.screen='checkout';return true;
   }
-
-  let pending = null;
-  try{ pending = JSON.parse(localStorage.getItem('sk_pending_payment') || 'null'); }catch(e){}
-  state.order = {
-    number: pending ? pending.number : '—',
-    shop: pending ? pending.shop : SHOPS[0],
-    pickupLabel: pending ? pending.pickupLabel : 'Скоро',
-    status: 'confirming',
-    firebaseId: null,
-  };
-  state.screen = 'status';
-  const deadline = Date.now() + 90000;
-  paymentConfirmTimer = setInterval(()=>pollPaymentConfirmation(paidOrderId, deadline), 3000);
-  pollPaymentConfirmation(paidOrderId, deadline);
+  resumePendingPayment();
+  if(failed)state.paymentMessage='Оплата прервана. Проверим результат перед повторной попыткой. Ссылка сохранена.';
   return true;
 }
+window.addEventListener('focus',()=>{const p=readPendingPayment();if(p)startPaymentConfirmation(p.orderId);});
 
 /* ---------- INIT ---------- */
 initMenuPreferences();
