@@ -102,6 +102,26 @@ function handleSchedule_(request,root,props){
   }
   return {rows:Object.entries(rows).map(([id,row])=>({id,...row})).filter(x=>x.status!=='cancelled').sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start)),staff:Object.values(staff).filter(x=>x.active!==false).map(x=>String(x.name)),...(!actor.admin?{myRows,teamRows}:{})};
  }
+ if(['approveShifts','rejectShifts'].includes(request.action)){
+  if(!actor.admin)throw Error('Подтверждение графика доступно только администратору.');
+  const operationId=teamId_(request.operationId),items=request.items;
+  if(!Array.isArray(items)||!items.length||items.length>31)throw Error('Выберите от 1 до 31 смены.');
+  const snap=teamSnapshot_(root+'/schedule'),all=snap.value||{},seen={},fingerprint=JSON.stringify([request.action,items]),rows=[];
+  let replay=0;
+  for(const item of items){const id=teamId_(item.shiftId);if(seen[id])throw Error('Смена выбрана дважды.');seen[id]=true;const event=all[shopId]?.[id]?.history?.[operationId];if(event){if(event.actor!==actor.name||event.batch!==fingerprint)throw Error('ID операции уже использован.');replay++;}}
+  if(replay){if(replay!==items.length)throw Error('Неполная история подтверждения. Обновите график.');return {rows:items.map(x=>({id:x.shiftId,...all[shopId][x.shiftId]})),replayed:true};}
+  for(const item of items){
+   const id=item.shiftId,old=all[shopId]?.[id];
+   if(!old||!(old.status==='pending'||old.status==='approved'&&['requested','accepted'].includes(old.swap?.status)))throw Error('Заявка уже обработана. Обновите график.');
+   const approve=request.action==='approveShifts';
+   if(approve&&old.date<Utilities.formatDate(new Date(),'Europe/Moscow','yyyy-MM-dd'))throw Error('Нельзя подтвердить прошедшую смену.');
+   const action=old.status==='pending'?(approve?'approveShift':'rejectShift'):(approve?'approveSwap':'rejectSwap');
+   const next=teamScheduleChange_({...item,action,operationId},actor,old,props,shopId,all,id,fingerprint);
+   (all[shopId]||(all[shopId]={}))[id]=next;rows.push({id,...next});
+  }
+  // A conflict in any selected shift rejects the whole review, preserving every original assignment.
+  teamComparePut_(root+'/schedule',all,snap.etag);return {rows};
+ }
  if(request.action==='requestShifts'){
   if(actor.admin)throw Error('Используйте редактирование администратора.');
   const operationId=teamId_(request.operationId),items=request.items;
@@ -172,6 +192,9 @@ function teamScheduleChange_(request,actor,old,props,shopId,all,id,batch){
   next={...old,date,start,end,status:'pending'};
  }else if(request.action==='approveShift'){
   if(!actor.admin||!old||old.status!=='pending')throw Error('Нет заявки для утверждения.');next={...old,status:'approved'};
+ }else if(request.action==='rejectShift'){
+  if(!actor.admin||!old||old.status!=='pending')throw Error('Нет заявки для отклонения.');
+  next=old.requestedFromOpen?{...old,name:'',status:'open',requestedFromOpen:false}:{...old,status:'cancelled'};
  }else if(request.action==='cancelShift'){
   if(!old||(!actor.admin&&(old.name!==actor.name||old.status!=='pending')))throw Error('Отменить эту смену может только владелец.');next=old.requestedFromOpen&&!actor.admin?{...old,name:'',status:'open',requestedFromOpen:false}:{...old,status:'cancelled'};
  }else throw Error('Неизвестное действие графика.');
@@ -183,7 +206,7 @@ function teamScheduleChange_(request,actor,old,props,shopId,all,id,batch){
   if(shop===shopId)throw Error('В это время на точке уже назначен сотрудник. На смене работает один человек.');
   if(x.name===next.name)throw Error('У сотрудника уже есть смена в это время.');
  }
- return {...next,revision:operationId,lastOperationId:operationId,updatedBy:actor.name,updatedAt:Date.now(),history:{...(old?.history||{}),[operationId]:{action:request.action,actor:actor.name,at:Date.now(),...(batch?{batch}:{}),previous:old?{date:old.date,start:old.start,end:old.end,name:old.name,status:old.status}:null}}};
+ return {...next,...(['requestShift','requestSwap'].includes(request.action)?{requestBatchId:operationId}:{}),revision:operationId,lastOperationId:operationId,updatedBy:actor.name,updatedAt:Date.now(),history:{...(old?.history||{}),[operationId]:{action:request.action,actor:actor.name,at:Date.now(),...(batch?{batch}:{}),previous:old?{date:old.date,start:old.start,end:old.end,name:old.name,status:old.status}:null}}};
 }
 
 function handleTeamRequest_(request,root,props){

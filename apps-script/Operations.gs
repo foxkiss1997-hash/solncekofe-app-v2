@@ -38,7 +38,7 @@ function doPost(e){
       answer=saveReport_(report,root,props);
     }else if(request.action==='teamOverview'){
       answer=teamOverview_(request,root,props);
-    }else if(['loyaltyLookup','awardStamp','redeemGift','spendBonus','creditBonus','reverseLoyalty','listSchedule','saveShift','requestShift','requestShifts','editShiftRequest','approveShift','cancelShift','requestSwap','acceptSwap','approveSwap','rejectSwap'].includes(request.action)){
+    }else if(['loyaltyLookup','awardStamp','redeemGift','spendBonus','creditBonus','reverseLoyalty','listSchedule','saveShift','requestShift','requestShifts','approveShifts','rejectShifts','rejectShift','editShiftRequest','approveShift','cancelShift','requestSwap','acceptSwap','approveSwap','rejectSwap'].includes(request.action)){
       answer=handleTeamRequest_(request,root,props);
     }else throw Error('Неизвестное действие.');
     answer={...answer,ok:true};
