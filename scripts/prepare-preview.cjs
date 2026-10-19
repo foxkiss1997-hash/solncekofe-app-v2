@@ -1,6 +1,6 @@
 const fs=require('fs');
 let html=fs.readFileSync('preorder.html','utf8');
-html=html.replace('<head>','<head><script src="preview-fixtures.js?v=payment1"></script>');
+html=html.replace('<head>','<head><script src="preview-fixtures.js?v=orderstatus1"></script>');
 html=html.replace('<script src="https://telegram.org/js/telegram-web-app.js"></script>','');
 html=html.replace('/* ---------- INIT ---------- */',`/* ---------- INIT ---------- */
 if(window.SOLNCE_PREVIEW){sendOpsRequest=window.previewRequest;window.previewSetup(state,typeof teamUI!=='undefined'?teamUI:null);}
@@ -15,3 +15,5 @@ const review=`<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta n
 fs.writeFileSync('design-review.html',review);
 
 fs.writeFileSync('payment-review.html',`<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Проверка оплаты — Солнцекофе</title><style>body{margin:0;background:#f2eee6;font-family:system-ui;color:#30291f}header{padding:14px 20px;font-size:14px}main{display:flex;justify-content:center;gap:20px;padding:10px;flex-wrap:wrap}iframe{width:390px;height:844px;border:0;border-radius:24px;box-shadow:0 5px 30px #3d281b10}iframe:last-child{width:320px}</style></head><body><header>Солнцекофе · онлайн-оплата · демоданные, деньги не списываются</header><main><iframe title="Оплата заказа" src="preview.html?lid=DEMO&view=payment&revision=payment1"></iframe><iframe title="Оформление" src="preview.html?lid=DEMO&view=checkout&revision=payment1"></iframe></main></body></html>`);
+
+fs.writeFileSync('order-status-review.html',`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Статусы заказа — Солнцекофе</title><style>body{margin:0;background:#f2eee6;font-family:system-ui;color:#30291f}header{padding:14px 20px;font-size:14px}main{display:flex;justify-content:center;gap:20px;padding:10px;flex-wrap:wrap}iframe{width:390px;height:844px;border:0;border-radius:24px;box-shadow:0 5px 30px #3d281b10}iframe:last-child{width:320px}</style></head><body><header>Солнцекофе · готовим → готово · демоданные</header><main><iframe title="Готовим заказ" src="preview.html?lid=DEMO&view=order-preparing&revision=orderstatus1"></iframe><iframe title="Заказ готов" src="preview.html?lid=DEMO&view=order-ready&revision=orderstatus1"></iframe></main></body></html>`);
