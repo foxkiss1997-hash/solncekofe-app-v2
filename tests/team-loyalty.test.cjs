@@ -199,3 +199,34 @@ test('eight selected shifts commit as one pending batch with one database write'
  const req={...x.staff,action:'requestShifts',operationId:op,items};const result=schedule(x,req);
  assert.equal(result.rows.length,8);assert.ok(result.rows.every(x=>x.status==='pending'));assert.equal(x.writes.length,1);schedule(x,req);assert.equal(x.writes.length,1);
 });
+
+test('administrator confirms eight requested shifts atomically; staff cannot review and retries do not reapply',()=>{
+ const x=setup(),items=Array.from({length:8},(_,i)=>({shiftId:(i+1).toString(16).repeat(32),date:'2026-10-'+(20+i),start:'08:00',end:'21:00'}));
+ schedule(x,{...x.staff,action:'requestShifts',operationId:op,items});x.writes.length=0;
+ const review={...x.owner,action:'approveShifts',operationId:giftOp,items:items.map(x=>({shiftId:x.shiftId,revision:op}))};
+ assert.throws(()=>schedule(x,{...review,...x.staff}),/администратору/);assert.equal(x.writes.length,0);
+ assert.equal(schedule(x,review).rows.length,8);assert.equal(x.writes.length,1);assert.ok(Object.values(x.db.ops_v3.schedule[1]).every(r=>r.status==='approved'));schedule(x,review);assert.equal(x.writes.length,1);
+ assert.throws(()=>schedule(x,{...review,action:'rejectShifts'}),/ID операции/);
+});
+test('a conflict or stale revision rejects every approval in the selection',()=>{
+ for(const stale of [false,true]){
+ const x=setup(),ids=['c'.repeat(32),'d'.repeat(32)];schedule(x,{...x.staff,action:'requestShifts',operationId:op,items:ids.map((shiftId,i)=>({shiftId,date:'2026-10-'+(20+i),start:'08:00',end:'16:00'}))});
+ if(!stale)schedule(x,{...x.owner,action:'saveShift',shiftId:'e'.repeat(32),operationId:giftOp,date:'2026-10-21',start:'10:00',end:'21:00',name:'Борис'});
+ x.writes.length=0;assert.throws(()=>schedule(x,{...x.owner,action:'approveShifts',operationId:'f'.repeat(32),items:ids.map((shiftId,i)=>({shiftId,revision:stale&&i===1?'old':op}))}),stale?/изменена/:/один человек/);
+ assert.equal(x.writes.length,0);assert.ok(ids.every(id=>x.db.ops_v3.schedule[1][id].status==='pending'));
+ }
+});
+test('rejecting a batch restores free slots and preserves the original holder of replacements',()=>{
+ const x=setup(),free='d'.repeat(32),busy='e'.repeat(32),custom='f'.repeat(32);
+ for(const [shiftId,date,name]of [[free,'2026-10-20',''],[busy,'2026-10-21','Борис']])schedule(x,{...x.owner,action:'saveShift',shiftId,operationId:op,date,start:'08:00',end:'16:00',name});
+ schedule(x,{...x.staff,action:'requestShifts',operationId:giftOp,items:[{shiftId:free,revision:op},{shiftId:busy,revision:op},{shiftId:custom,date:'2026-10-22',start:'08:00',end:'16:00'}]});x.writes.length=0;
+ const review={...x.owner,action:'rejectShifts',operationId:'1'.repeat(32),items:[free,busy,custom].map(shiftId=>({shiftId,revision:giftOp}))};schedule(x,review);
+ assert.equal(x.writes.length,1);assert.equal(x.db.ops_v3.schedule[1][free].status,'open');assert.equal(x.db.ops_v3.schedule[1][free].name,'');assert.equal(x.db.ops_v3.schedule[1][busy].name,'Борис');assert.equal(x.db.ops_v3.schedule[1][busy].swap.status,'rejected');assert.equal(x.db.ops_v3.schedule[1][custom].status,'cancelled');
+});
+test('mixed new shifts and replacements are confirmed together, and review test mode never touches production',()=>{
+ const x=setup(),busy='d'.repeat(32),custom='e'.repeat(32);
+ schedule(x,{...x.owner,action:'saveShift',shiftId:busy,operationId:op,date:'2026-10-20',start:'08:00',end:'16:00',name:'Борис'});
+ schedule(x,{...x.staff,action:'requestShifts',operationId:giftOp,items:[{shiftId:busy,revision:op},{shiftId:custom,date:'2026-10-21',start:'08:00',end:'16:00'}]});
+ x.put('/ops_v3_test/schedule',x.db.ops_v3.schedule);x.writes.length=0;x.ctx.req={...x.owner,action:'approveShifts',operationId:'f'.repeat(32),items:[busy,custom].map(shiftId=>({shiftId,revision:giftOp}))};vm.runInContext("handleSchedule_(req,'/ops_v3_test',props)",x.ctx);
+ assert.equal(x.db.ops_v3_test.schedule[1][busy].name,'Анна');assert.equal(x.db.ops_v3_test.schedule[1][custom].status,'approved');assert.equal(x.db.ops_v3.schedule[1][busy].name,'Борис');assert.equal(x.db.ops_v3.schedule[1][custom].status,'pending');assert.equal(x.writes.length,1);
+});
