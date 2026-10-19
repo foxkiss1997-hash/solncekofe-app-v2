@@ -683,8 +683,8 @@
 
 .ops-photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.ops-photo-grid img{width:100%;height:120px;object-fit:cover;border-radius:12px}.ops-photos{margin:12px 0}.ops-check-editor{margin:14px 0;padding:12px;border:1px solid #33443a;border-radius:15px}.ops-check-editor.archived{opacity:.55}.admin-sun .tabs{overflow-x:auto;display:flex}.admin-sun .tab{flex-shrink:0}
 </style>
-<link rel="stylesheet" href="unified.css?v=20261019-stock1">
-<link rel="stylesheet" href="frosted-glass.css?v=20261019-stock1">
+<link rel="stylesheet" href="unified.css?v=20261019-loyalty2">
+<link rel="stylesheet" href="frosted-glass.css?v=20261019-loyalty2">
 </head>
 <body>
   <div class="shell">
@@ -692,11 +692,12 @@
     <div id="app"></div>
   </div>
 
-<script src="operations-v3.js?v=20261019-stock1"></script>
-<script src="stable-ui.js?v=20261019-stock1"></script>
-<script src="team-loyalty.js?v=20261019-stock1"></script>
-<script src="menu-photos.js?v=20261019-stock1"></script>
-<script src="menu-experience.js?v=20261019-stock1"></script>
+<script src="operations-v3.js?v=20261019-loyalty2"></script>
+<script src="stable-ui.js?v=20261019-loyalty2"></script>
+<script src="assets/loyalty-qr.js?v=20261019-loyalty2"></script>
+<script src="team-loyalty.js?v=20261019-loyalty2"></script>
+<script src="menu-photos.js?v=20261019-loyalty2"></script>
+<script src="menu-experience.js?v=20261019-loyalty2"></script>
 <script>
 /* ---------- DATA (menu: Солнцекофе, Yandex Eda) ---------- */
 const CATEGORIES = [
@@ -1000,15 +1001,7 @@ async function getLoyaltyGuest(id){
 }
 async function initLoyalty(){
   LOYALTY_ID = await resolveLoyaltyId();
-  const g = await getLoyaltyGuest(LOYALTY_ID);
-  state.loyalty = Math.min(7, g.stamps || 0);
-  if(g.name&&!state.guestDisplayName){
-    state.guestDisplayName = g.name;
-    if(!state.guestName) state.guestName = g.name;
-  }
-  if(g.contact && !state.receiptContact) state.receiptContact = g.contact;
-  render();
-  if(state.screen==='card')checkWheelAvailability();
+  await refreshGuestLoyalty();
 }
 
 async function loadReferrals(){
@@ -1439,7 +1432,7 @@ function renderCart(){
           <div class="punch-row">
             ${Array.from({length:7}).map((_,i)=>`<div class="punch fade-up ${i<state.loyalty?'filled':''}" style="animation-delay:${i*30}ms">${i<state.loyalty?checkSVG('#fff'):''}</div>`).join('')}
           </div>
-          <div class="punch-note">${state.loyalty>=7 ? 'Следующий классический кофе (M) — подарок от нас ☀️' : `До подарка осталось штампов: ${7-state.loyalty}`}</div>
+          <div class="punch-note">${loyaltyProgressNote()}</div>
         </div>
       </div>
 
@@ -1498,10 +1491,22 @@ function cartLineOpts(l){
 function renderCard(){
   const displayId = LOYALTY_ID || 'Загрузка…';
   const qrData = `solncekofe:${displayId}`;
-  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&qzone=1&color=1B140F&bgcolor=FCFAF3&data=${encodeURIComponent(qrData)}`;
+  const qrSrc = loyaltyQrData(qrData);
   return `
     <div class="screen">
       <div class="topbar"><button class="iconbtn rippleable" data-action="back-to-menu">←</button><h2>Моя карта</h2></div>
+      ${renderGuestGiftFlow()}
+      ${state.myVouchers && availableGuestGifts().length ? `
+        <div class="section">
+          <div class="section-label">Мои подарки</div><p class="hint">Выберите подарок, покажите его QR бариста. Погашение — после подтверждения сотрудником.</p>
+          ${availableGuestGifts().map(v=>`
+            <div class="friend-row">
+              <div class="friend-icon">🎁</div>
+              <div class="friend-info"><b>${esc(v.label)}</b><div>Готов к получению</div><button class="ops-submit" data-action="guest-select-gift" data-id="${esc(v.id)}">Получить подарок</button></div>
+            </div>`).join('')}
+        </div>
+      ` : ''}
+      ${state.loyaltySyncError?`<div class="section"><p class="ops-message bad" role="status">${esc(state.loyaltySyncError)}</p><button class="ops-cancel" data-action="guest-refresh-loyalty">Обновить карту</button></div>`:''}
 
       <div class="section">
         <div class="member-card">
@@ -1518,7 +1523,7 @@ function renderCard(){
             <div class="punch-row">
               ${Array.from({length:7}).map((_,i)=>`<div class="punch fade-up ${i<state.loyalty?'filled':''}" style="animation-delay:${i*30}ms">${i<state.loyalty?checkSVG('#fff'):''}</div>`).join('')}
             </div>
-            <div class="punch-note">${state.loyalty>=7 ? 'Следующий классический кофе (M) — подарок от нас ☀️' : `До подарка осталось штампов: ${7-state.loyalty}`}</div>
+            <div class="punch-note">${loyaltyProgressNote()}</div>
           </div>
         </div>
       </div>
@@ -1547,23 +1552,14 @@ function renderCard(){
             <div class="wheel-overlay-title">Поздравляем!</div>
             <div class="wheel-overlay-prize">${state.wheelResult.label}</div>
             ${state.wheelResult.voucherId
-              ? `<div class="wheel-overlay-code">Покажи баристе, код приза:<br><b>${state.wheelResult.voucherId}</b></div>`
+              ? `<div class="wheel-overlay-code">Подарок сохранён в «Мои подарки». Нажмите «Получить подарок» и покажите QR бариста.</div>`
               : `<div class="wheel-overlay-code">Уже начислено на карту ✓</div>`}
             <button class="ref-btn rippleable" data-action="dismiss-wheel-result" style="margin-top:16px;">Отлично!</button>
           </div>
         </div>
       ` : ''}
 
-      ${state.myVouchers && state.myVouchers.filter(v=>!v.redeemed).length ? `
-        <div class="section">
-          <div class="section-label">Невостребованные призы</div>
-          ${state.myVouchers.filter(v=>!v.redeemed).map(v=>`
-            <div class="friend-row">
-              <div class="friend-icon">🎁</div>
-              <div class="friend-info"><b>${esc(v.label)}</b><div>Код: ${esc(v.id)}</div></div>
-            </div>`).join('')}
-        </div>
-      ` : ''}
+
 
       <div class="section">
         <div class="ref-hero">
@@ -1641,7 +1637,7 @@ function renderStaffOpForm(){
   if(m==='checklist')return renderShiftChecklist();
   if(m==='revenue')return `<div class="ops-form" id="ops-active-form"><h3>Отчёт по выручке</h3>${renderOpsLocation()}<label class="hint">Дата отчёта<input class="text-input" type="date" aria-label="Дата отчёта" data-action="set-report-date" value="${esc(state.reportDate||todayKey())}"></label><label class="hint">Наличные, ₽<input class="text-input" type="number" min="0" inputmode="decimal" data-action="set-report-cash" value="${esc(state.reportCash)}" aria-label="Наличные, ₽"></label><label class="hint">Безналичные, ₽<input class="text-input" type="number" min="0" inputmode="decimal" data-action="set-report-cashless" value="${esc(state.reportCashless)}" aria-label="Безналичные, ₽"></label>${renderOpsPhotos('report','Фото отчёта по выручке')}${renderOpsAuth()}<button class="ops-submit" data-action="submit-revenue-report" ${state.opsSaving||state.opsPhotoLoading?'disabled':''}>${state.opsSaving?'Отправляем…':'Отправить отчёт'}</button>${state.reportMsg?`<div class="ops-message ${state.reportMsgOk?'ok':'bad'}">${esc(state.reportMsg)}</div>`:''}<button class="ops-cancel" data-action="close-op">Закрыть</button></div>`;
 
-  if(m==='stamp')return `<div class="ops-form" id="ops-active-form"><h3>Начислить штамп</h3><button class="ops-submit" data-action="staff-scan-qr">Сканировать QR гостя</button><h4>Ввести ID гостя вручную</h4><label class="hint">ID гостя<input class="text-input" type="text" placeholder="ID гостя" value="${esc(state.chargeIdValue||'')}" data-action="set-charge-id"></label><button class="ops-submit" data-action="staff-charge-loyalty" ${teamUI.busy?'disabled':''}>Начислить штамп</button>${state.chargeMsg?`<div class="ops-message ${state.chargeMsgOk?'ok':'bad'}">${esc(state.chargeMsg)}</div>`:''}<button class="ops-cancel" data-action="close-op">Закрыть</button></div>`;
+  if(m==='stamp')return `<div class="ops-form" id="ops-active-form"><h3>Начислить штамп</h3><p class="hint">За онлайн-заказы штампы начисляются автоматически. Здесь начисляйте только за покупку на кассе, чтобы не повторять начисление.</p><button class="ops-submit" data-action="staff-scan-qr">Сканировать QR гостя</button><h4>Ввести ID гостя вручную</h4><label class="hint">ID гостя<input class="text-input" type="text" placeholder="ID гостя" value="${esc(state.chargeIdValue||'')}" data-action="set-charge-id"></label><button class="ops-submit" data-action="staff-charge-loyalty" ${teamUI.busy?'disabled':''}>Начислить штамп</button>${state.chargeMsg?`<div class="ops-message ${state.chargeMsgOk?'ok':'bad'}">${esc(state.chargeMsg)}</div>`:''}<button class="ops-cancel" data-action="close-op">Закрыть</button></div>`;
   if(m==='reward')return renderTeamLoyalty();
   if(m==='schedule')return renderTeamSchedule();
   if(m==='payroll')return renderTeamPayroll();
@@ -2545,20 +2541,7 @@ function pickWeightedPrize(){
   return WHEEL_PRIZES[0];
 }
 
-async function checkWheelAvailability(){
-  if(!LOYALTY_ID) return;
-  try{
-    const bRes = await fetch(DB_URL + '/guests/' + LOYALTY_ID + '/bonusSpins.json');
-    state.wheelBonusSpins = (await bRes.json()) || 0;
-  }catch(e){ state.wheelBonusSpins = 0; }
-  state.wheelCanSpin = state.wheelBonusSpins > 0;
-  try{
-    const vRes = await fetch(DB_URL + '/guests/' + LOYALTY_ID + '/vouchers.json');
-    const vObj = await vRes.json();
-    state.myVouchers = vObj ? Object.keys(vObj).map(id=>Object.assign({id}, vObj[id])) : [];
-  }catch(e){ state.myVouchers = []; }
-  render();
-}
+async function checkWheelAvailability(){return refreshGuestLoyalty();}
 
 async function spinWheel(){
   if(!state.wheelCanSpin || state.wheelSpinning || !LOYALTY_ID) return;
@@ -2856,6 +2839,7 @@ function renderStatus(){
       `}
       <div class="dial-order">Заказ <b>№${o.number}</b> · Заберёшь: <b>${o.pickupLabel}</b></div>
       <div class="status-shop">${o.shop.name} · ${o.shop.addr}</div>
+      ${o.loyaltyStatus==='credited'?`<div class="section"><p class="ops-message ok">За оплату начислено штампов: ${Number(o.loyaltyStamps)||0}.</p><button class="ops-cancel" data-action="go-card">Открыть карту и подарки</button></div>`:o.loyaltyStatus==='needs_review'?'<div class="section"><p class="hint">Начисление за этот заказ нужно проверить у администратора.</p></div>':''}
 
       <div class="stations">
         <div class="station-wrap"><div class="station ${ready||o.status==='accepted'?'done':''}" id="st0">${ready||o.status==='accepted'?checkSVG('#fff'):''}</div><div class="station-label">Принят точкой</div></div>
@@ -3030,7 +3014,7 @@ async function pollOrderStatus(){
     const o=await res.json();
     if(!o||state.order?.firebaseId!==id||state.screen!=='status')return;
     let changed=false;
-    for(const key of ['status','acceptedAt','prepMinutes','completedAt','completedBy','refunded']){
+    for(const key of ['status','acceptedAt','prepMinutes','completedAt','completedBy','refunded','loyaltyStatus','loyaltyStamps']){
       if(o[key]!==undefined&&state.order[key]!==o[key]){state.order[key]=o[key];changed=true;}
     }
     if(changed){saveOrderToStorage();render();}
@@ -3106,9 +3090,9 @@ document.addEventListener('click', (e)=>{
 
   if(action==='go-cart'){ state.screen='cart'; render(); }
   else if(action==='tab-go-menu'){ state.screen='menu'; render(); }
-  else if(action==='tab-go-card'){ state.screen='card'; render(); loadReferrals(); loadMyOrders(); checkWheelAvailability(); }
+  else if(action==='tab-go-card'){ state.screen='card'; render(); refreshGuestLoyalty(); loadReferrals(); loadMyOrders(); checkWheelAvailability(); }
   else if(action==='tab-go-orders'){ state.screen='orders'; render(); loadMyOrders(); }
-  else if(action==='go-card'){ state.screen='card'; render(); loadReferrals(); loadMyOrders(); checkWheelAvailability(); }
+  else if(action==='go-card'){ state.screen='card'; render(); refreshGuestLoyalty(); loadReferrals(); loadMyOrders(); checkWheelAvailability(); }
   else if(action==='spin-wheel'){ spinWheel(); }
   else if(action==='dismiss-wheel-result'){ state.wheelJustWon = false; render(); }
   else if(action==='share-referral'){ shareReferralLink(); }
@@ -3466,6 +3450,7 @@ async function pollPaymentConfirmation(orderId,deadline,generation=paymentGenera
     clearInterval(paymentConfirmTimer);paymentConfirmTimer=null;paymentGeneration++;
     if(['payment','checkout'].includes(state.screen))state.screen='status';
     render();
+    refreshGuestLoyalty();
   }catch(e){
     state.paymentMessage='Не удалось проверить платёж. Заказ сохранён. Попробуйте проверить ещё раз.';
   }finally{
@@ -3492,6 +3477,7 @@ window.addEventListener('focus',()=>{const p=readPendingPayment();if(p)startPaym
 initMenuPreferences();
 initOpsV3();
 startMenuAvailabilityUpdates();
+startLoyaltyUpdates();
 const operationsEntry = new URLSearchParams(location.search).get('screen');
 if(operationsEntry === 'staff' || operationsEntry === 'admin'){
   state.screen = operationsEntry;
