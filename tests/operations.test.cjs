@@ -45,10 +45,9 @@ function back(){
  return {context,db,writes,sheets,photos,book,run:s=>vm.runInContext(s,context),failSheet:n=>{failSheet=n},failDb:v=>{failDb=v},props:{getProperty:k=>({SPREADSHEET_ID:'test-sheet',PHOTO_FOLDER_ID:'private-folder'})[k]}};
 }
 function report(overrides={}){return {reportId:'a'.repeat(32),schemaVersion:3,shopId:1,date:'2026-10-10',type:'delivery',submittedBy:'Тест',submittedAt:Date.now(),party:'Тест поставщика',goods:'Кофе',amount:500,payment:'cash',photos:[{id:'b'.repeat(32),group:'report',dataUrl:'data:image/jpeg;base64,/9j/AA=='}],...overrides};}
-test('staff login validates the selected shop even when another shop has the same password',async()=>{
- const f=front(),calls=[];f.run("state.staffShop=2;state.staffName=null;state.staffPinValue='pass';loadStaffOrders=()=>{};loadTodayOps=()=>{};loadChecklistConfig=()=>{};");
- f.context.fetch=async url=>{calls.push(url);return {ok:true,json:async()=>({employee:{name:'Сотрудник второй точки',password:'pass',active:true}})}};
- await f.context.staffPasswordLogin();assert.equal(f.run('state.staffShop'),2);assert.equal(f.run('state.staffName'),'Сотрудник второй точки');assert.equal(calls.length,1);assert.match(calls[0],/staff\/2\.json$/);
+test('staff login sends the selected shop to server and stores only the issued session token',async()=>{
+ const f=front(),calls=[];f.run("state.staffShop=2;state.staffName=null;state.staffPinValue='pass';loadStaffOrders=()=>{};loadTodayOps=()=>{};loadChecklistConfig=()=>{};refreshStaffShiftStatus=async()=>{};paymentJson=async(url,opts)=>{const b=JSON.parse(opts.body);state.loginBody=b;return {ok:true,shopId:b.shopId,name:'Сотрудник второй точки',token:'a'.repeat(64),expiresAt:Date.now()+100000}};");
+ await f.context.staffPasswordLogin();assert.equal(f.run('state.staffShop'),2);assert.equal(f.run('state.staffName'),'Сотрудник второй точки');assert.equal(f.run('state.loginBody.shopId'),2);assert.equal(f.run('state.reportPassword'),'');assert.doesNotMatch(f.context.localStorage.getItem('sk_staff_session'),/pass|password/);
 });
 test('staff login refuses inactive accounts and requires an explicit shop',async()=>{
  const f=front();f.run("state.staffName=null;state.staffShop=null;state.staffPinValue='pass'");let calls=0;
