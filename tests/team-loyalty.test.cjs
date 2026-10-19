@@ -249,7 +249,7 @@ test('five confirmed worked shifts earn 21000 on Sunday; planned and pending shi
  const x=setup(),p=privatePay(x);for(let i=0;i<5;i++){const id=String(i+1).repeat(32);pastShift(x,id,'2026-10-'+(12+i));worked(x,id,(i+6).toString(16).repeat(32));}
  pastShift(x,'f'.repeat(32),'2026-10-17');x.writes.length=0;
  const data=schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-18'});assert.equal(data.count,5);assert.equal(data.amount,21000);assert.equal(data.week.payDate,'2026-10-18');assert.equal(p.entries.length,5);assert.equal(x.writes.length,0);assert.equal(data.awaiting,undefined);
- assert.ok(!JSON.stringify(x.db.ops_v3.schedule).includes('4200'));assert.ok(!JSON.stringify(x.db.ops_v3.schedule).includes('attendance'));
+ assert.ok(!JSON.stringify(x.db.ops_v3.schedule).includes('4200'));
 });
 test('only administrator confirms completed work, ignores client amounts, and cannot count a future shift',()=>{
  const x=setup(),p=privatePay(x);pastShift(x);
@@ -308,9 +308,49 @@ test('private spreadsheet persists append-only payroll and retries after a lost 
  worked(x);assert.equal(cells.length,2);assert.equal(schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-18'}).amount,4200);
  schedule(x,{...x.owner,action:'reverseWorkedShift',shiftId,operationId:'d'.repeat(32),revision:op,reason:'Исправление ошибки'});
  assert.equal(cells.length,3);assert.equal(cells[1][9],4200);assert.equal(cells[2][9],-4200);assert.equal(schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-18'}).amount,0);assert.ok(!JSON.stringify(cells).includes('password'));assert.ok(!JSON.stringify(x.db.ops_v3.schedule).includes('4200'));
+ schedule(x,{...x.owner,action:'addShiftPenalty',shiftId,revision:op,operationId:'e'.repeat(32),amount:200,reason:'Ручная отметка'});assert.equal(cells[3][9],-200);assert.equal(schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-18'}).amount,-200);
+ schedule(x,{...x.owner,action:'reverseShiftPenalty',shiftId,originalId:'e'.repeat(32),operationId:'f'.repeat(32),reason:'Отмена ошибки'});assert.equal(cells[4][9],200);assert.equal(schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-18'}).amount,0);
 });
 
 test('readiness reads nested payroll week and employee data without truncating the acknowledgement',()=>{
  const x=setup();x.ctx.html='<script>window.top.postMessage('+JSON.stringify({ok:true,week:{start:'2026-10-19',end:'2026-10-25'},rows:[{name:'Анна',amount:4200}]})+',"https://foxkiss1997-hash.github.io");</script>';
  const ack=vm.runInContext('readOpsReadinessAck_(html,"https://foxkiss1997-hash.github.io")',x.ctx);assert.equal(ack.ok,true);assert.equal(ack.week.end,'2026-10-25');assert.equal(ack.rows[0].amount,4200);
+});
+
+function attendanceSetup(start='11:55'){
+ const x=setup(),p=privatePay(x);x.ctx.payAppend=(store,event)=>{const e=copy(event);store.operations[e.operationId]=e;if(!e.kind)store.current[e.key]=e;p.entries.push(e);};
+ x.ctx.photoSave=()=> 'https://drive.google.com/file/d/private/view';vm.runInContext('teamPayrollAppend_=payAppend;teamAttendancePhoto_=photoSave;',x.ctx);
+ schedule(x,{...x.owner,action:'saveShift',shiftId,operationId:op,date:'2026-10-19',start,end:'21:00',name:'Анна'});
+ const begin=(extra={})=>schedule(x,{...x.staff,action:'beginShiftOpening',shiftId,operationId:giftOp,...extra});
+ const finish=(extra={})=>schedule(x,{...x.staff,action:'finishShiftOpening',shiftId,sessionId:giftOp,operationId:'d'.repeat(32),photo:'camera-only',...extra});
+ return {...x,p,begin,finish};
+}
+test('late thresholds use exact server milliseconds at 5 and 15 minutes',()=>{
+ const x=setup();for(const [ms,amount]of [[-1,0],[299999,0],[300000,200],[899999,200],[900000,1000],[1200000,1000],[99999999,1000]]){x.ctx.ms=ms;assert.equal(vm.runInContext('teamLatePenalty_(ms)',x.ctx),amount);}
+});
+test('opening needs photo completion, freezes server button time and deducts once, with private totals',()=>{
+ const x=attendanceSetup();const b=x.begin({openedAt:0,lateMinutes:0,amount:0});assert.equal(b.openedAt,Date.parse('2026-10-19T09:00:00Z'));
+ let data=schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-19'});assert.equal(data.penaltyTotal,0);assert.equal(data.openings.length,0);
+ x.finish();x.finish();data=schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-19'});assert.equal(data.penaltyTotal,200);assert.equal(data.amount,-200);assert.equal(data.openings[0].lateMinutes,5);assert.equal(x.p.entries.length,2);assert.equal(x.writes.length,1);
+ const other=schedule(x,{...x.staff,submittedBy:'Борис',auth:{password:'other'},action:'listPayroll',date:'2026-10-19'});assert.equal(other.penalties.length,0);assert.equal(other.openings.length,0);
+ assert.throws(()=>schedule(x,{...x.owner,action:'cancelShift',shiftId,operationId:'f'.repeat(32),revision:op}),/уже открыта/);
+});
+test('session cannot bypass photo, identity, expiry, assignment or shift date',()=>{
+ const x=attendanceSetup('11:45');assert.throws(()=>x.finish(),/истекло/);assert.throws(()=>x.begin({submittedBy:'Борис',auth:{password:'other'}}),/назначенный/);assert.throws(()=>x.begin({...x.owner}),/назначенный/);
+ x.begin();x.ctx.photoSave=()=>{throw Error('Нет фото')};vm.runInContext('teamAttendancePhoto_=photoSave;',x.ctx);assert.throws(()=>x.finish(),/Нет фото/);assert.equal(x.p.entries.length,1);
+ x.p.ledgers['/ops_v3'].operations[giftOp].detail.expiresAt=0;assert.throws(()=>x.finish(),/истекло/);
+});
+test('new begin operations reuse unexpired session rather than moving arrival time',()=>{
+ const x=attendanceSetup();x.begin();const b=x.begin({operationId:'e'.repeat(32)});assert.equal(b.sessionId,giftOp);assert.equal(x.p.entries.length,1);
+ x.p.ledgers['/ops_v3'].operations[giftOp].detail.expiresAt=0;const c=x.begin({operationId:'f'.repeat(32)});assert.equal(c.sessionId,'f'.repeat(32));assert.equal(x.p.entries.length,2);
+});
+test('admin manual penalty and cancellation are reasoned, authenticated and idempotent',()=>{
+ const x=attendanceSetup('11:45');x.begin();x.finish();const request={...x.owner,action:'addShiftPenalty',shiftId,revision:op,operationId:'e'.repeat(32),amount:300,reason:'Нарушение регламента'};
+ assert.throws(()=>schedule(x,{...request,...x.staff}),/администратор/);assert.throws(()=>schedule(x,{...request,amount:1.5}),/целым/);assert.throws(()=>schedule(x,{...request,reason:''}),/причину/);
+ schedule(x,request);schedule(x,request);let data=schedule(x,{...x.owner,action:'listPayroll',date:'2026-10-19'});assert.equal(data.penaltyTotal,1300);
+ const reverse={...x.owner,action:'reverseShiftPenalty',shiftId,originalId:'d'.repeat(32),operationId:'f'.repeat(32),reason:'Сбой кассы, штраф отменён'};schedule(x,reverse);schedule(x,reverse);data=schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-19'});assert.equal(data.penaltyTotal,300);assert.equal(data.penalties.find(x=>x.id==='d'.repeat(32)).reversed,true);
+ assert.throws(()=>schedule(x,{...reverse,operationId:'1'.repeat(32)}),/уже отменён/);assert.equal(x.p.entries.length,4);
+});
+test('photo validation rejects uploads that cannot be a fresh camera JPEG before creating files',()=>{
+ const x=setup();for(const photo of ['', 'data:image/png;base64,AAAA','data:image/jpeg;base64,%%%%','data:image/jpeg;base64,'+'A'.repeat(2400001)]){x.ctx.photoRequest={photo};assert.throws(()=>vm.runInContext("teamAttendancePhoto_(photoRequest,props,'/ops_v3')",x.ctx),/фото/);}
 });

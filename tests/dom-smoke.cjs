@@ -68,5 +68,9 @@ try{
  evaluate("window.batchCalls=[];teamRequest=body=>{window.batchCalls.push(body);return new Promise(()=>{});};");
  w.document.querySelector('[data-action="team-selection-submit"]').click();assert.equal(w.batchCalls.length,1);assert.equal(w.batchCalls[0].action,'requestShifts');assert.equal(w.batchCalls[0].items.length,8);
  console.log('PASS: selecting eight calendar days sends exactly one approval request containing eight shifts');
+ evaluate("Object.assign(state,{screen:'staff',staffName:'Анна',staffShop:1,opMode:'opening'});teamUI.busy=false;teamUI.openingIdentity='Анна:1';teamUI.openingRows=[{id:'c'.repeat(32),start:'08:00',end:'21:00',opened:null}];render();");
+ assert.ok(w.document.querySelector('[data-action=\"shift-camera-open\"]'));assert.equal(w.document.querySelectorAll('#ops-active-form input[type=file]').length,0);assert.match(w.document.querySelector('#ops-active-form').textContent,/Время фиксирует сервер/);
+ evaluate("state.staffName='Борис';render();");assert.equal(w.document.querySelectorAll('[data-action=\"shift-camera-open\"]').length,0);
+ console.log('PASS: camera-only opening has no file/gallery input and hides another employee shift');
  console.log('DOM smoke tests passed. Browser layout and Telegram hardware camera still require device verification.');
 }finally{w.close();}
