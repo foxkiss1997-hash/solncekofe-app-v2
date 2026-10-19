@@ -38,5 +38,21 @@ try{
  assert.equal(w.document.querySelectorAll('[data-action="team-shift-accept-swap"]').length,0);
  evaluate("state.staffName='Борис';teamUI.scheduleKey='Борис:1';render();");assert.equal(w.document.querySelectorAll('[data-action="team-shift-accept-swap"]').length,1);
  console.log('PASS: multiple shifts selected together; only the current holder can approve an incoming request');
+ evaluate("Object.assign(state,{staffName:'Анна',staffShop:1});teamUI.selectionKey=null;teamUI.scheduleKey='Анна:1';teamUI.schedule.rows=[];teamUI.calendarDate='2027-01-25';teamUI.date='2027-01-25';teamUI.start='08:00';teamUI.end='16:00';localStorage.removeItem(shiftDraftKey());loadShiftSelection();addShiftSelection();teamUI.date='2027-01-26';addShiftSelection();");
+ assert.equal(evaluate('shiftSelection().length'),2);
+ w.document.querySelector('[data-action="team-selection-edit"]').click();assert.match(w.document.querySelector('[data-action="team-selection-add"]').textContent,/Сохранить изменение/);
+ evaluate("teamUI.date='2027-01-27';teamUI.start='09:00';addShiftSelection();teamUI.shiftSelection=null;teamUI.selectionKey=null;loadShiftSelection();render();");
+ assert.equal(evaluate('shiftSelection().length'),2);assert.equal(evaluate('shiftSelection()[0].date'),'2027-01-27');assert.equal(evaluate('shiftSelection()[0].start'),'09:00');
+ evaluate("state.staffShop=2;render();");assert.equal(evaluate('shiftSelection().length'),0);
+ evaluate("state.staffShop=1;render();");assert.equal(evaluate('shiftSelection().length'),2);
+ console.log('PASS: edited multi-shift draft survives reload and remains isolated by employee and shop');
+ evaluate("localStorage.removeItem(shiftDraftKey());loadShiftSelection();teamUI.schedule.rows=[];teamUI.calendarMonth='2027-01';teamUI.calendarDate='2027-01-01';render();");
+ w.document.querySelector('[data-action="team-calendar-multi"]').click();
+ for(const day of [20,21,22,23,24,25,26,27])w.document.querySelector('[data-date="2027-01-'+day+'"]').click();
+ assert.equal(w.document.querySelectorAll('.calendar-day.multi-selected').length,8);
+ w.document.querySelector('[data-action="team-calendar-add"]').click();assert.equal(evaluate('shiftSelection().length'),8);
+ evaluate("window.batchCalls=[];teamRequest=body=>{window.batchCalls.push(body);return new Promise(()=>{});};");
+ w.document.querySelector('[data-action="team-selection-submit"]').click();assert.equal(w.batchCalls.length,1);assert.equal(w.batchCalls[0].action,'requestShifts');assert.equal(w.batchCalls[0].items.length,8);
+ console.log('PASS: selecting eight calendar days sends exactly one approval request containing eight shifts');
  console.log('DOM smoke tests passed. Browser layout and Telegram hardware camera still require device verification.');
 }finally{w.close();}
