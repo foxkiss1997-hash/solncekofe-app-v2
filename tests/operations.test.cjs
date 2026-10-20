@@ -27,7 +27,7 @@ test('Google sandbox authentication errors reach the login form instead of timin
  await assert.rejects(pending,/Нет доступа администратора/);
 });
 function front(){
- const local=new Map(),listeners={};const context=vm.createContext({console,crypto,Intl,URL,URLSearchParams,setTimeout,clearTimeout,queueMicrotask,location:{origin:'https://foxkiss1997-hash.github.io'},window:{location:{search:'',href:'https://foxkiss1997-hash.github.io/preorder.html'},addEventListener(){},removeEventListener(){}},document:{addEventListener(name,fn){(listeners[name]??=[]).push(fn)},getElementById(){return {innerHTML:'',querySelector(){return null}}}},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v)},fetch:async()=>({ok:true,json:async()=>null})});
+ const local=new Map(),listeners={};const context=vm.createContext({console,crypto,Intl,URL,URLSearchParams,AbortController,setTimeout,clearTimeout,queueMicrotask,location:{origin:'https://foxkiss1997-hash.github.io'},window:{location:{search:'',href:'https://foxkiss1997-hash.github.io/preorder.html'},addEventListener(){},removeEventListener(){}},document:{addEventListener(name,fn){(listeners[name]??=[]).push(fn)},getElementById(){return {innerHTML:'',querySelector(){return null}}}},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v)},fetch:async()=>({ok:true,json:async()=>null})});
  vm.runInContext(moduleSource,context);vm.runInContext(inline,context);vm.runInContext("render=()=>{};showToast=()=>{};Object.assign(state,{adminChecklistShop:1,adminChecklistStage:'open',opsConfigDraft:null,staffShop:1,staffName:'Тест',reportPassword:'pass',opMode:'checklist',checklistStage:'day'});",context);
  const stores={queue:new Map(),drafts:new Map()};context.stores=stores;
  vm.runInContext("opsStore=async(name,mode,fn)=>fn({get:k=>stores[name].get(k),put:(v,k)=>stores[name].set(k||v.reportId,JSON.parse(JSON.stringify(v))),delete:k=>stores[name].delete(k),getAll:()=>Array.from(stores[name].values())});",context);
@@ -70,7 +70,7 @@ test('revenue form labels its shop and submits one immutable report with photos 
 test('complete browser scripts parse and render staff/admin/checklist without initialization requests',()=>{const f=front();assert.match(f.run('renderStaff()'),/Фотоотчёт|фотоотчёт/);assert.match(f.run('renderAdminChecklists()'),/Убрать пункт/);assert.equal(f.run("getChecklistItems('day').length"),7);assert.match(f.run('renderChecklistV3()'),/полить цветы/);});
 test('draft checks and photos are isolated by shop, staff, date and stage',()=>{const f=front();f.run("saveChecklistDraft({hall:true});opsPhotoDrafts[opsDraftKey()]=[{id:'x'}];state.staffShop=2;");assert.equal(f.run('readChecklistDraft().hall'),undefined);assert.equal(f.run('opsPhotos().length'),0);f.run("state.staffShop=1;state.staffName='Другой';");assert.equal(f.run('readChecklistDraft().hall'),undefined);});
 test('archiving and editing future templates do not mutate queued report snapshots',async()=>{const f=front();f.run("opsChecklistConfig[1]={revision:'r1',stages:{day:[{id:'x',label:'Старое',active:true,requirePhoto:true}]}};sendOpsRequest=async()=>{throw Error('offline')};");await f.run("enqueueOpsReport({type:'checklist',checks:[{key:'x',label:'Старое',done:true}],stage:'day'})");f.run("opsChecklistConfig[1].stages.day[0].label='Новое';opsChecklistConfig[1].stages.day[0].active=false;");assert.equal(f.stores.queue.values().next().value.checks[0].label,'Старое');assert.equal(f.run("getChecklistItems('day').length"),0);});
-test('failed Google acknowledgement keeps complete report/photos queued; retry removes it once',async()=>{const f=front();f.run("opsPhotoDrafts[opsDraftKey()]=[{id:'p',group:'report',dataUrl:'photo'}];sendOpsRequest=async()=>{throw Error('timeout')};");await f.run("enqueueOpsReport({type:'delivery',amount:100,party:'Кофе'})");assert.equal(f.stores.queue.size,1);assert.equal(f.stores.queue.values().next().value.photos[0].dataUrl,'photo');assert.equal(f.stores.queue.values().next().value.auth,undefined);f.run('sendOpsRequest=async()=>({ok:true})');await f.run('retryOpsQueue()');await f.run('retryOpsQueue()');assert.equal(f.stores.queue.size,0);});
+test('failed Google acknowledgement keeps complete report/photos queued; retry removes it once',async()=>{const f=front();f.run("opsPhotoDrafts[opsDraftKey()]=[{id:'p',group:'report',dataUrl:'photo'}];sendOpsRequest=async()=>{throw Error('timeout')};");await f.run("enqueueOpsReport({type:'delivery',amount:100,party:'Кофе'})");assert.equal(f.stores.queue.size,1);assert.equal(f.stores.queue.values().next().value.photos[0].dataUrl,'photo');assert.equal(f.stores.queue.values().next().value.auth,undefined);f.run("sendOpsRequest=async body=>({ok:true,reportId:body.report.reportId,status:'synced'})");await f.run('retryOpsQueue()');await f.run('retryOpsQueue()');assert.equal(f.stores.queue.size,0);});
 test('durable queue failure does not clear photos or falsely show success',async()=>{const f=front();f.run("opsPhotoDrafts[opsDraftKey()]=[{id:'p',dataUrl:'photo'}];opsStore=async()=>{throw Error('QuotaExceeded')};");await assert.rejects(f.run("enqueueOpsReport({type:'checklist'})"),/QuotaExceeded/);assert.equal(f.run('opsPhotos().length'),1);});
 test('pending reports of another employee/shop are not sent with current credentials',async()=>{const f=front();f.stores.queue.set('foreign',{reportId:'foreign',shopId:2,submittedBy:'Тест'});let calls=0;f.context.track=()=>{calls++;return {ok:true}};f.run('sendOpsRequest=track');await f.run('retryOpsQueue()');assert.equal(calls,0);assert.equal(f.stores.queue.size,1);});
 test('server rejects negative/nonfinite totals, extra-large/duplicate photos and unknown report type',()=>{const b=back();for(const r of [report({type:'revenue',cash:-1,cashless:2}),report({amount:Infinity}),report({type:'guests'}),report({photos:Array(13).fill(report().photos[0])}),report({photos:[report().photos[0],report().photos[0]]})])assert.throws(()=>b.context.validateReport_(r));});
@@ -101,4 +101,47 @@ test('production is explicitly enabled, confined to the main origin and isolated
  const r=b.context.validateReport_(report({type:'revenue',cash:350,cashless:500}));
  assert.equal(b.context.saveReport_(r,prod.root,prod.props).status,'synced');
  assert(b.writes.every(x=>x.path==='/ops_v3'||x.path.startsWith('/ops_v3/')));assert.equal(b.sheets['Выручка'].rows[1][6],850);
+});
+
+test('saved-token reports include explicit scope and are removed only after matching sheet acknowledgement',async()=>{
+ const f=front();f.run("state.reportPassword='';state.staffSessionToken='a'.repeat(64);opsPhotoDrafts[opsDraftKey()]=[]");let request;
+ f.context.fetch=async(url,opts)=>{request=JSON.parse(opts.body);return {ok:true,status:200,json:async()=>({ok:true,reportId:request.request.report.reportId,status:'synced'})}};
+ await f.run("enqueueOpsReport({type:'revenue',cash:100,cashless:200})");
+ assert.equal(request.token,'a'.repeat(64));assert.equal(request.request.shopId,1);assert.equal(request.request.submittedBy,'Тест');assert.equal(request.request.report.type,'revenue');assert.equal(f.stores.queue.size,0);
+});
+test('wrong report ID or incomplete Google acknowledgement keeps the queued report and photos',async()=>{
+ for(const answer of [{ok:true},{ok:true,status:'pending'},{ok:true,status:'synced',reportId:'wrong'}]){
+  const f=front();f.stores.queue.set('saved',{reportId:'saved',shopId:1,submittedBy:'Тест',photos:[{dataUrl:'photo'}]});f.context.answer=answer;f.run('sendOpsRequest=async()=>answer');await f.run('retryOpsQueue()');assert.equal(f.stores.queue.size,1);assert.match(f.run('state.opsSyncMessage'),/остаётся в очереди/);
+ }
+});
+
+test('post save preserves form on HTTP failure and never resets an already sent post',async()=>{
+ for(const mode of ['read-error','write-error','conflict','sent']){
+  const f=front();f.run("Object.assign(state,{adminAuthed:true,newPostDate:'2026-10-21',newPostText:'Кофе с собой',newPostPhoto:'https://example.org/photo.jpg'})");let writes=0;
+  f.context.fetch=async(url,opts={})=>{if(opts.method==='PUT'){writes++;return {ok:false,status:mode==='conflict'?412:403}}return {ok:mode!=='read-error',headers:{get:()=> '"v1"'},json:async()=>mode==='sent'?{sent:true}:null}};
+  await f.run('saveAdminPost()');assert.equal(f.run('state.postMsgOk'),false);assert.equal(f.run('state.newPostText'),'Кофе с собой');assert.equal(writes,['write-error','conflict'].includes(mode)?1:0);assert.equal(f.run('state.postSaving'),false);
+ }
+});
+test('double-tapping post save performs one conditional write and clears only confirmed form',async()=>{
+ const f=front();f.run("Object.assign(state,{adminAuthed:true,newPostDate:'2026-10-21',newPostText:'Новый пост',newPostPhoto:''})");let writes=0;
+ f.context.fetch=async(url,opts={})=>{if(opts.method==='PUT'){writes++;assert.equal(opts.headers['If-Match'],'"v1"');assert.equal(JSON.parse(opts.body).sent,false)}return {ok:true,headers:{get:()=> '"v1"'},json:async()=>null}};
+ await Promise.all([f.run('saveAdminPost()'),f.run('saveAdminPost()')]);assert.equal(writes,1);assert.equal(f.run('state.postMsgOk'),true);assert.equal(f.run('state.newPostText'),'');assert.match(f.run('state.postMsg'),/ещё не подтверждена/);
+});
+test('post date and photo URL validation prevent invalid writes and queue read errors stay visible',async()=>{
+ const f=front();let calls=0;f.context.fetch=async()=>{calls++;return {ok:false}};
+ f.run("Object.assign(state,{adminAuthed:true,newPostDate:'2026-99-99',newPostText:'Текст',newPostPhoto:''})");await f.run('saveAdminPost()');assert.equal(calls,0);
+ f.run("state.newPostDate='2026-10-21';state.newPostPhoto='javascript:alert(1)'");await f.run('saveAdminPost()');assert.equal(calls,0);
+ f.run("state.adminPosts=[{date:'2026-10-21',text:'Сохранённый пост'}]");await f.run('loadAdminPosts()');assert.equal(f.run('state.adminPosts.length'),1);assert.match(f.run('state.adminPostsError'),/Не удалось/);
+});
+
+test('saved-session report goes through real frontend envelope, relay scope checks and Apps Script sheet writer without duplicate rows',{skip:!fs.existsSync('../solncekofe-payment-relay/server.js')&&'Requires the private relay checkout beside the app'},async()=>{
+ const f=front(),b=back();b.db['/staff/1']={qa:{name:'Тест',password:'test-pass',active:true}};
+ const relay=vm.createContext({require,module:{exports:{}},process:{env:{}},console:{log(){},error(){}},Buffer,URL,URLSearchParams,setTimeout,clearTimeout,AbortController});vm.runInContext(fs.readFileSync('../solncekofe-payment-relay/server.js','utf8'),relay);
+ relay.verifyStaffSession=async()=>({saved:{shopId:1,name:'Тест'},row:{password:'test-pass'}});
+ relay.forwardStaffOperation=async request=>{const r=b.context.validateReport_(request.report);b.context.authorizeStaff_(r,request.auth);return {ok:true,apiVersion:3,channel:'solncekofe-ops-v3',nonce:request.nonce,...b.context.saveReport_(r,'/ops_v3_test',b.props)}};
+ f.context.fetch=async(url,opts)=>{const body=JSON.parse(opts.body),r={writeHead(status){this.status=status},end(raw){this.data=JSON.parse(raw)}};await relay.handleStaffOperation(body,r);return {ok:r.status===200,status:r.status,json:async()=>r.data}};
+ f.run("state.reportPassword='';state.staffSessionToken='a'.repeat(64)");
+ const queued=report({type:'revenue',cash:100,cashless:200});f.stores.queue.set(queued.reportId,queued);
+ await f.run('retryOpsQueue()');assert.equal(f.stores.queue.size,0);assert.equal(b.sheets['Выручка'].rows.length,2);assert.equal(b.sheets['Выручка'].rows[1][6],300);
+ f.stores.queue.set(queued.reportId,queued);await f.run('retryOpsQueue()');assert.equal(f.stores.queue.size,0);assert.equal(b.sheets['Выручка'].rows.length,2);
 });
