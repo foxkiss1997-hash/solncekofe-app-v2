@@ -90,8 +90,11 @@ async function retryOpsQueue(){
   if(opsQueueBusy)return;if(!hasStaffAuth()){state.opsSyncMessage='Введите личный пароль в форме отчёта для повторной отправки.';render();return;}
   const identity=[state.staffShop,state.staffName].join(':'),password=state.reportPassword;opsQueueBusy=true;render();
   try{const rows=await opsStore('queue','readonly',s=>s.getAll());for(const row of rows.filter(x=>[x.shopId,x.submittedBy].join(':')===identity)){
-    await sendOpsRequest({action:'submitReport',report:row},password);await opsStore('queue','readwrite',s=>s.delete(row.reportId));
-  }state.opsSyncMessage='Все отчёты подтверждены Google Таблицей.';}catch(e){state.opsSyncMessage=e.message;}
+    if(identity!==[state.staffShop,state.staffName].join(':'))break;
+    const answer=await sendOpsRequest({action:'submitReport',shopId:row.shopId,submittedBy:row.submittedBy,report:row},password);
+    if(answer?.ok!==true||answer.reportId!==row.reportId||answer.status!=='synced')throw Error('Google Таблица не подтвердила этот отчёт. Он остаётся в очереди.');
+    await opsStore('queue','readwrite',s=>s.delete(row.reportId));
+  }if(identity===[state.staffShop,state.staffName].join(':'))state.opsSyncMessage='Все отчёты подтверждены Google Таблицей.';}catch(e){if(identity===[state.staffShop,state.staffName].join(':'))state.opsSyncMessage=e.message;}
   opsQueueBusy=false;await updateOpsPending();render();
 }
 async function enqueueOpsReport(payload){

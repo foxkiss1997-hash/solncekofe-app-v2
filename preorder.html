@@ -683,8 +683,8 @@
 
 .ops-photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.ops-photo-grid img{width:100%;height:120px;object-fit:cover;border-radius:12px}.ops-photos{margin:12px 0}.ops-check-editor{margin:14px 0;padding:12px;border:1px solid #33443a;border-radius:15px}.ops-check-editor.archived{opacity:.55}.admin-sun .tabs{overflow-x:auto;display:flex}.admin-sun .tab{flex-shrink:0}
 </style>
-<link rel="stylesheet" href="unified.css?v=20261019-stockrestore1">
-<link rel="stylesheet" href="frosted-glass.css?v=20261019-stockrestore1">
+<link rel="stylesheet" href="unified.css?v=20261020-reports1">
+<link rel="stylesheet" href="frosted-glass.css?v=20261020-reports1">
 </head>
 <body>
   <div class="shell">
@@ -692,12 +692,12 @@
     <div id="app"></div>
   </div>
 
-<script src="operations-v3.js?v=20261019-stockrestore1"></script>
-<script src="stable-ui.js?v=20261019-stockrestore1"></script>
-<script src="assets/loyalty-qr.js?v=20261019-stockrestore1"></script>
-<script src="team-loyalty.js?v=20261019-stockrestore1"></script>
-<script src="menu-photos.js?v=20261019-stockrestore1"></script>
-<script src="menu-experience.js?v=20261019-stockrestore1"></script>
+<script src="operations-v3.js?v=20261020-reports1"></script>
+<script src="stable-ui.js?v=20261020-reports1"></script>
+<script src="assets/loyalty-qr.js?v=20261020-reports1"></script>
+<script src="team-loyalty.js?v=20261020-reports1"></script>
+<script src="menu-photos.js?v=20261020-reports1"></script>
+<script src="menu-experience.js?v=20261020-reports1"></script>
 <script>
 /* ---------- DATA (menu: Солнцекофе, Yandex Eda) ---------- */
 const CATEGORIES = [
@@ -915,7 +915,7 @@ let state = {
   adminMenuLoading:false, newMenuName:'', newMenuCat:'coffee', newMenuPrice:'', newMenuIcon:'🍽️', adminStopCat:'coffee',
   editingMenuItemId:null, editItemName:'', editItemIcon:'', editItemPrices:{}, editItemPhoto:null,
   newMenuPhoto:null, shopPhotos:{}, guestDisplayName:null,
-  newPostDate:'', newPostText:'', newPostPhoto:'', postMsg:'', postMsgOk:false, adminPosts:[], adminPostsLoading:false,
+  newPostDate:'', newPostText:'', newPostPhoto:'', postMsg:'', postMsgOk:false, postSaving:false, adminPosts:[], adminPostsLoading:false, adminPostsError:'',
   editingPrizeId:null, newPrizeLabel:'', newPrizeEmoji:'', newPrizeType:'stamp', newPrizeValue:'', newPrizeWeight:'', prizeMsg:'', prizeMsgOk:false,
   opMode:null, opAmount:'', opParty:'', opNote:'', opPayment:'cash', opPhoto:'', opMsg:'', opMsgOk:false,
   shiftCash:'', shiftCashless:'', shiftActual:'', shiftPhoto:'', shiftChecks:emptyShiftChecks(), checklistStage:'open', checklistSaving:false, checklistMsg:'', checklistMsgOk:false, shiftMsg:'', shiftMsgOk:false,
@@ -2091,26 +2091,26 @@ function renderAdminPostsTab(){
   return `
     <div class="section">
       <div class="field">
-        <label style="display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);font-weight:600;margin-bottom:7px;">Дата публикации (по будням, 10:00 МСК)</label>
+        <label style="display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);font-weight:600;margin-bottom:7px;">Дата в очереди публикаций</label>
         <input class="text-input" type="date" value="${esc(state.newPostDate||'')}" data-action="set-post-date">
       </div>
       <div class="field" style="margin-top:8px;">
-        <label style="display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);font-weight:600;margin-bottom:7px;">Текст истории «Офис цветов»</label>
+        <label style="display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);font-weight:600;margin-bottom:7px;">Текст поста</label>
         <textarea class="text-input" rows="6" style="width:100%;resize:vertical;font-family:inherit;" placeholder="Сегодня Орхидея снова недовольна, что её никто не сфотографировал..." data-action="set-post-text">${esc(state.newPostText||'')}</textarea>
       </div>
       <div class="field" style="margin-top:8px;">
         <label style="display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);font-weight:600;margin-bottom:7px;">Ссылка на фото (необязательно)</label>
         <input class="text-input" type="text" placeholder="https://...jpg" value="${esc(state.newPostPhoto||'')}" data-action="set-post-photo">
       </div>
-      <button class="btn-ghost rippleable" data-action="admin-save-post" style="margin-top:8px;">Сохранить пост на эту дату</button>
-      ${state.postMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.postMsgOk?'var(--mint-deep)':'var(--coral-deep)'};font-weight:700;">${state.postMsg}</div>` : ''}
+      <p class="hint">Сохранение добавляет пост в очередь «Офис цветов». Доставку в Telegram подтверждает статус «Отправлен». Выбор канала и кнопка «Опубликовать сейчас» на этом экране пока недоступны.</p><button class="btn-ghost rippleable" data-action="admin-save-post" style="margin-top:8px;" ${state.postSaving?'disabled':''}>${state.postSaving?'Сохраняем…':'Сохранить пост на эту дату'}</button>
+      ${state.postMsg ? `<div class="order-meta" style="margin-top:8px;color:${state.postMsgOk?'var(--mint-deep)':'var(--coral-deep)'};font-weight:700;">${esc(state.postMsg)}</div>` : ''}
     </div>
     <div class="section">
-      <div class="section-label">Ближайшие посты</div>
+      <div class="section-label">Очередь постов</div>${state.adminPostsError?`<p class="pin-error" role="status">${esc(state.adminPostsError)}</p>`:''}
       ${state.adminPostsLoading ? `<p class="empty-note">Загружаем…</p>` :
         (state.adminPosts.length ? state.adminPosts.map(p=>`
           <div class="order-card">
-            <div class="order-head"><b>${p.date}</b><div class="order-status ${p.sent?'done':''}">${p.sent?'Отправлен':'Ждёт'}</div></div>
+            <div class="order-head"><b>${esc(p.date)}</b><div class="order-status ${p.sent?'done':''}">${p.sent?'Отправлен':'Ждёт'}</div></div>
             <div class="order-items">${esc((p.text||'').slice(0,90))}${(p.text||'').length>90?'…':''}</div>
           </div>`).join('') : `<p class="empty-note">Постов пока нет.</p>`)
       }
@@ -2317,35 +2317,39 @@ async function removeAdminMenuItem(dbId){
 }
 
 async function loadAdminPosts(){
-  state.adminPostsLoading = true; render();
+  state.adminPostsLoading = true;state.adminPostsError='';render();
   try{
     const res = await fetch(DB_URL + '/posts.json');
-    const obj = res.ok ? await res.json() : null;
+    if(!res.ok)throw Error('Не удалось загрузить очередь постов. Проверьте связь и обновите раздел.');
+    const obj = await res.json();
     const dates = obj ? Object.keys(obj).sort() : [];
-    state.adminPosts = dates.map(date => Object.assign({ date }, obj[date]));
-  }catch(e){ state.adminPosts = []; }
+    state.adminPosts = dates.map(date => Object.assign({},obj[date],{date}));
+  }catch(e){state.adminPostsError=e.message||'Очередь постов недоступна.';}
   state.adminPostsLoading = false; render();
 }
 
 async function saveAdminPost(){
-  const date = state.newPostDate;
-  const text = (state.newPostText||'').trim();
-  const photo = (state.newPostPhoto||'').trim();
-  if(!date || !text){
-    state.postMsg = 'Заполните дату и текст поста.'; state.postMsgOk = false; render(); return;
+  if(state.postSaving)return;
+  const date = state.newPostDate,text = (state.newPostText||'').trim(),photo = (state.newPostPhoto||'').trim();
+  if(!state.adminAuthed){state.postMsg='Сначала войдите в админку.';state.postMsgOk=false;render();return;}
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!text||!Number.isFinite(Date.parse(date+'T12:00:00Z'))||new Date(date+'T12:00:00Z').toISOString().slice(0,10)!==date){
+    state.postMsg = 'Заполните корректную дату и текст поста.'; state.postMsgOk = false; render(); return;
   }
+  if(photo){try{const url=new URL(photo);if(url.protocol!=='https:')throw Error();}catch(e){state.postMsg='Укажите HTTPS-ссылку на фото.';state.postMsgOk=false;render();return;}}
+  state.postSaving=true;state.postMsg='';render();
   try{
-    await fetch(DB_URL + '/posts/' + date + '.json', {
-      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text, photo, sent:false })
-    });
-    state.postMsg = 'Пост сохранён на ' + date + '. Разошлётся автоматически в 10:00 (если это будний день).';
-    state.postMsgOk = true;
-    state.newPostText = '';
-    state.newPostPhoto = '';
-  }catch(e){
-    state.postMsg = 'Не удалось сохранить — проверьте связь.'; state.postMsgOk = false;
-  }
-  await loadAdminPosts();
+    const path=DB_URL+'/posts/'+date+'.json',snapshot=await fetch(path,{headers:{'X-Firebase-ETag':'true'}});
+    if(!snapshot.ok)throw Error('Не удалось проверить пост. Текст остался в форме.');
+    const previous=await snapshot.json(),etag=snapshot.headers.get('etag');
+    if(!etag)throw Error('Нет подтверждения версии поста. Обновите раздел.');
+    if(previous?.sent)throw Error('Этот пост уже отправлен. Выберите другую дату, чтобы избежать повторной публикации.');
+    const response=await fetch(path,{method:'PUT',headers:{'Content-Type':'application/json','If-Match':etag},body:JSON.stringify({...previous,text,photo,sent:false})});
+    if(!response.ok)throw Error(response.status===412?'Пост изменился на другом устройстве. Обновите очередь перед сохранением.':'База не подтвердила сохранение. Текст остался в форме.');
+    state.postMsg = 'Пост сохранён в очередь на '+date+'. Публикация ещё не подтверждена.';state.postMsgOk = true;
+    if(state.newPostDate===date&&state.newPostText.trim()===text&&state.newPostPhoto.trim()===photo){state.newPostText='';state.newPostPhoto='';}
+    await loadAdminPosts();
+  }catch(e){state.postMsg=e.message||'Не удалось сохранить — проверьте связь.';state.postMsgOk=false;}
+  finally{state.postSaving=false;render();}
 }
 
 async function saveAdminPrize(){

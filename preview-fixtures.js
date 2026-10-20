@@ -15,6 +15,12 @@ window.fetch=async function(input,options={}){
  const url=new URL(typeof input==='string'?input:input.url,location.href);
  if(url.hostname.includes('firebaseio.com')){
   const method=(options.method||'GET').toUpperCase();
+  if(new URLSearchParams(location.search).get('view')==='posts'&&/^\/posts(?:\/\d{4}-\d{2}-\d{2})?\.json$/.test(url.pathname)){
+   const dates=previewDb['/posts.json']??={},date=url.pathname.match(/^\/posts\/(.+)\.json$/)?.[1];
+   if(method==='PUT'&&date){if(new URLSearchParams(location.search).get('postError')==='1')return new Response(JSON.stringify({error:'Demo write rejected'}),{status:403});dates[date]=JSON.parse(options.body);}
+   else if(method!=='GET')throw Error('Демо: действие недоступно.');
+   return new Response(JSON.stringify(date?dates[date]??null:dates),{status:200,headers:{'Content-Type':'application/json',etag:'"preview"'}});
+  }
   if(method!=='GET'){throw Error('Запись в рабочую базу отключена в демонстрации.');}
   return new Response(JSON.stringify(previewDb[url.pathname]??null),{status:200,headers:{'Content-Type':'application/json'}});
  }
