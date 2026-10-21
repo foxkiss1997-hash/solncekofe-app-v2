@@ -29,3 +29,13 @@ test('repeat order uses current prices, preserves options and never places an or
 test('repeat order is all or nothing when an item is stopped; seasonal section uses configured flags',()=>{
  const x=app();try{x.run("menuLastCart=[{itemId:'cap',sizeId:'m',qty:1,milk:'regular',syrup:'none'},{itemId:'latte',sizeId:'m',qty:1,milk:'regular',syrup:'none'}];STOP_LIST.add('latte');repeatLastCart();");assert.equal(x.run('state.cart.length'),0);x.run("MENU_OVERRIDES.raf={seasonal:true};state.category='seasonal';");assert.equal(x.run('menuItemsForView().length'),1);assert.equal(x.run('menuItemsForView()[0].id'),'raf');}finally{x.dom.window.close();}
 });
+
+test('new food, autumn and rescue sections are visible with honest empty states and no placeholder purchases',()=>{
+ const x=app();try{
+  const page=x.run('renderGlassMenu()');for(const title of ['Выпечка','Вафли-сэндвичи','Осеннее меню','Спаси вкусняшку'])assert.ok(page.includes(title));
+  for(const category of ['bakery','waffles','autumn','rescue']){x.run(`state.category='${category}';state.menuSearch=''`);assert.equal(x.run('menuItemsForView().length'),0);assert.doesNotMatch(x.run('renderMenuEmptyState()'),/data-action|₽/);}
+  x.run("EXTRA_ITEMS=[{id:'x_waffle',category:'waffles',name:'Тестовая вафля',sizes:{m:390}}];state.category='waffles'");assert.equal(x.run('menuItemsForView()[0].id'),'x_waffle');
+  x.run("MENU_OVERRIDES.raf={seasonal:true};state.category='autumn'");assert.equal(x.run('menuItemsForView()[0].id'),'raf');
+  x.run("state.category='bakery';state.menuSearch='несуществующая позиция'");assert.match(x.run('renderMenuEmptyState()'),/Ничего не нашли/);
+ }finally{x.dom.window.close();}
+});
