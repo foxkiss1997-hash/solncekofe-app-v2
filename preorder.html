@@ -148,7 +148,7 @@
     background:var(--card-strong);
   }
   .item-icon svg{width:22px;height:22px;}
-  .item-icon img{width:100%;height:100%;object-fit:cover;border-radius:inherit;}
+  .item-icon img{width:100%;height:100%;object-fit:${item.category==='fitness'?'contain':'cover'};${item.category==='fitness'?'padding:8px;box-sizing:border-box;':''}border-radius:inherit;}
   .item-info{flex:1;min-width:0;}
   .item-info h3{margin:0 0 5px;font-family:var(--font-display);font-size:15.5px;font-weight:700;}
   .item-price{font-family:var(--font-mono);font-size:12.5px;font-weight:600;}
@@ -683,8 +683,8 @@
 
 .ops-photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.ops-photo-grid img{width:100%;height:120px;object-fit:cover;border-radius:12px}.ops-photos{margin:12px 0}.ops-check-editor{margin:14px 0;padding:12px;border:1px solid #33443a;border-radius:15px}.ops-check-editor.archived{opacity:.55}.admin-sun .tabs{overflow-x:auto;display:flex}.admin-sun .tab{flex-shrink:0}
 </style>
-<link rel="stylesheet" href="unified.css?v=20261022-rescue1">
-<link rel="stylesheet" href="frosted-glass.css?v=20261022-rescue1">
+<link rel="stylesheet" href="unified.css?v=20261022-desserts1">
+<link rel="stylesheet" href="frosted-glass.css?v=20261022-desserts1">
 </head>
 <body>
   <div class="shell">
@@ -692,13 +692,13 @@
     <div id="app"></div>
   </div>
 
-<script src="operations-v3.js?v=20261022-rescue1"></script>
-<script src="stable-ui.js?v=20261022-rescue1"></script>
-<script src="assets/loyalty-qr.js?v=20261022-rescue1"></script>
-<script src="team-loyalty.js?v=20261022-rescue1"></script>
-<script src="menu-photos.js?v=20261022-rescue1"></script>
-<script src="menu-experience.js?v=20261022-rescue1"></script>
-<script src="rescue-menu.js?v=20261022-rescue1"></script>
+<script src="operations-v3.js?v=20261022-desserts1"></script>
+<script src="stable-ui.js?v=20261022-desserts1"></script>
+<script src="assets/loyalty-qr.js?v=20261022-desserts1"></script>
+<script src="team-loyalty.js?v=20261022-desserts1"></script>
+<script src="menu-photos.js?v=20261022-desserts1"></script>
+<script src="menu-experience.js?v=20261022-desserts1"></script>
+<script src="rescue-menu.js?v=20261022-desserts1"></script>
 <script>
 /* ---------- DATA (menu: Солнцекофе, Yandex Eda) ---------- */
 const CATEGORIES = [
@@ -736,7 +736,7 @@ function iconColor(category){ return CAT_ICON_COLOR[category] || 'var(--amber-de
 function itemThumbHTML(item){
   if(item?.itemId&&!item.id)item=itemById(item.itemId)||item;
   if(item && item.photo){
-    return `<img src="${item.photo}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
+    return `<img src="${item.photo}" alt="" style="width:100%;height:100%;object-fit:${item.category==='fitness'?'contain':'cover'};${item.category==='fitness'?'padding:8px;box-sizing:border-box;':''}border-radius:inherit;">`;
   }
   return (typeof menuPhotoHTML==='function'&&menuPhotoHTML(item))||iconSVG(item ? item.category : 'coffee');
 }
@@ -822,9 +822,9 @@ const ITEMS = [
   {id:'pizzafunghi', category:'pizza', name:'4 сыра', sizes:{m:750}, icon:'🍕'},
 
   // ПП десерты
-  {id:'ppcheesecake', category:'fitness', name:'ПП Сникерс', sizes:{m:330}, hit:true, icon:'🍰'},
-  {id:'ppbrownie', category:'fitness', name:'ПП Кето шоколад', sizes:{m:330}, icon:'🍫'},
-  {id:'ppenergy', category:'fitness', name:'Банан карамель', sizes:{m:330}, icon:'🥥'},
+  {id:'ppcheesecake', category:'fitness', name:'ПП Сникерс', sizes:{m:350}, weightGrams:140, photo:'https://foxkiss1997-hash.github.io/solncekofe-app-v2/assets/menu/mozhno-snickers-20261022.webp', icon:'🍰'},
+  {id:'ppbrownie', category:'fitness', name:'Кето вишня–шоколад', sizes:{m:350}, weightGrams:140, photo:'https://foxkiss1997-hash.github.io/solncekofe-app-v2/assets/menu/mozhno-keto-cherry-chocolate-20261022.webp', icon:'🍰'},
+  {id:'ppenergy', category:'fitness', name:'Банан–карамель', sizes:{m:350}, weightGrams:140, photo:'https://foxkiss1997-hash.github.io/solncekofe-app-v2/assets/menu/mozhno-banana-caramel-20261022.webp', icon:'🍰'},
 ];
 
 const SIZE_META = {s:{label:'S'}, m:{label:'M'}, l:{label:'L'}};
@@ -3246,7 +3246,7 @@ async function loadExtraMenu(){
     if(obj){
       EXTRA_ITEMS = Object.keys(obj).map(id=>{
         const m = obj[id];
-        return { id: 'x_'+id, dbId:id, category:m.category, name:m.name, sizes:{m:m.price}, hit:!!m.hit, icon:m.icon||'🍽️', photo:m.photo||null, custom:true };
+        return { id: 'x_'+id, dbId:id, category:m.category, name:m.name, sizes:{m:m.price}, hit:!!m.hit, icon:m.icon||'🍽️', photo:m.photo||null, weightGrams:Number(m.weightGrams)||null, custom:true };
       });
     }
   }catch(e){ /* ignore, menu just stays with built-in items */ }
