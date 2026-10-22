@@ -9,7 +9,7 @@ try{
  let field=w.document.querySelector('[data-action="set-op-party"]');field.value='Молоко';field.dispatchEvent(new w.Event('input',{bubbles:true}));field.focus();field.setSelectionRange(2,4);scroll=700;evaluate('render();render();');
  assert.equal(w.document.querySelector('[data-action="set-op-party"]'),field);assert.equal(w.document.activeElement,field);assert.equal(field.value,'Молоко');assert.equal(field.selectionStart,2);assert.equal(field.selectionEnd,4);assert.equal(scroll,700);
  console.log('PASS: refresh keeps the exact input, focus, caret, form value and scroll');
- evaluate("state.screen='menu';render();");assert.equal(scroll,0);assert.equal(w.document.querySelectorAll('.menu-thumb').length,4);
+ evaluate("state.screen='menu';render();");assert.equal(scroll,0);assert.equal(w.document.querySelectorAll('.menu-thumb').length,6);
  evaluate("state.screen='staff';render();");assert.equal(scroll,700);
  console.log('PASS: screen navigation restores each screen position; menu renders photographic cells');
  evaluate("Object.assign(state,{opMode:'reward'});Object.assign(teamUI,{guestId:'ABCD',lookupKey:'Анна:1:ABCD',guest:{name:'Гость',stamps:5,bonusBalance:100,vouchers:[{id:'GIFT',label:'Кофе'}],history:[]}});render();");

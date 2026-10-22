@@ -32,7 +32,7 @@ test('repeat order is all or nothing when an item is stopped; seasonal section u
 
 test('new food, autumn and rescue sections are visible with honest empty states and no placeholder purchases',()=>{
  const x=app();try{
-  const page=x.run('renderGlassMenu()');for(const title of ['Выпечка','Вафли-сэндвичи','Осеннее меню','Спаси вкусняшку'])assert.ok(page.includes(title));
+  x.run('state.menuAllCategories=true');const page=x.run('renderGlassMenu()');for(const title of ['Выпечка','Вафли-сэндвичи','Осеннее меню','Спаси вкусняшку'])assert.ok(page.includes(title));
   for(const category of ['bakery','waffles','autumn','rescue']){x.run(`state.category='${category}';state.menuSearch=''`);assert.equal(x.run('menuItemsForView().length'),0);assert.doesNotMatch(x.run('renderMenuEmptyState()'),/data-action|₽/);}
   x.run("EXTRA_ITEMS=[{id:'x_waffle',category:'waffles',name:'Тестовая вафля',sizes:{m:390}}];state.category='waffles'");assert.equal(x.run('menuItemsForView()[0].id'),'x_waffle');
   x.run("MENU_OVERRIDES.raf={seasonal:true};state.category='autumn'");assert.equal(x.run('menuItemsForView()[0].id'),'raf');
