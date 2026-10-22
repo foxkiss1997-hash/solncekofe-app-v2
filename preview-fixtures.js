@@ -4,7 +4,7 @@ const previewToday=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow',yea
 const demoGuest={name:'',stamps:5,bonusBalance:100,bonusSpins:0,vouchers:{DEMO_GIFT:{label:'Классический кофе M',type:'free_item',redeemed:false}},loyaltyHistory:{}};
 const previewDb={
  '/guests/DEMO.json':demoGuest,
- '/menu.json':{farmer:{category:'pizza',name:'Крестьянская',price:750},carbonara:{category:'pizza',name:'Карбонара',price:750}},
+ '/menu.json':{bakery_preview:{category:'bakery',name:'Круассан классический',price:260,icon:'🥐'},farmer:{category:'pizza',name:'Крестьянская',price:750},carbonara:{category:'pizza',name:'Карбонара',price:750}},
  '/menu_overrides.json':{raforange:{seasonal:true},ppcheesecake:{name:'ПП Сникерс',sizes:{m:330}},ppbrownie:{name:'ПП Кето шоколад',sizes:{m:330}},ppenergy:{name:'Банан карамель',sizes:{m:330}}},
  '/stoplist.json':{},'/shop_stoplist.json':{1:{esptonik:true},2:{}},'/shop_photos.json':{},'/orders.json':{},
  '/ops_v3/checklist_config.json':{},'/wheel_prizes.json':null,
@@ -23,6 +23,18 @@ window.fetch=async function(input,options={}){
   }
   if(method!=='GET'){throw Error('Запись в рабочую базу отключена в демонстрации.');}
   return new Response(JSON.stringify(previewDb[url.pathname]??null),{status:200,headers:{'Content-Type':'application/json'}});
+ }
+ if(url.hostname==='solncekofe-payment-relay.onrender.com'&&url.pathname==='/rescue-offers'){
+  const shopId=Number(url.searchParams.get('shopId'));return new Response(JSON.stringify({ok:true,shopId,serverAt:Date.now(),offers:(window.previewRescueOffers||[]).filter(x=>x.shopId===shopId&&x.active&&x.available>0&&x.pickupUntil>Date.now())}),{status:200});
+ }
+ if(url.hostname==='solncekofe-payment-relay.onrender.com'&&url.pathname==='/rescue-operation'){
+  const b=JSON.parse(options.body||'{}');if(b.auth?.password!=='preview-pass'||b.submittedBy!=='Анна'||b.shopId!==2)throw Error('Демо: нет доступа.');
+  window.previewRescueOffers??=[];let offer=window.previewRescueOffers.find(x=>x.id===b.id);
+  if(b.action!=='list'){
+   if(b.action==='close'){offer.active=false;offer.revision++;}
+   else{if(!b.freshConfirmed||Number(b.price)<=0||Number(b.price)>=260||Number(b.quantity)<1||b.pickupUntil<=Date.now())throw Error('Проверьте цену, количество и время.');offer={id:b.id,itemId:b.itemId,name:'Круассан классический',originalPrice:260,price:Number(b.price),quantity:Number(b.quantity),available:Number(b.quantity),reserved:0,pickupUntil:b.pickupUntil,active:true,shopId:2,revision:(offer?.revision||0)+1};window.previewRescueOffers=window.previewRescueOffers.filter(x=>x.id!==b.id).concat(offer);}
+  }
+  return new Response(JSON.stringify({ok:true,shopId:2,offers:window.previewRescueOffers,offer}),{status:200});
  }
  if(url.hostname==='solncekofe-payment-relay.onrender.com'&&url.pathname==='/staff-session'){
   const b=JSON.parse(options.body||'{}'),valid=b.action==='login'?b.password==='preview-pass'&&b.shopId===2:b.token==='b'.repeat(64);
@@ -68,6 +80,11 @@ window.previewSchedule.rows.push(...[{id:'e'.repeat(32),revision:'f'.repeat(32),
 window.previewPayroll={week:{start:'2026-10-12',end:'2026-10-18',payDate:'2026-10-18'},rate:4200,count:5,amount:21000,totals:[{name:'Анна',count:5,amount:21000}],awaiting:[{id:'e'.repeat(32),shopId:2,date:'2026-10-18',start:'08:00',end:'21:00',name:'Иван',revision:'f'.repeat(32)}],rows:[12,13,14,16,17].map((day,i)=>({id:String(i+1).repeat(32),shopId:i===3?1:2,date:'2026-10-'+day,start:'08:00',end:'21:00',name:'Анна',status:'worked',rate:4200,amount:4200,revision:'b'.repeat(32)}))};
 window.previewSetup=function(state,team){
  const query=new URLSearchParams(location.search),role=query.get('role');state.shopId=2;
+ if(query.get('view')==='rescue'){
+  window.previewRescueOffers=[{id:'a'.repeat(32),itemId:'x_bakery_preview',name:'Круассан классический',originalPrice:260,price:160,quantity:3,available:3,reserved:0,pickupUntil:Date.now()+3600000,active:true,shopId:2,revision:1}];
+  rescueOffersByShop[2]=window.previewRescueOffers;state.category='coffee';
+ }
+
  if(query.has('fines')){const p=window.previewPayroll;p.gross=21000;p.penaltyTotal=1200;p.amount=19800;p.totals[0].amount=19800;p.penalties=[{id:'a'.repeat(32),shiftId:'1'.repeat(32),shopId:2,name:'Анна',date:'2026-10-12',amount:200,reason:'Опоздание: 7 мин.',automatic:true},{id:'b'.repeat(32),shiftId:'2'.repeat(32),shopId:2,name:'Анна',date:'2026-10-13',amount:1000,reason:'Опоздание: 20 мин.',automatic:true}];p.openings=[{id:'1'.repeat(32),shopId:2,name:'Анна',date:'2026-10-12',openedAt:Date.parse('2026-10-12T08:07:00+03:00'),lateMinutes:7}];}
 
  if(['order-ready','order-preparing'].includes(query.get('view'))){
@@ -102,6 +119,10 @@ window.previewSetup=function(state,team){
   localStorage.removeItem('sk_pending_payment');localStorage.removeItem('sk_active_order');state.paymentPending=null;
   state.staffShop=Number(query.get('point'))===1?1:2;state.screen='staff';state.opMode='stock';state.staffStockSearch='раф';state.staffStockCategory='coffee';state.staffStockReady=true;state.staffStockIdentity=stockIdentity();
   previewDb['/shop_stoplist.json'][2]={cap:true};previewDb['/stoplist.json']={raf:true};STOP_LIST.add('raf');shopStopLists=previewDb['/shop_stoplist.json'];
+ }
+ if(role==='staff'&&query.get('view')==='rescue'){
+  state.opMode='rescue';rescueDraft();state.rescueStaffReady=true;state.rescueStaffOffers=window.previewRescueOffers;
+  document.body.classList.add('preview-rescue-only');const style=document.createElement('style');style.textContent='.preview-rescue-only .ops-shell > :not(.topbar):not(#ops-active-form){display:none}.preview-rescue-only #ops-active-form{margin-top:12px}';document.head.appendChild(style);
  }
  if(role==='owner'&&query.get('view')==='assign'){state.adminTab='schedule';state.teamShop=Number(query.get('point'))===1?1:2;Object.assign(team,{schedule:{staff:['Анна','Борис'],rows:[],teamRows:[]},scheduleKey:'owner:'+state.teamShop,adminName:'Анна',adminMonth:'2026-11',adminDraftKey:'owner:'+state.teamShop+':Анна',adminDraft:[2,3,4,5,6,7,8,9].map((day,i)=>({shiftId:String(i+1).repeat(32),revision:'',date:'2026-11-'+String(day).padStart(2,'0')}))});}
 
