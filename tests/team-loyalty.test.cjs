@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 const copy=x=>x===undefined?null:JSON.parse(JSON.stringify(x));
-const source=['Operations','TeamLoyalty','Catalog','Orders'].map(x=>fs.readFileSync('apps-script/'+x+'.gs','utf8')).join('\n');
+const source=['Operations','TeamLoyalty','PayrollPayments','Catalog','Orders'].map(x=>fs.readFileSync('apps-script/'+x+'.gs','utf8')).join('\n');
 const op='a'.repeat(32),giftOp='b'.repeat(32),shiftId='c'.repeat(32);
 function setup(){
  const db={staff:{1:{one:{name:'Анна',password:'pass',active:true},two:{name:'Борис',password:'other',active:true}},2:{one:{name:'Анна',password:'second',active:true}}},guests:{ABCD:{stamps:5,bonusSpins:2,bonusBalance:100,vouchers:{GIFT:{label:'Кофе',redeemed:false}}}}},writes=[];
@@ -331,7 +331,7 @@ test('late thresholds use exact server milliseconds at 5 and 15 minutes',()=>{
 test('opening needs photo completion, freezes server button time and deducts once, with private totals',()=>{
  const x=attendanceSetup();const b=x.begin({openedAt:0,lateMinutes:0,amount:0});assert.equal(b.openedAt,Date.parse('2026-10-19T09:00:00Z'));
  let data=schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-19'});assert.equal(data.penaltyTotal,0);assert.equal(data.openings.length,0);
- x.finish();x.finish();data=schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-19'});assert.equal(data.penaltyTotal,200);assert.equal(data.amount,-200);assert.equal(data.openings[0].lateMinutes,5);assert.equal(x.p.entries.length,2);assert.equal(x.writes.length,1);
+ x.finish();x.finish();data=schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-19'});assert.equal(data.penaltyTotal,200);assert.equal(data.amount,4000);assert.equal(data.count,1);assert.equal(data.openings[0].lateMinutes,5);assert.equal(x.p.entries.length,2);assert.equal(x.writes.length,1);
  const other=schedule(x,{...x.staff,submittedBy:'Борис',auth:{password:'other'},action:'listPayroll',date:'2026-10-19'});assert.equal(other.penalties.length,0);assert.equal(other.openings.length,0);
  assert.throws(()=>schedule(x,{...x.owner,action:'cancelShift',shiftId,operationId:'f'.repeat(32),revision:op}),/уже открыта/);
 });
@@ -386,4 +386,37 @@ test('owner assignment respects test root isolation',()=>{
 test('readiness unwraps Google HTML one layer at a time without corrupting batch fingerprints or quoted names',()=>{
  const x=setup(),ack={ok:true,nonce:'a'.repeat(32),rows:[{name:'Анна "Тест"',history:{batch:JSON.stringify({name:'Анна',items:[{date:'2026-10-19'}]}),note:'C:\\report'}}]},html='<script>window.top.postMessage('+JSON.stringify(ack)+',"https://foxkiss1997-hash.github.io");</script>';
  for(const body of [html,JSON.stringify(html),JSON.stringify(JSON.stringify(html))]){x.ctx.responseBody=body;const result=vm.runInContext('readOpsReadinessAck_(responseBody,"https://foxkiss1997-hash.github.io")',x.ctx);assert.equal(result.rows[0].history.batch,ack.rows[0].history.batch);assert.equal(result.rows[0].name,ack.rows[0].name);assert.equal(result.rows[0].history.note,ack.rows[0].history.note);}
+});
+
+test('opening accrues immediately, legacy openings accrue too, and explicit reversal survives refresh',()=>{
+ const x=attendanceSetup();x.begin();x.finish();let d=schedule(x,{...x.owner,action:'listPayroll',date:'2026-10-19'});assert.equal(d.gross,4200);assert.equal(d.due,4000);assert.equal(d.rows[0].automatic,true);assert.equal(d.awaiting.length,0);
+ const opening=x.p.entries.find(e=>e.action==='finishShiftOpening');delete opening.detail.accrualRate;delete opening.detail.accrualAmount;x.p.ledgers['/ops_v3'].operations[opening.operationId]=opening;
+ d=schedule(x,{...x.owner,action:'listPayroll',date:'2026-10-19'});assert.equal(d.gross,4200);assert.throws(()=>worked(x,shiftId,'e'.repeat(32)),/ещё не закончилась|уже учтена/);
+ schedule(x,{...x.owner,action:'reverseWorkedShift',shiftId,operationId:'f'.repeat(32),revision:op,reason:'Смена открыта ошибочно'});d=schedule(x,{...x.owner,action:'listPayroll',date:'2026-10-19'});assert.equal(d.gross,0);assert.equal(d.rows[0].status,'reversed');assert.equal(d.awaiting.length,0);
+});
+function payout(x,extra={}){return schedule(x,{...x.owner,action:'recordPayrollPayment',name:'Анна',date:'2026-10-19',paymentMode:'partial',amount:1000,expectedDue:4000,operationId:'e'.repeat(32),...extra});}
+test('partial payment then full payment records actual amounts and clears the debt without erasing work',()=>{
+ const x=attendanceSetup();x.begin();x.finish();const first=payout(x);payout(x);assert.equal(first.payment.dueAfter,3000);
+ let d=schedule(x,{...x.owner,action:'listPayroll',date:'2026-10-19'});assert.equal(d.paid,1000);assert.equal(d.due,3000);assert.equal(d.count,1);assert.equal(d.payments.length,1);
+ payout(x,{paymentMode:'full',amount:999999,expectedDue:3000,operationId:'f'.repeat(32)});d=schedule(x,{...x.owner,action:'listPayroll',date:'2026-10-19'});assert.equal(d.paid,4000);assert.equal(d.due,0);assert.equal(d.payments[1].amount,3000);assert.equal(d.totals[0].status,'paid');assert.equal(d.gross,4200);assert.equal(d.penaltyTotal,200);assert.equal(d.balances[0].due,0);
+ const staff=schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-19'});assert.equal(staff.payments.length,2);assert.equal(staff.paid,4000);assert.equal(staff.payrollReportUrl,undefined);
+ const other=schedule(x,{...x.staff,submittedBy:'Борис',auth:{password:'other'},action:'listPayroll',date:'2026-10-19'});assert.equal(other.payments.length,0);assert.equal(other.balances.length,0);
+});
+test('payments reject staff, stale balances, overpayments, decimals and reused IDs with changed payload',()=>{
+ const x=attendanceSetup();x.begin();x.finish();assert.throws(()=>payout(x,{...x.staff}),/администратор/);
+ for(const amount of [0,-1,1.5,4001])assert.throws(()=>payout(x,{amount}),/сумму/);
+ assert.throws(()=>payout(x,{expectedDue:4200}),/изменился/);payout(x);assert.throws(()=>payout(x,{amount:2000}),/ID операции/);assert.throws(()=>payout(x,{operationId:'f'.repeat(32)}),/изменился/);
+ const next=schedule(x,{...x.owner,action:'listPayroll',date:'2026-10-26'});assert.equal(next.paid,0);assert.equal(next.due,0);assert.equal(next.balances[0].due,3000);
+});
+test('lost payment acknowledgement is replayed exactly once; report failure never hides committed payment',()=>{
+ const x=attendanceSetup();x.begin();x.finish();const original=x.ctx.payAppend;let fail=true;x.ctx.payAppend=(store,event)=>{original(store,event);if(event.kind==='payment'&&fail){fail=false;throw Error('lost payment acknowledgement');}};
+ vm.runInContext('teamPayrollAppend_=payAppend;',x.ctx);assert.throws(()=>payout(x),/lost payment acknowledgement/);const ack=payout(x);assert.equal(ack.replayed,true);assert.equal(ack.payment.amount,1000);assert.equal(schedule(x,{...x.owner,action:'listPayroll',date:'2026-10-19'}).payments.length,1);
+});
+test('payroll report writes human-readable payout history and weekly remaining balance to private Sheets',()=>{
+ const x=attendanceSetup();x.begin();x.finish();payout(x);const tabs={};
+ const fake=name=>tabs[name]||(tabs[name]={cells:[],appendRow(r){this.cells.push(copy(r));},setFrozenRows(){},getLastRow(){return this.cells.length;},getRange(row,col,height=1,width=1){const self=this;return {getValue:()=>self.cells[row-1]?.[col-1],setValues(vals){for(let i=0;i<vals.length;i++){self.cells[row-1+i]??=[];for(let j=0;j<vals[i].length;j++)self.cells[row-1+i][col-1+j]=vals[i][j];}},clearContent(){for(let i=row-1;i<row-1+height;i++)self.cells[i]=[];}};}});
+ x.ctx.DriveApp={Access:{PRIVATE:'private'},getFileById:()=>({getSharingAccess:()=> 'private'})};x.ctx.SpreadsheetApp={openById:()=>({getSheetByName:n=>tabs[n]||null,insertSheet:n=>fake(n)}),flush(){}};x.ctx.reportProps={getProperty:k=>k==='PAYROLL_SPREADSHEET_ID'?'private-book':null};x.ctx.reportStore=x.p.ledgers['/ops_v3'];
+ assert.equal(vm.runInContext("teamPayrollReport_(reportStore,reportProps,'/ops_v3')",x.ctx),true);assert.equal(tabs['Выплаты'].cells[1][5],1000);assert.equal(tabs['Зарплата по неделям'].cells[1][8],3000);assert.equal(tabs['Смены и начисления'].cells[1][6],4200);
+ vm.runInContext("teamPayrollReport_(reportStore,reportProps,'/ops_v3')",x.ctx);assert.equal(tabs['Выплаты'].cells.length,2);
+ x.ctx.DriveApp.getFileById=()=>({getSharingAccess:()=> 'public'});assert.throws(()=>vm.runInContext("teamPayrollReport_(reportStore,reportProps,'/ops_v3')",x.ctx),/закрыт/);
 });
