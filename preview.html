@@ -683,8 +683,8 @@
 
 .ops-photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.ops-photo-grid img{width:100%;height:120px;object-fit:cover;border-radius:12px}.ops-photos{margin:12px 0}.ops-check-editor{margin:14px 0;padding:12px;border:1px solid #33443a;border-radius:15px}.ops-check-editor.archived{opacity:.55}.admin-sun .tabs{overflow-x:auto;display:flex}.admin-sun .tab{flex-shrink:0}
 </style>
-<link rel="stylesheet" href="unified.css?v=20261023-autumn4">
-<link rel="stylesheet" href="frosted-glass.css?v=20261023-autumn4">
+<link rel="stylesheet" href="unified.css?v=20261024-menu-editor1">
+<link rel="stylesheet" href="frosted-glass.css?v=20261024-menu-editor1">
 </head>
 <body>
   <div class="shell">
@@ -692,13 +692,13 @@
     <div id="app"></div>
   </div>
 
-<script src="operations-v3.js?v=20261023-autumn4"></script>
-<script src="stable-ui.js?v=20261023-autumn4"></script>
-<script src="assets/loyalty-qr.js?v=20261023-autumn4"></script>
-<script src="team-loyalty.js?v=20261023-autumn4"></script>
-<script src="menu-photos.js?v=20261023-autumn4"></script>
-<script src="menu-experience.js?v=20261023-autumn4"></script>
-<script src="rescue-menu.js?v=20261023-autumn4"></script>
+<script src="operations-v3.js?v=20261024-menu-editor1"></script>
+<script src="stable-ui.js?v=20261024-menu-editor1"></script>
+<script src="assets/loyalty-qr.js?v=20261024-menu-editor1"></script>
+<script src="team-loyalty.js?v=20261024-menu-editor1"></script>
+<script src="menu-photos.js?v=20261024-menu-editor1"></script>
+<script src="menu-experience.js?v=20261024-menu-editor1"></script>
+<script src="rescue-menu.js?v=20261024-menu-editor1"></script>
 <script>
 /* ---------- DATA (menu: Солнцекофе, Yandex Eda) ---------- */
 const CATEGORIES = [
@@ -739,6 +739,7 @@ function itemThumbHTML(item){
   if(item && item.photo){
     return `<img src="${item.photo}" alt="" style="width:100%;height:100%;object-fit:${item.category==='fitness'?'contain':'cover'};${item.category==='fitness'?'padding:8px;box-sizing:border-box;':''}border-radius:inherit;">`;
   }
+  if(item?.photo==='')return iconSVG(item.category);
   return (typeof menuPhotoHTML==='function'&&menuPhotoHTML(item))||iconSVG(item ? item.category : 'coffee');
 }
 // Resizes/compresses an uploaded image client-side to a small JPEG data URL —
@@ -917,7 +918,7 @@ let state = {
   adminAuthed:false, adminPinValue:'', adminPinError:'', adminOrders:[], adminStats:{count:0, revenue:0, tips:[], tipsTotal:0}, adminLoading:false,
   adminTab:'overview', adminStaffShop:1, adminStaff:[], adminStaffLoading:false, newStaffName:'',
   newStaffPassword:'', editingStaffId:null,
-  adminMenuLoading:false, newMenuName:'', newMenuCat:'coffee', newMenuPrice:'', newMenuIcon:'🍽️', adminStopCat:'coffee',
+  adminMenuLoading:false, newMenuName:'', newMenuCat:'coffee', newMenuPrice:'', newMenuIcon:'🍽️', adminStopCat:'all', adminMenuSearch:'', editItemCategory:'coffee', editItemWeight:'', editItemVolumes:{}, editItemSaving:false, editItemPhotoUploading:false,
   editingMenuItemId:null, editItemName:'', editItemIcon:'', editItemPrices:{}, editItemPhoto:null,
   newMenuPhoto:null, shopPhotos:{}, guestDisplayName:null,
   newPostDate:'', newPostText:'', newPostPhoto:'', postMsg:'', postMsgOk:false, postSaving:false, adminPosts:[], adminPostsLoading:false, adminPostsError:'',
@@ -1056,7 +1057,7 @@ function allItems(){
   return ITEMS.concat(EXTRA_ITEMS,typeof rescueMenuItems==='function'?rescueMenuItems():[]).map(i=>{
     const ov = MENU_OVERRIDES[i.id];
     if(!ov) return i;
-    return Object.assign({}, i, ov, { sizes: Object.assign({}, i.sizes, ov.sizes||{}) });
+    return Object.assign({}, i, ov, { sizes: ov.sizesMode==='replace' ? Object.assign({}, ov.sizes||{}) : Object.assign({}, i.sizes, ov.sizes||{}) });
   });
 }
 function itemById(id){ return allItems().find(i=>i.id===id); }
@@ -2047,21 +2048,25 @@ function renderAdminMenuTab(){
     </div>
 
     <div class="section">
-      <div class="section-label">Весь ассортимент — цены и наличие</div><label class="hint">Наличие для кофейни<select class="ops-select" data-action="menu-admin-stock-shop"><option value="0" ${!state.adminStockShop?'selected':''}>Обе точки</option>${SHOPS.map(x=>`<option value="${x.id}" ${state.adminStockShop===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
+      <div class="section-label">Всё меню — редактирование</div><label class="hint">Найти позицию<input class="text-input" data-action="admin-menu-search" placeholder="Название напитка или блюда" value="${esc(state.adminMenuSearch||'')}"></label><label class="hint">Наличие для кофейни<select class="ops-select" data-action="menu-admin-stock-shop"><option value="0" ${!state.adminStockShop?'selected':''}>Обе точки</option>${SHOPS.map(x=>`<option value="${x.id}" ${state.adminStockShop===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
       <div class="segmented" style="flex-wrap:wrap;">
+        <button class="seg ${state.adminStopCat==='all'?'active':''}" data-action="admin-set-stop-cat" data-cat="all">Все позиции</button>
         ${CATEGORIES.map(c=>`
           <div class="seg rippleable ${state.adminStopCat===c.id?'active':''}" data-action="admin-set-stop-cat" data-cat="${c.id}" style="flex:none;padding:8px 12px;">
             <div class="lb" style="font-size:12px;">${c.label}</div>
           </div>`).join('')}
       </div>
       <div style="margin-top:10px;">
-        ${allItems().filter(i=>i.category===state.adminStopCat).map(i=>{
+        ${allItems().filter(i=>i.category!=='rescue'&&(state.adminStopCat==='all'||i.category===state.adminStopCat||i.id===state.editingMenuItemId)&&(!state.adminMenuSearch||i.id===state.editingMenuItemId||i.name.toLocaleLowerCase('ru-RU').replace(/ё/g,'е').includes(state.adminMenuSearch.toLocaleLowerCase('ru-RU').replace(/ё/g,'е')))).map(i=>{
           const stopped=state.adminStockShop?itemStopped(i.id,state.adminStockShop):STOP_LIST.has(i.id);
           const priceLabel = Object.entries(i.sizes).map(([sz,p])=>`${sz.toUpperCase()} ${money(p)}`).join(' · ');
           if(state.editingMenuItemId === i.id){
             return `
-            <div class="order-card">
+            <div class="order-card" style="min-width:0;">
+              <fieldset style="border:0;padding:0;margin:0;min-width:0;" ${state.editItemSaving?'disabled':''}>
               <div class="field"><input class="text-input" type="text" placeholder="Название" value="${esc(state.editItemName)}" data-action="set-edit-item-name"></div>
+              <label class="hint">Категория<select class="text-input" data-action="set-edit-item-category">${CATEGORIES.map(c=>`<option value="${c.id}" ${state.editItemCategory===c.id?'selected':''}>${c.label}</option>`).join('')}</select></label>
+              <label class="hint">Вес порции, г (необязательно)<input class="text-input" type="number" min="1" data-action="set-edit-item-weight" value="${esc(String(state.editItemWeight||''))}"></label>
               <div class="field" style="margin-top:8px;"><input class="text-input" type="text" placeholder="Эмодзи" value="${esc(state.editItemIcon)}" data-action="set-edit-item-icon" style="width:76px;text-align:center;"></div>
               <div class="field" style="margin-top:8px;display:flex;align-items:center;gap:10px;">
                 ${state.editItemPhoto ? `<img src="${state.editItemPhoto}" style="width:44px;height:44px;border-radius:12px;object-fit:cover;flex:none;">` : ''}
@@ -2072,25 +2077,28 @@ function renderAdminMenuTab(){
                 ${state.editItemPhoto ? `<button class="iconbtn rippleable" data-action="clear-edit-item-photo" type="button">✕</button>` : ''}
               </div>
               <div class="field" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
-                ${Object.keys(i.sizes).map(sz=>`
+                ${Object.keys(state.editItemPrices).map(sz=>`
                   <div style="display:flex;align-items:center;gap:6px;">
                     <span style="font-size:12px;color:var(--ink-soft);">${sz.toUpperCase()}</span>
-                    <input class="text-input" type="number" inputmode="numeric" value="${esc(String(state.editItemPrices[sz] ?? i.sizes[sz]))}" data-action="set-edit-item-price" data-size="${sz}" style="width:90px;">
+                    <input class="text-input" type="number" min="1" step="0.01" aria-label="Цена ${sz.toUpperCase()}" inputmode="decimal" value="${esc(String(state.editItemPrices[sz] ?? ''))}" data-action="set-edit-item-price" data-size="${sz}" style="width:90px;">
+                    <input class="text-input" type="number" min="1" aria-label="Объём ${sz.toUpperCase()}, мл" placeholder="мл" value="${esc(String(state.editItemVolumes[sz]||''))}" data-action="set-edit-item-volume" data-size="${sz}" style="width:90px;">
+                    <button class="iconbtn" data-action="edit-item-remove-size" data-size="${sz}" aria-label="Убрать размер ${sz.toUpperCase()}" ${Object.keys(state.editItemPrices).length===1?'disabled':''}>×</button>
                   </div>`).join('')}
               </div>
+              <p class="hint">Цена в рублях; объём в мл можно оставить пустым.</p><div style="display:flex;gap:8px;">${['s','m','l'].filter(sz=>!(sz in state.editItemPrices)).map(sz=>`<button class="btn-ghost" data-action="edit-item-add-size" data-size="${sz}">+ Размер ${sz.toUpperCase()}</button>`).join('')}</div>
               <div style="display:flex;gap:8px;margin-top:10px;">
-                <button class="btn-ghost rippleable" data-action="admin-save-item-edit" data-id="${i.id}" style="flex:1;">Сохранить</button>
+                <button ${state.editItemPhotoUploading?'disabled':''} class="btn-ghost rippleable" data-action="admin-save-item-edit" data-id="${i.id}" style="flex:1;">${state.editItemSaving?'Сохраняем…':state.editItemPhotoUploading?'Загружаем фото…':'Сохранить'}</button>
                 <button class="btn-ghost rippleable" data-action="admin-cancel-item-edit" style="flex:1;">Отмена</button>
-              </div>
+              </div></fieldset>
             </div>`;
           }
           return `
-          <div class="order-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div class="order-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
             <div class="rippleable" data-action="admin-toggle-stop" data-id="${i.id}" style="flex:1;cursor:pointer;${stopped?'opacity:0.5;':''}">
               <div style="${stopped?'text-decoration:line-through;':''}">${i.icon} <b>${esc(i.name)}</b></div>
               <div class="order-meta">${priceLabel}</div>
             </div>
-            <button class="iconbtn rippleable" data-action="admin-edit-item" data-id="${i.id}" aria-label="Изменить ${esc(i.name)}">✎</button><button class="ops-cancel seasonal-toggle" data-action="menu-seasonal" data-id="${i.id}" aria-pressed="${!!i.seasonal}">${i.seasonal?'В сезонном':'В сезонное'}</button>
+            <button class="btn-ghost rippleable" style="width:auto;margin:0;padding:9px 12px;" data-action="admin-edit-item" data-id="${i.id}" aria-label="Изменить ${esc(i.name)}">✎ Изменить</button><button class="ops-cancel seasonal-toggle" data-action="menu-seasonal" data-id="${i.id}" aria-pressed="${!!i.seasonal}">${i.seasonal?'В сезонном':'В сезонное'}</button>
             <div class="switch ${!stopped?'on':''} rippleable" data-action="admin-toggle-stop" data-id="${i.id}"></div>
           </div>`;
         }).join('') || `<p class="empty-note">В этой категории пока нет позиций.</p>`}
@@ -3156,17 +3164,20 @@ document.addEventListener('click', (e)=>{
   else if(action==='admin-toggle-stop'){ toggleStopItem(el.dataset.id); }
   else if(action==='admin-edit-item'){
     const i = itemById(el.dataset.id);
-    if(i){
+    if(i&&state.adminAuthed&&!state.editItemSaving&&!state.editItemPhotoUploading){
+      state.editItemCategory=i.category;state.editItemWeight=i.weightGrams||'';state.editItemVolumes={...(i.sizeVolumes||{})};
       state.editingMenuItemId = i.id;
       state.editItemName = i.name;
       state.editItemIcon = i.icon;
       state.editItemPrices = Object.assign({}, i.sizes);
-      state.editItemPhoto = i.photo || null;
+      state.editItemPhoto = i.photo ?? null;
       render();
     }
   }
-  else if(action==='admin-cancel-item-edit'){ state.editingMenuItemId=null; render(); }
-  else if(action==='clear-edit-item-photo'){ state.editItemPhoto=null; render(); }
+  else if(action==='admin-cancel-item-edit'){ if(!state.editItemSaving&&!state.editItemPhotoUploading){state.editingMenuItemId=null; render();} }
+  else if(action==='edit-item-add-size'){ if(!state.editItemSaving){state.editItemPrices[el.dataset.size]='';render();} }
+  else if(action==='edit-item-remove-size'){ if(!state.editItemSaving&&Object.keys(state.editItemPrices).length>1){delete state.editItemPrices[el.dataset.size];delete state.editItemVolumes[el.dataset.size];render();} }
+  else if(action==='clear-edit-item-photo'){ state.editItemPhoto=''; render(); }
   else if(action==='admin-save-item-edit'){ saveMenuItemEdit(el.dataset.id); }
   else if(action==='order-accept'){ acceptOrder(el.dataset.id); }
   else if(action==='order-done'){ markOrderDone(el.dataset.id); }
@@ -3184,9 +3195,10 @@ document.addEventListener('change', (e)=>{
       state.newMenuPhoto = dataUrl; render();
     }).catch(()=>showToast('Не удалось загрузить фото.'));
   } else if(action==='set-edit-item-photo'){
-    readFileAsCompressedDataURL(file, 480, 0.72).then(dataUrl=>{
-      state.editItemPhoto = dataUrl; render();
-    }).catch(()=>showToast('Не удалось загрузить фото.'));
+    const editingId=state.editingMenuItemId;state.editItemPhotoUploading=true;render();
+    readFileAsCompressedDataURL(file, 640, 0.8).then(dataUrl=>{
+      if(state.editingMenuItemId===editingId)state.editItemPhoto = dataUrl;
+    }).catch(()=>showToast('Не удалось загрузить фото.')).finally(()=>{state.editItemPhotoUploading=false;render();});
   } else if(action==='set-shop-photo'){
     uploadShopPhoto(el.dataset.shop, file);
   } else if(action==='set-op-photo'){
@@ -3228,6 +3240,10 @@ document.addEventListener('input', (e)=>{
   else if(action==='set-new-menu-cat'){ state.newMenuCat = el.value; }
   else if(action==='set-new-menu-price'){ state.newMenuPrice = el.value; }
   else if(action==='set-new-menu-icon'){ state.newMenuIcon = el.value; }
+  else if(action==='admin-menu-search'){state.adminMenuSearch=el.value;render();}
+  else if(action==='set-edit-item-category'){state.editItemCategory=el.value;}
+  else if(action==='set-edit-item-weight'){state.editItemWeight=el.value;}
+  else if(action==='set-edit-item-volume'){state.editItemVolumes[el.dataset.size]=el.value;}
   else if(action==='set-edit-item-name'){ state.editItemName = el.value; }
   else if(action==='set-edit-item-icon'){ state.editItemIcon = el.value; }
   else if(action==='set-edit-item-price'){ state.editItemPrices[el.dataset.size] = el.value; }
@@ -3299,23 +3315,36 @@ async function uploadShopPhoto(shopId, file){
 }
 
 async function saveMenuItemEdit(id){
-  const name = state.editItemName.trim();
-  const icon = state.editItemIcon.trim() || '🍽️';
-  const sizes = {};
-  Object.keys(state.editItemPrices).forEach(sz=>{
-    const p = parseInt(state.editItemPrices[sz], 10);
-    if(!isNaN(p) && p>0) sizes[sz] = p;
-  });
-  if(!name || !Object.keys(sizes).length) return;
+  if(!state.adminAuthed||state.editItemSaving||state.editItemPhotoUploading||state.editingMenuItemId!==id)return;
+  const item=itemById(id);if(!item||item.category==='rescue')return;
+  const name=state.editItemName.trim(),category=state.editItemCategory,sizes={},sizeVolumes={};
+  if(!name||!CATEGORIES.some(c=>c.id===category)){showToast('Укажите название и категорию.');return;}
+  for(const [sz,value] of Object.entries(state.editItemPrices)){
+    const price=Number(String(value).replace(',','.'));
+    if(!String(value).trim()||!Number.isFinite(price)||price<=0){showToast('Укажите положительную цену для каждого размера.');return;}
+    sizes[sz]=Math.round(price*100)/100;
+    const v=String(state.editItemVolumes[sz]||'').trim();
+    if(v){if(!Number.isFinite(Number(v))||Number(v)<=0){showToast('Объём должен быть больше нуля.');return;}sizeVolumes[sz]=Number(v);}
+  }
+  if(!Object.keys(sizes).length){showToast('Добавьте хотя бы один размер и цену.');return;}
+  const weight=String(state.editItemWeight||'').trim();
+  if(weight&&(!Number.isFinite(Number(weight))||Number(weight)<=0)){showToast('Вес должен быть больше нуля.');return;}
+  const patch={name,category,icon:state.editItemIcon.trim()||'🍽️',sizes,sizesMode:'replace',sizeVolumes,weightGrams:weight?Number(weight):null,photo:state.editItemPhoto??''};
+  state.editItemSaving=true;render();
   try{
-    await fetch(DB_URL + '/menu_overrides/' + id + '.json', {
-      method:'PATCH', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name, icon, sizes, photo: state.editItemPhoto || null })
-    });
-  }catch(e){}
-  state.editingMenuItemId = null;
-  state.editItemPhoto = null;
-  await loadExtraMenu();
+    const url=DB_URL+'/menu_overrides/'+encodeURIComponent(id)+'.json';
+    const current=await fetch(url,{headers:{'X-Firebase-ETag':'true'},cache:'no-store'});
+    if(!current.ok)throw Error('Не удалось загрузить позицию перед сохранением.');
+    const existing=await current.json(),etag=current.headers.get('ETag');
+    if(!etag)throw Error('Сервер не подтвердил версию позиции. Попробуйте ещё раз.');
+    const response=await fetch(url,{method:'PUT',headers:{'Content-Type':'application/json','If-Match':etag},body:JSON.stringify({...existing,...patch})});
+    if(response.status===412)throw Error('Позицию уже изменили. Обновите меню и повторите правки.');
+    if(!response.ok)throw Error('Изменения не сохранены. Проверьте соединение и повторите.');
+    const saved=await response.json();
+    if(!saved||saved.name!==name||saved.category!==category||saved.sizesMode!=='replace'||Object.keys(sizes).some(sz=>saved.sizes?.[sz]!==sizes[sz]))throw Error('Сервер не подтвердил сохранение.');
+    MENU_OVERRIDES[id]=saved;state.adminStopCat='all';state.adminMenuSearch='';state.editingMenuItemId=null;state.editItemPhoto=null;showToast('Позиция сохранена. Изменения уже в меню.');
+  }catch(e){showToast(e.message||'Не удалось сохранить. Ваши правки остались в форме.');}
+  finally{state.editItemSaving=false;render();}
 }
 
 async function toggleStopItem(itemId){return setMenuAvailability(itemId);}
