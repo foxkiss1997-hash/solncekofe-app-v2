@@ -420,3 +420,7 @@ test('payroll report writes human-readable payout history and weekly remaining b
  vm.runInContext("teamPayrollReport_(reportStore,reportProps,'/ops_v3')",x.ctx);assert.equal(tabs['Выплаты'].cells.length,2);
  x.ctx.DriveApp.getFileById=()=>({getSharingAccess:()=> 'public'});assert.throws(()=>vm.runInContext("teamPayrollReport_(reportStore,reportProps,'/ops_v3')",x.ctx),/закрыт/);
 });
+test('completed camera opening and retries refresh Google projections immediately, while begin never accrues',()=>{
+ const x=attendanceSetup();let syncs=0;x.ctx.syncProjection=()=>{syncs++;return {reportSynced:true};};vm.runInContext('teamPayrollSyncSafe_=syncProjection;',x.ctx);
+ x.begin();assert.equal(syncs,0);const result=x.finish();assert.equal(result.reportSynced,true);assert.equal(syncs,1);x.finish();assert.equal(syncs,2);assert.equal(schedule(x,{...x.staff,action:'listPayroll',date:'2026-10-19'}).gross,4200);
+});
