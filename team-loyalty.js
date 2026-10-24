@@ -303,6 +303,30 @@ async function placePickupOrder(){
  }catch(e){state.checkoutError=e.message+' Заказ не подтверждён на этом экране. Повторная отправка использует тот же номер.';}
  finally{state.payingNow=false;render();}
 }
+function ownerPayrollView(source){
+ if(!source||!teamIsAdmin())return source;
+ const name=teamUI.payrollPerson||'',shop=Number(teamUI.payrollShop||0),matches=x=>(!name||x.name===name)&&(!shop||x.shopId===shop);
+ const rows=(source.rows||[]).filter(matches),awaiting=(source.awaiting||[]).filter(matches),openings=(source.openings||[]).filter(matches),penalties=(source.penalties||[]).filter(matches),totals={};
+ for(const row of rows){const t=totals[row.name]??={name:row.name,count:0,gross:0,penalties:0,amount:0};if(row.status==='worked'){t.count++;t.gross+=Number(row.amount)||0;}}
+ for(const fine of penalties){const t=totals[fine.name]??={name:fine.name,count:0,gross:0,penalties:0,amount:0};if(!fine.reversed)t.penalties+=Number(fine.amount)||0;}
+ for(const t of Object.values(totals))t.amount=t.gross-t.penalties;
+ const gross=rows.filter(x=>x.status==='worked').reduce((n,x)=>n+(Number(x.amount)||0),0),penaltyTotal=penalties.filter(x=>!x.reversed).reduce((n,x)=>n+(Number(x.amount)||0),0);
+ return {...source,rows,awaiting,openings,penalties,penaltyShifts:(source.penaltyShifts||[...(source.awaiting||[]),...(source.rows||[])]).filter(matches),totals:Object.values(totals).sort((a,b)=>a.name.localeCompare(b.name,'ru')),gross:(!name&&!shop)?source.gross??gross:gross,penaltyTotal:(!name&&!shop)?source.penaltyTotal??penaltyTotal:penaltyTotal,amount:(!name&&!shop)?source.amount:gross-penaltyTotal,count:(!name&&!shop)?source.count:rows.filter(x=>x.status==='worked').length};
+}
+function renderOwnerPayrollFilters(source,disabled){
+ if(!teamIsAdmin())return '';
+ const names=[...new Set([...(source?.rows||[]),...(source?.awaiting||[]),...(source?.penalties||[]),...(teamUI.payrollPerson?[{name:teamUI.payrollPerson}]:[])].map(x=>x.name))].sort((a,b)=>a.localeCompare(b,'ru'));
+ return `<section class="owner-history-filters" aria-label="Фильтры истории работы"><label>Неделя, в которую входит дата<input type="date" class="text-input" data-action="owner-payroll-date" value="${esc(teamUI.payrollDate||todayKey())}" ${disabled}></label><label>Сотрудник<select class="ops-select" data-action="owner-payroll-person" ${disabled}><option value="">Все сотрудники</option>${names.map(name=>`<option value="${esc(name)}" ${teamUI.payrollPerson===name?'selected':''}>${esc(name)}</option>`).join('')}</select></label><label>Кофейня<select class="ops-select" data-action="owner-payroll-shop" ${disabled}><option value="0">Обе кофейни</option>${SHOPS.map(shop=>`<option value="${shop.id}" ${Number(teamUI.payrollShop)===shop.id?'selected':''}>${esc(shop.name.replace('Солнцекофе — ',''))}</option>`).join('')}</select></label></section>`;
+}
+function renderOwnerPayrollPeople(data){
+ return `<section class="owner-earnings" aria-label="Заработок по сотрудникам">${(data.totals||[]).map(person=>`<article class="owner-earnings-card"><h4>${esc(person.name)}</h4><span class="owner-shift-count">${person.count} смен</span><dl class="owner-key-values"><div><dt>Заработано</dt><dd>${money(person.gross)}</dd></div><div><dt>Штрафы</dt><dd>${money(person.penalties)}</dd></div><div class="owner-net"><dt>К выплате</dt><dd>${money(person.amount)}</dd></div></dl><button class="owner-text-button" data-action="owner-payroll-details" data-name="${esc(person.name)}">Показать смены →</button></article>`).join('')||'<p class="hint">В выбранном периоде начислений нет.</p>'}</section>`;
+}
+function renderOwnerWorkHistory(data){
+ return `<section class="owner-work-history" aria-label="История работы"><h4>История по дням</h4>${(data.rows||[]).map(row=>{
+  const fines=(data.penalties||[]).filter(x=>x.shopId===row.shopId&&x.shiftId===row.id&&!x.reversed),penalty=fines.reduce((n,x)=>n+(Number(x.amount)||0),0),opening=(data.openings||[]).find(x=>x.shopId===row.shopId&&x.id===row.id);
+  return `<article class="owner-work-day"><div class="owner-work-date"><b>${payrollShortDate(row.date)}</b><span>${esc(row.name)}</span></div><p class="hint">${esc(SHOPS.find(s=>s.id===row.shopId)?.name||'Кофейня')} · ${esc(row.start)}–${esc(row.end)}</p><span class="owner-status">${row.status==='worked'?'Отработана · подтверждено':'Начисление отменено'}</span>${opening?`<p class="hint">Открыта в ${new Date(opening.openedAt).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'})} · опоздание ${Number(opening.lateMinutes)||0} мин.</p>`:''}<dl class="owner-key-values"><div><dt>Начислено</dt><dd>${money(row.status==='worked'?Number(row.amount)||0:0)}</dd></div><div><dt>Штрафы за эту смену</dt><dd>${money(penalty)}</dd></div><div class="owner-net"><dt>Итог смены</dt><dd>${money((row.status==='worked'?Number(row.amount)||0:0)-penalty)}</dd></div></dl>${fines.map(x=>`<p class="hint">${esc(x.reason)}</p>`).join('')}</article>`;
+ }).join('')||'<p class="hint">Подтверждённых отработанных смен в этом периоде нет. Неподтверждённые дни не считаются заработком.</p>'}</section>`;
+}
 function payrollKey(){return teamIdentity()+':'+(teamUI.payrollDate||todayKey());}
 async function loadTeamPayroll(){
  if(teamUI.busy)return;const key=payrollKey();teamUI.busy=true;teamUI.message='';teamUI.payrollReview=null;render();
@@ -331,10 +355,10 @@ async function submitPayrollReview(){
  finally{teamUI.busy=false;render();}
 }
 function renderTeamPayroll(){
- const admin=teamIsAdmin(),data=teamUI.payrollKey===payrollKey()?teamUI.payroll:null,disabled=teamUI.busy?'disabled':'',review=teamUI.payrollReview?.identity===teamIdentity()?teamUI.payrollReview:null;
+ const admin=teamIsAdmin(),source=teamUI.payrollKey===payrollKey()?teamUI.payroll:null,data=ownerPayrollView(source),disabled=teamUI.busy?'disabled':'',review=teamUI.payrollReview?.identity===teamIdentity()?teamUI.payrollReview:null;
  const point=row=>esc(SHOPS.find(x=>x.id===row.shopId)?.name||'Кофейня');
- return `<div class="ops-form payroll-form" id="ops-active-form"><h3>${admin?'Зарплата команды':'Моя зарплата'}</h3><p class="hint">${admin?'Обе кофейни':esc(state.staffName)+' · обе кофейни'} · 4 200 ₽ за отработанную смену.</p><div class="payroll-period"><button class="ops-cancel" data-action="team-payroll-prev" aria-label="Предыдущая неделя" ${disabled}>‹</button><b>${data?`${payrollShortDate(data.week.start)} — ${payrollShortDate(data.week.end)}`:'Расчёт за неделю'}</b><button class="ops-cancel" data-action="team-payroll-next" aria-label="Следующая неделя" ${disabled}>›</button></div><button class="ops-cancel" data-action="team-payroll-load" ${disabled}>${teamUI.busy?'Обновляем…':'Обновить расчёт'}</button>
- ${data?`<section class="payroll-total" aria-label="Начислено за неделю"><span>Начислено за неделю</span><strong>${money(data.amount)}</strong><span>Смены: ${money(data.gross??data.amount)} · штрафы: ${money(data.penaltyTotal||0)}</span><span>Отработано смен: ${data.count}</span><b>День выплаты — воскресенье, ${payrollShortDate(data.week.payDate)}</b></section><p class="hint">Период: понедельник — воскресенье. В расчёте только смены, отмеченные администратором как отработанные. Сумма показывает начисления; выплату проводит администратор.</p>${admin?`<h4>По сотрудникам</h4>${data.totals.map(x=>`<div class="payroll-person"><b>${esc(x.name)}</b><span>${x.count} смен · ${money(x.amount)}</span></div>`).join('')||'<p class="hint">Подтверждённых начислений за эту неделю пока нет.</p>'}<h4>Подтвердить отработанные смены</h4>${data.awaiting.map(row=>`<div class="payroll-row"><b>${esc(row.name)} · ${payrollShortDate(row.date)}</b><span>${esc(row.start)}–${esc(row.end)} · ${point(row)}</span>${row.replacementPending?'<p class="hint">Сначала обработайте заявку на замену в графике.</p>':`<button class="ops-submit" data-action="team-payroll-worked" data-id="${row.id}" data-shop="${row.shopId}" ${disabled}>Смена отработана · +4 200 ₽</button>`}</div>`).join('')||'<p class="hint">Закончившихся смен без подтверждения за эту неделю нет.</p>'}`:''}${renderPayrollAttendance(data,admin,disabled)}<h4>Начисления по сменам</h4>${data.rows.map(row=>`<div class="payroll-row"><b>${admin?esc(row.name)+' · ':''}${payrollShortDate(row.date)} · ${money(row.amount)}</b><span>${esc(row.start)}–${esc(row.end)} · ${point(row)}</span><small>${row.status==='worked'?'Отработана · '+money(row.rate)+' за смену':'Начисление отменено: '+esc(row.reason||'исправление')}</small>${admin&&row.status==='worked'?`<button class="ops-cancel" data-action="team-payroll-reverse" data-id="${row.id}" data-shop="${row.shopId}" ${disabled}>Отменить начисление с причиной</button>`:''}</div>`).join('')||'<p class="hint">Начислений за эту неделю пока нет.</p>'}`:'<p class="hint">Нажмите «Обновить расчёт», чтобы загрузить начисления.</p>'}
+ return `<div class="ops-form payroll-form" id="ops-active-form"><h3>${admin?'Работа и заработок':'Моя зарплата'}</h3>${renderOwnerPayrollFilters(source,disabled)}<p class="hint">${admin?'Обе кофейни':esc(state.staffName)+' · обе кофейни'} · 4 200 ₽ за отработанную смену.</p><div class="payroll-period"><button class="ops-cancel" data-action="team-payroll-prev" aria-label="Предыдущая неделя" ${disabled}>‹</button><b>${data?`${payrollShortDate(data.week.start)} — ${payrollShortDate(data.week.end)}`:'Расчёт за неделю'}</b><button class="ops-cancel" data-action="team-payroll-next" aria-label="Следующая неделя" ${disabled}>›</button></div><button class="ops-cancel" data-action="team-payroll-load" ${disabled}>${teamUI.busy?'Обновляем…':'Обновить расчёт'}</button>
+ ${data?`<section class="payroll-total" aria-label="Начислено за неделю"><span>${admin?'К выплате за неделю':'Начислено за неделю'}</span><strong>${money(data.amount)}</strong><span>Смены: ${money(data.gross??data.amount)} · штрафы: ${money(data.penaltyTotal||0)}</span><span>Отработано смен: ${data.count}</span><b>День выплаты — воскресенье, ${payrollShortDate(data.week.payDate)}</b></section><p class="hint">Период: понедельник — воскресенье. В расчёте только подтверждённые рабочие смены. Итог — заработок за вычетом действующих штрафов, а не отметка о проведённой выплате.</p>${admin?`<h4>По сотрудникам</h4>${renderOwnerPayrollPeople(data)}${renderOwnerWorkHistory(data)}<h4>Подтвердить отработанные смены</h4>${data.awaiting.map(row=>`<div class="payroll-row"><b>${esc(row.name)} · ${payrollShortDate(row.date)}</b><span>${esc(row.start)}–${esc(row.end)} · ${point(row)}</span>${row.replacementPending?'<p class="hint">Сначала обработайте заявку на замену в графике.</p>':`<button class="ops-submit" data-action="team-payroll-worked" data-id="${row.id}" data-shop="${row.shopId}" ${disabled}>Смена отработана · +4 200 ₽</button>`}</div>`).join('')||'<p class="hint">Закончившихся смен без подтверждения за эту неделю нет.</p>'}`:''}${renderPayrollAttendance(data,admin,disabled)}<h4>Начисления по сменам</h4>${data.rows.map(row=>`<div class="payroll-row"><b>${admin?esc(row.name)+' · ':''}${payrollShortDate(row.date)} · ${money(row.amount)}</b><span>${esc(row.start)}–${esc(row.end)} · ${point(row)}</span><small>${row.status==='worked'?'Отработана · '+money(row.rate)+' за смену':'Начисление отменено: '+esc(row.reason||'исправление')}</small>${admin&&row.status==='worked'?`<button class="ops-cancel" data-action="team-payroll-reverse" data-id="${row.id}" data-shop="${row.shopId}" ${disabled}>Отменить начисление с причиной</button>`:''}</div>`).join('')||'<p class="hint">Начислений за эту неделю пока нет.</p>'}`:'<p class="hint">Нажмите «Обновить расчёт», чтобы загрузить начисления.</p>'}
  ${review?`<section class="ops-message payroll-confirm" aria-label="Подтверждение учёта смены"><b>${review.action==='confirmWorkedShift'?'Подтвердить отработанную смену и начислить 4 200 ₽?':'Отменить начисление за смену?'}</b><p>${esc(review.row.name)} · ${payrollShortDate(review.row.date)} · ${point(review.row)}</p>${review.action==='reverseWorkedShift'?`<label class="hint">Причина отмены<input class="text-input" data-action="team-payroll-reason" maxlength="240" value="${esc(teamUI.payrollReason||'')}" ${disabled}></label>`:''}<button class="ops-submit" data-action="team-payroll-confirm" ${disabled}>${review.action==='confirmWorkedShift'?'Да, смена отработана':'Подтвердить отмену начисления'}</button><button class="ops-cancel" data-action="team-payroll-cancel" ${disabled}>Назад</button></section>`:''}${teamUI.message?`<p class="ops-message" role="status">${esc(teamUI.message)}</p>`:''}${!admin?'<button class="ops-cancel" data-action="close-op">Закрыть</button>':''}</div>`;
 }
 document.addEventListener('input',e=>{if(e.target.dataset.action==='team-payroll-reason')teamUI.payrollReason=e.target.value;});
@@ -350,13 +374,41 @@ document.addEventListener('click',e=>{
  else if(action==='team-payroll-cancel'){teamUI.payrollReview=null;render();}
 });
 async function loadTeamOverview(){
- if(teamUI.busy)return;teamUI.busy=true;teamUI.message='';render();
- try{const result=await teamRequest({action:'teamOverview'});if(teamIsAdmin())teamUI.overview=result;}
- catch(e){teamUI.message=e.message;}finally{teamUI.busy=false;render();}
+ if(!teamIsAdmin()||teamUI.busy)return;
+ const identity=teamIdentity(),date=todayKey();teamUI.busy=true;teamUI.message='';teamUI.overviewAttendance=null;render();
+ const results=await Promise.allSettled([teamRequest({action:'teamOverview'}),teamRequest({action:'listPayroll',date})]);
+ if(teamIsAdmin()&&identity===teamIdentity()){
+  if(results[0].status==='fulfilled')teamUI.overview=results[0].value;else teamUI.message='Не удалось обновить обзор: '+results[0].reason.message;
+  if(results[1].status==='fulfilled'){teamUI.overviewAttendance=results[1].value;teamUI.overviewAttendanceKey=identity;}
+  else teamUI.message+=(teamUI.message?' ':'')+'Отметки открытия смен не загрузились. Нажмите «Обновить».';
+ }
+ teamUI.busy=false;render();
+}
+function ownerAttendanceCards(now=Date.now()){
+ if(!teamIsAdmin())return '';
+ const data=teamUI.overview,date=todayKey(),attendance=teamUI.overviewAttendanceKey===teamIdentity()?teamUI.overviewAttendance:null;
+ const verified=!!attendance&&attendance.week?.start<=date&&attendance.week?.end>=date;
+ const clock=value=>new Date(value).toLocaleTimeString('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'});
+ return `<section class="owner-shifts" aria-label="Кто на смене"><div class="owner-section-heading"><div><span class="owner-eyebrow">Команда сегодня</span><h3>Кто на смене</h3></div><span class="owner-date">${payrollShortDate(date)}</span></div><p class="hint">График и фактическое открытие показаны отдельно.</p><div class="owner-shop-grid">${SHOPS.map(shop=>{
+  const point=data?.date===date?data.rows.find(x=>x.shopId===shop.id):null;
+  const people=point?.staff||[];
+  return `<article class="owner-shift-card"><span class="owner-shop-name">${esc(shop.name.replace('Солнцекофе — ',''))}</span>${!point?'<p class="hint">Данные на сегодня ещё не загружены.</p>':!people.length?'<h4>Смена не назначена</h4><p class="hint">Добавьте сотрудника в графике.</p>':people.map(person=>{
+   const opening=verified?(attendance.openings||[]).find(x=>x.shopId===shop.id&&x.name===person.name&&x.date===date):null;
+   const work=verified?(attendance.rows||[]).find(x=>x.shopId===shop.id&&x.name===person.name&&x.date===date&&x.status==='worked'):null;
+   const ended=now>=Date.parse(date+'T'+person.end+':00+03:00'),started=now>=Date.parse(date+'T'+person.start+':00+03:00');
+   const label=work?'Отработана · подтверждено':opening?(ended?'Время смены закончилось':'Смена открыта'):!started?'По графику · позже':verified?'Открытие не отмечено':'Открытие не подтверждено';
+   return `<div class="owner-person-shift"><h4>${esc(person.name)}</h4><p class="owner-shift-hours">${esc(person.start)} — ${esc(person.end)}</p><span class="owner-status ${opening&&!ended&&!work?'is-open':''}">${label}</span>${opening?`<p class="hint">Открыта в ${clock(opening.openedAt)} · опоздание ${Number(opening.lateMinutes)||0} мин.</p>`:''}</div>`;
+  }).join('')}${people.length>1?'<p class="owner-warning">На этот день назначено несколько сотрудников. Проверьте график.</p>':''}<button class="owner-text-button" data-action="owner-open-schedule" data-shop="${shop.id}">Открыть график →</button></article>`;
+ }).join('')}</div></section>`;
+}
+function renderOwnerAttendance(){
+ if(!teamIsAdmin())return '';
+ return `<div class="ops-form owner-overview"><div class="owner-section-heading"><h3>Смены сегодня</h3><button class="owner-text-button" data-action="team-overview-refresh" ${teamUI.busy?'disabled':''}>${teamUI.busy?'Обновляем…':'Обновить'}</button></div>${ownerAttendanceCards()}${teamUI.message?`<p class="ops-message" role="status">${esc(teamUI.message)}</p>`:''}</div>`;
 }
 function renderTeamOverview(){
+ if(!teamIsAdmin())return '';
  const data=teamUI.overview;
- return `<div class="ops-form"><h3>Обзор дня</h3><p class="hint">${data?esc(data.date):'Данные ещё не загружены'}</p><button class="ops-cancel" data-action="team-overview-refresh" ${teamUI.busy?'disabled':''}>Обновить показатели</button>${data?data.rows.map(x=>`<div class="schedule-row"><h3>${esc(SHOPS.find(s=>s.id===x.shopId)?.name)}</h3><div>Выручка: <b>${x.revenue===null?'Отчёт не сдан':money(x.revenue)}</b></div><div>Внесённые расходы: ${money(x.expense)}</div><div>Неоплаченных поставок: ${x.unpaidDeliveries||0}</div><div>Фотоотчётов: ${x.photoReports} · Проблем: ${x.issues}</div>${x.cashDifference!==null?`<div>Расхождение кассы: ${money(x.cashDifference)}</div>`:''}<div class="hint">${x.staff.length?x.staff.map(s=>esc(s.name)+' '+esc(s.start)+'–'+esc(s.end)).join('<br>'):'На сегодня нет утверждённых смен'}</div></div>`).join(''):''}<p class="hint">Выручка появляется после отчёта сотрудника. Расходы показаны по внесённым операциям; это не расчёт чистой прибыли.</p>${teamUI.message?`<p role="status">${esc(teamUI.message)}</p>`:''}<a class="ops-cancel" href="${OPS_SPREADSHEET_URL}" target="_blank" rel="noopener">Открыть Google Таблицу</a></div>`;
+ return `<div class="ops-form owner-overview"><header class="owner-section-heading"><div><span class="owner-eyebrow">Солнцекофе · две кофейни</span><h3>Сегодня под контролем</h3><p class="hint">${data?payrollShortDate(data.date):'Загрузите данные дня'}</p></div><button class="owner-text-button" data-action="team-overview-refresh" ${teamUI.busy?'disabled':''}>${teamUI.busy?'Обновляем…':'Обновить'}</button></header>${ownerAttendanceCards()}<div class="owner-section-heading"><h3>Показатели кофеен</h3></div><div class="owner-shop-grid">${data?data.rows.map(x=>`<article class="owner-location-card"><span class="owner-shop-name">${esc(SHOPS.find(s=>s.id===x.shopId)?.name.replace('Солнцекофе — ','')||'Кофейня')}</span><span class="owner-metric-label">Выручка по отчёту</span><strong class="owner-revenue">${x.revenue===null?'Отчёт не сдан':money(x.revenue)}</strong><dl class="owner-key-values"><div><dt>Расходы</dt><dd>${money(x.expense)}</dd></div><div><dt>Фотоотчёты</dt><dd>${x.photoReports}</dd></div><div><dt>Проблемы</dt><dd>${x.issues}</dd></div><div><dt>Поставки без оплаты</dt><dd>${x.unpaidDeliveries||0}</dd></div>${x.cashDifference!==null?`<div><dt>Разница в кассе</dt><dd>${money(x.cashDifference)}</dd></div>`:''}</dl></article>`).join(''):'<p class="hint">Нажмите «Обновить», чтобы загрузить данные.</p>'}</div><button class="ops-submit" data-action="owner-open-payroll">История работы и заработок →</button><p class="hint">Выручка появляется после отчёта сотрудника. Расходы не являются расчётом чистой прибыли.</p>${teamUI.message?`<p role="status">${esc(teamUI.message)}</p>`:''}<a class="owner-text-button" href="${OPS_SPREADSHEET_URL}" target="_blank" rel="noopener">Открыть Google Таблицу</a></div>`;
 }
 document.addEventListener('click',e=>{if(e.target.closest('[data-action="team-overview-refresh"]'))loadTeamOverview();});
 async function teamAwardStamp(){
@@ -628,3 +680,17 @@ document.addEventListener('click',e=>{
 });
 window.addEventListener('focus',()=>{if(state.screen==='staff'&&state.staffName)refreshStaffShiftStatus();});
 function startStaffSessionUpdates(){setInterval(()=>{if(state.screen==='staff'&&state.staffName&&!document.hidden&&state.shiftStatusDate!==todayKey())refreshStaffShiftStatus();},60000);}
+
+/* Owner navigation and read-only history filters. */
+document.addEventListener('change',e=>{
+ if(!teamIsAdmin()||teamUI.busy)return;const a=e.target.dataset.action;
+ if(a==='owner-payroll-date'&&/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)){teamUI.payrollDate=e.target.value;teamUI.payrollPerson='';teamUI.payrollReview=null;loadTeamPayroll();}
+ else if(a==='owner-payroll-person'){teamUI.payrollPerson=e.target.value;teamUI.payrollReview=null;render();}
+ else if(a==='owner-payroll-shop'){teamUI.payrollShop=Number(e.target.value);teamUI.payrollReview=null;render();}
+});
+document.addEventListener('click',e=>{
+ if(!teamIsAdmin()||teamUI.busy)return;const el=e.target.closest('[data-action]');if(!el)return;
+ if(el.dataset.action==='owner-open-schedule'){state.teamShop=Number(el.dataset.shop);state.adminTab='schedule';teamLoadSchedule();}
+ else if(el.dataset.action==='owner-open-payroll'){state.adminTab='payroll';loadTeamPayroll();}
+ else if(el.dataset.action==='owner-payroll-details'){teamUI.payrollPerson=el.dataset.name;teamUI.payrollReview=null;render();}
+});
