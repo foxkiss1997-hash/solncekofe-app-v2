@@ -62,6 +62,13 @@ window.previewRequest=async function(body){
  if(body.action==='listSchedule')return window.previewSchedule;
  if(body.action==='assignShifts')throw Error('Демонстрация: рабочие смены не назначаются.');
  if(body.action==='listPayroll')return window.previewPayroll;
+ if(body.action==='recordPayrollPayment'){
+  const p=window.previewPayroll;const previous=p.payments.find(x=>x.id===body.operationId);if(previous)return {payment:previous,reportSynced:true};
+  if(body.expectedDue!==p.due)throw Error('Остаток изменился. Обновите расчёт.');
+  const amount=body.paymentMode==='full'?p.due:body.amount;if(amount<=0||amount>p.due)throw Error('Проверьте сумму.');
+  const payment={id:body.operationId,name:body.name,amount,at:Date.now(),dueBefore:p.due,dueAfter:p.due-amount,status:amount===p.due?'paid':'partial',note:body.note};p.payments.push(payment);p.paid+=amount;p.due-=amount;p.balances[0].due=p.due;return {payment,reportSynced:true};
+ }
+
  if(body.action==='listShiftOpening'&&new URLSearchParams(location.search).get('view')==='staff-session'){const at=Date.parse(previewToday+'T08:00:00+03:00');return {rows:[{id:'a'.repeat(32),date:previewToday,start:'08:00',end:'21:00',name:'Анна',opened:{openedAt:at,lateMinutes:0}}],serverAt:Date.now()};}
  if(body.action==='listShiftOpening')return {rows:[{id:'a'.repeat(32),date:previewToday,start:'08:00',end:'21:00',name:'Анна',opened:null}]};
  if(body.action==='authorizeAdmin')return {authorized:true};
@@ -80,6 +87,8 @@ window.previewSchedule.myRows=[{id:'a'.repeat(32),shopId:2,name:'Анна',date:
 window.previewSchedule.teamRows=[...window.previewSchedule.myRows.filter(x=>x.status==='approved'),{id:'demo-ivan',shopId:2,name:'Иван',date:previewToday.slice(0,8)+'20',start:'16:00',end:'21:00',status:'approved'},{id:'demo-other',shopId:1,name:'Борис',date:previewToday.slice(0,8)+'20',start:'08:00',end:'20:00',status:'approved'}];
 window.previewSchedule.rows.push(...[{id:'e'.repeat(32),revision:'f'.repeat(32),date:previewToday.slice(0,8)+'21',start:'08:00',end:'21:00',name:'Иван',status:'approved'},{id:'1'.repeat(32),revision:'2'.repeat(32),date:previewToday.slice(0,8)+'23',start:'08:00',end:'21:00',name:'',status:'open'}]);
 window.previewPayroll={week:{start:'2026-10-12',end:'2026-10-18',payDate:'2026-10-18'},rate:4200,count:5,amount:21000,totals:[{name:'Анна',count:5,amount:21000}],awaiting:[{id:'e'.repeat(32),shopId:2,date:'2026-10-18',start:'08:00',end:'21:00',name:'Иван',revision:'f'.repeat(32)}],rows:[12,13,14,16,17].map((day,i)=>({id:String(i+1).repeat(32),shopId:i===3?1:2,date:'2026-10-'+day,start:'08:00',end:'21:00',name:'Анна',status:'worked',rate:4200,amount:4200,revision:'b'.repeat(32)}))};
+Object.assign(window.previewPayroll,{payrollVersion:2,gross:21000,penaltyTotal:0,paid:5000,due:16000,reportSynced:true,payments:[{id:'7'.repeat(32),name:'Анна',weekStart:'2026-10-12',weekEnd:'2026-10-18',amount:5000,paidBefore:0,dueBefore:21000,dueAfter:16000,status:'partial',at:Date.parse('2026-10-18T12:00:00+03:00'),note:'Перевод на карту'}],balances:[{name:'Анна',due:16000,paid:5000}]});
+window.previewPayroll.rows.forEach(x=>x.automatic=true);
 window.previewSetup=function(state,team){
  const query=new URLSearchParams(location.search),role=query.get('role');state.shopId=2;
  if(query.get('view')==='rescue'){
@@ -87,7 +96,7 @@ window.previewSetup=function(state,team){
   rescueOffersByShop[2]=window.previewRescueOffers;state.category='coffee';
  }
 
- if(query.has('fines')){const p=window.previewPayroll;p.gross=21000;p.penaltyTotal=1200;p.amount=19800;p.totals[0].amount=19800;p.penalties=[{id:'a'.repeat(32),shiftId:'1'.repeat(32),shopId:2,name:'Анна',date:'2026-10-12',amount:200,reason:'Опоздание: 7 мин.',automatic:true},{id:'b'.repeat(32),shiftId:'2'.repeat(32),shopId:2,name:'Анна',date:'2026-10-13',amount:1000,reason:'Опоздание: 20 мин.',automatic:true}];p.openings=[{id:'1'.repeat(32),shopId:2,name:'Анна',date:'2026-10-12',openedAt:Date.parse('2026-10-12T08:07:00+03:00'),lateMinutes:7}];}
+ if(query.has('fines')){const p=window.previewPayroll;p.gross=21000;p.penaltyTotal=1200;p.amount=19800;p.totals[0].amount=19800;p.due=14800;p.balances[0].due=14800;p.penalties=[{id:'a'.repeat(32),shiftId:'1'.repeat(32),shopId:2,name:'Анна',date:'2026-10-12',amount:200,reason:'Опоздание: 7 мин.',automatic:true},{id:'b'.repeat(32),shiftId:'2'.repeat(32),shopId:2,name:'Анна',date:'2026-10-13',amount:1000,reason:'Опоздание: 20 мин.',automatic:true}];p.openings=[{id:'1'.repeat(32),shopId:2,name:'Анна',date:'2026-10-12',openedAt:Date.parse('2026-10-12T08:07:00+03:00'),lateMinutes:7}];}
 
  if(['order-ready','order-preparing'].includes(query.get('view'))){
   const ready=query.get('view')==='order-ready';localStorage.removeItem('sk_pending_payment');state.paymentPending=null;
