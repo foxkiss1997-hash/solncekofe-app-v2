@@ -354,7 +354,7 @@ function teamAttendanceAction_(request,root,props,actor){
   return {rows,serverAt:Date.now()};
  }
  const id=teamId_(request.shiftId),operationId=teamId_(request.operationId),key=shopId+':'+id,reason=String(request.reason||'').trim(),fingerprint=JSON.stringify([request.action,shopId,id,request.sessionId||'',request.originalId||'',request.amount??null,reason]);
- const prior=store.operations[operationId];if(prior){if(prior.actor!==actor.name||prior.fingerprint!==fingerprint)throw Error('ID операции уже использован.');return {row:{id,shopId},sessionId:prior.operationId,openedAt:prior.detail.openedAt,expiresAt:prior.detail.expiresAt,replayed:true};}
+ const prior=store.operations[operationId];if(prior){if(prior.actor!==actor.name||prior.fingerprint!==fingerprint)throw Error('ID операции уже использован.');return {row:{id,shopId},sessionId:prior.operationId,openedAt:prior.detail.openedAt,expiresAt:prior.detail.expiresAt,replayed:true,...(request.action!=='beginShiftOpening'?teamPayrollSyncSafe_(store,props,root):{})};}
  const row=dbRead_(root+'/schedule/'+shopId+'/'+id);if(request.action!=='reverseShiftPenalty'&&(!row||row.status!=='approved'||!row.name))throw Error('Нужна утверждённая смена.');
  const detail=row?{name:row.name,date:row.date,start:row.start,end:row.end}:{},now=Date.now();let delta=0,originalId='';
  if(['beginShiftOpening','finishShiftOpening'].includes(request.action)){
@@ -385,6 +385,6 @@ function teamAttendanceAction_(request,root,props,actor){
   }
  }
  if(!store.sheet)store=teamPayrollStore_(props,root,true);
- teamPayrollAppend_(store,{kind:'attendance',operationId,key,shopId,shiftId:id,action:request.action,actor:actor.name,at:now,fingerprint,detail,delta,originalId});
- return {row:{id,shopId},sessionId:operationId,openedAt:detail.openedAt,expiresAt:detail.expiresAt};
+ const event={kind:'attendance',operationId,key,shopId,shiftId:id,action:request.action,actor:actor.name,at:now,fingerprint,detail,delta,originalId};teamPayrollAppend_(store,event);store.operations[operationId]=event;
+ return {row:{id,shopId},sessionId:operationId,openedAt:detail.openedAt,expiresAt:detail.expiresAt,...(request.action!=='beginShiftOpening'?teamPayrollSyncSafe_(store,props,root):{})};
 }
