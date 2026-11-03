@@ -1,16 +1,25 @@
 /* Rescue offers use authenticated server writes and a separate, finite allocation. */
-let rescueOffersByShop={},rescueLoadSequence=0,rescueClockOffset=0,rescueCartKey='',rescueCartFingerprint='';
+let rescueOffersByShop={},rescueClockOffset=0,rescueCartKey='',rescueCartFingerprint='';
+const rescuePublicLoads=new Map();
 function rescueNow(){return Date.now()+rescueClockOffset;}
 function rescueTime(at){return new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit'}).format(new Date(at));}
 function activeRescueOffers(){return (rescueOffersByShop[state.shopId]||[]).filter(x=>x.active&&x.available>0&&x.pickupUntil>rescueNow());}
 function rescueMenuItems(){return activeRescueOffers().map(x=>({id:'rescue_'+x.id,category:'rescue',name:x.name,sizes:{m:x.price},icon:'🥐',photo:itemByBasePhoto(x.itemId),rescueOfferId:x.id,originalPrice:x.originalPrice,available:x.available,pickupUntil:x.pickupUntil}));}
 function itemByBasePhoto(id){const base=ITEMS.concat(EXTRA_ITEMS).find(x=>x.id===id);return MENU_OVERRIDES[id]?.photo||base?.photo;}
 async function loadRescueOffers(){
- const shopId=state.shopId,sequence=++rescueLoadSequence;
- try{const response=await fetch(PAYMENT_RELAY_URL+'/rescue-offers?shopId='+shopId,{cache:'no-store'});if(!response.ok)throw Error();const data=await response.json();if(!data.ok||data.shopId!==shopId||!Array.isArray(data.offers))throw Error();
-  const changed=JSON.stringify(rescueOffersByShop[shopId])!==JSON.stringify(data.offers);rescueOffersByShop[shopId]=data.offers;rescueClockOffset=Number(data.serverAt)-Date.now()||0;
-  if(sequence===rescueLoadSequence){state.rescueLoadError=false;if(changed&&['menu','cart','customize','checkout'].includes(state.screen))render();}
- }catch(e){if(sequence===rescueLoadSequence){rescueOffersByShop[shopId]=[];state.rescueLoadError=true;if(state.category==='rescue'&&state.screen==='menu')render();}}
+ const shopId=state.shopId;
+ if(rescuePublicLoads.has(shopId))return rescuePublicLoads.get(shopId);
+ const firstLoad=!(shopId in rescueOffersByShop);state.rescueLoading=firstLoad;let redraw=firstLoad;
+ if(firstLoad&&state.category==='rescue'&&state.screen==='menu')render();
+ const job=(async()=>{
+  try{const data=await paymentJson(PAYMENT_RELAY_URL+'/rescue-offers?shopId='+shopId,{cache:'no-store'},12000);
+   if(!data.ok||data.shopId!==shopId||!Array.isArray(data.offers))throw Error('Список не подтверждён.');
+   redraw=redraw||!!state.rescueLoadError||JSON.stringify(rescueOffersByShop[shopId])!==JSON.stringify(data.offers);
+   rescueOffersByShop[shopId]=data.offers;rescueClockOffset=Number(data.serverAt)-Date.now()||0;
+   if(state.shopId===shopId)state.rescueLoadError=false;
+  }catch(e){if(state.shopId===shopId){redraw=true;rescueOffersByShop[shopId]=[];state.rescueLoadError=true;}}
+  finally{rescuePublicLoads.delete(shopId);if(state.shopId===shopId){state.rescueLoading=false;if(redraw&&['menu','cart','customize','checkout'].includes(state.screen))render();}}
+ })();rescuePublicLoads.set(shopId,job);return job;
 }
 function renderRescueBanner(inCart=false){
  const offers=activeRescueOffers(),available=offers.reduce((n,x)=>n+x.available,0),has=offers.length>0;
@@ -34,32 +43,43 @@ function rescueCheckoutKey(){
 }
 function rescueId(){return crypto.randomUUID().replaceAll('-','');}
 function rescueDraft(){
- const identity=stockIdentity();if(state.rescueIdentity!==identity){state.rescueIdentity=identity;state.rescueDraft=null;state.rescueStaffOffers=[];state.rescueStaffMessage='';state.rescueStaffBusy=false;state.rescueStaffReady=false;}
+ const identity=stockIdentity();if(state.rescueIdentity!==identity){state.rescueIdentity=identity;state.rescueDraft=null;state.rescueStaffOffers=[];state.rescueStaffMessage='';state.rescueStaffBusy=false;state.rescueStaffReady=false;state.rescueStaffLoading=false;state.rescueSupportedCategories=['bakery','waffles','fitness'];}
  if(!state.rescueDraft)state.rescueDraft={id:rescueId(),itemId:'',price:'',quantity:'',until:'',freshConfirmed:false,expectedRevision:0,operationId:rescueId()};return state.rescueDraft;
 }
 async function rescueStaffRequest(payload){return paymentJson(PAYMENT_RELAY_URL+'/rescue-operation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,shopId:state.staffShop,submittedBy:state.staffName,sessionToken:state.staffSessionToken||undefined,auth:{password:state.reportPassword}})},25000);}
 async function loadStaffRescue(){
- rescueDraft();const identity=stockIdentity();state.rescueStaffLoading=true;render();
- try{await loadExtraMenu();const data=await rescueStaffRequest({action:'list'});if(identity!==stockIdentity())return;if(!data.ok||data.shopId!==state.staffShop||!Array.isArray(data.offers))throw Error(data.error||'Список не подтверждён.');state.rescueStaffOffers=data.offers;state.rescueStaffReady=true;state.rescueStaffMessage='';}
+ rescueDraft();if(state.rescueStaffLoading||state.rescueStaffBusy)return;const identity=stockIdentity();state.rescueStaffLoading=true;state.rescueStaffReady=false;render();
+ try{const [,data]=await Promise.all([loadExtraMenu(),rescueStaffRequest({action:'list'})]);if(identity!==stockIdentity())return;if(!data.ok||data.shopId!==state.staffShop||!Array.isArray(data.offers))throw Error(data.error||'Список не подтверждён.');state.rescueStaffOffers=data.offers;if(Number.isFinite(data.serverAt))rescueClockOffset=data.serverAt-Date.now();state.rescueSupportedCategories=Array.isArray(data.categories)?data.categories.filter(x=>['bakery','waffles','fitness','desserts'].includes(x)):['bakery','waffles','fitness'];state.rescueStaffReady=true;state.rescueStaffMessage='';}
  catch(e){if(identity===stockIdentity()){state.rescueStaffReady=false;state.rescueStaffMessage=e.message||'Не удалось загрузить предложения.';}}
  finally{if(identity===stockIdentity()){state.rescueStaffLoading=false;render();}}
 }
 function renderStaffRescue(){
- const d=rescueDraft(),shop=SHOPS.find(x=>x.id===state.staffShop),busy=state.rescueStaffBusy,items=allItems().filter(x=>['bakery','waffles','fitness'].includes(x.category));
- return `<section class="ops-form rescue-form" id="ops-active-form"><h3>Спасение выпечки</h3><p class="ops-muted">${esc(shop?.name||'')} · предложения только этой кофейни</p><p class="hint">Выделите товар для акции и уберите это количество из обычной продажи на кассе. Добавляйте только продукцию с действующим сроком годности.</p>
+ const d=rescueDraft(),shop=SHOPS.find(x=>x.id===state.staffShop),busy=state.rescueStaffBusy,items=allItems().filter(x=>(state.rescueSupportedCategories||['bakery','waffles','fitness']).includes(x.category)&&!menuPricePending(x)&&!itemStopped(x.id,state.staffShop));
+ return `<section class="ops-form rescue-form" id="ops-active-form"><h3>Спаси вкусняшку</h3><p class="ops-muted">${esc(shop?.name||'')} · предложения только этой кофейни</p><p class="hint">Выделите товар для акции и уберите это количество из обычной продажи на кассе. Добавляйте только продукцию с действующим сроком годности.</p>
+ ${state.rescueStaffLoading?'<p class="ops-muted" role="status">Загружаем меню и предложения…</p>':''}${state.rescueStaffReady&&!items.length?'<p class="ops-message">Нет доступных позиций с ценой. Проверьте меню и стоп-лист этой кофейни.</p>':''}
  <label>Позиция<select class="ops-select" data-rescue-field="itemId" aria-label="Позиция для спасения"><option value="">Выберите из меню</option>${items.map(x=>`<option value="${esc(x.id)}" ${d.itemId===x.id?'selected':''}>${esc(x.name)} · ${money(x.sizes.m)}</option>`).join('')}</select></label>
  <label>Всего выделено, шт.<input class="text-input" type="number" min="1" max="100" step="1" data-rescue-field="quantity" value="${esc(String(d.quantity))}"></label>
  <label>Цена за порцию, ₽<input class="text-input" type="number" min="1" step="1" data-rescue-field="price" value="${esc(String(d.price))}"></label>
  <label>Забрать до (московское время)<input class="text-input" type="datetime-local" data-rescue-field="until" value="${esc(d.until)}"></label>
  <label class="rescue-confirm"><input type="checkbox" data-rescue-field="freshConfirmed" ${d.freshConfirmed?'checked':''}> Подтверждаю: товар пригоден до указанного времени, количество отложено для спасения.</label>
- <button class="ops-submit" data-action="rescue-save" ${busy||!state.rescueStaffReady?'disabled':''}>${busy?'Сохраняем…':d.expectedRevision?'Сохранить изменения':'Опубликовать предложение'}</button>
+ <button class="ops-submit" data-action="rescue-save" ${busy||state.rescueStaffLoading||!state.rescueStaffReady||!items.length?'disabled':''}>${busy?'Сохраняем…':d.expectedRevision?'Сохранить изменения':'Опубликовать предложение'}</button>
  ${d.expectedRevision?'<button class="ops-cancel" data-action="rescue-new">Новое предложение</button>':''}
  ${state.rescueStaffMessage?`<p class="ops-message" role="status">${esc(state.rescueStaffMessage)}</p>`:''}
  <h3>Предложения этой кофейни</h3><button class="ops-cancel" data-action="rescue-staff-refresh" ${busy||state.rescueStaffLoading?'disabled':''}>${state.rescueStaffLoading?'Обновляем…':'Обновить список'}</button>
- ${(state.rescueStaffOffers||[]).map(x=>`<article class="order-card"><b>${esc(x.name)}</b><p>${money(x.price)} · ${x.available} шт. доступны · ${x.reserved} шт. в оплатах / заказах</p><p class="hint">До ${rescueTime(x.pickupUntil)} · ${x.active&&x.pickupUntil>rescueNow()?'Опубликовано':'Снято или срок закончился'}</p><button class="ops-cancel" data-action="rescue-edit" data-id="${x.id}" ${busy?'disabled':''}>Редактировать</button>${x.active?`<button class="ops-cancel" data-action="rescue-close" data-id="${x.id}" ${busy?'disabled':''}>Снять с продажи</button>`:''}</article>`).join('')||'<p class="hint">Пока нет предложений. Заполните форму выше.</p>'}<button class="ops-cancel" data-action="close-op" ${busy?'disabled':''}>Закрыть</button></section>`;
+ ${(state.rescueStaffOffers||[]).map(x=>`<article class="order-card"><b>${esc(x.name)}</b><p>${money(x.price)} · ${x.available} шт. доступны · ${x.reserved} шт. в оплатах / заказах</p><p class="hint">До ${rescueTime(x.pickupUntil)} · ${x.active&&x.pickupUntil>rescueNow()?'Опубликовано':'Снято или срок закончился'}</p><button class="ops-cancel" data-action="rescue-edit" data-id="${x.id}" ${busy?'disabled':''}>Редактировать</button>${x.active?`<button class="ops-cancel" data-action="rescue-close" data-id="${x.id}" ${busy?'disabled':''}>Снять с продажи</button>`:''}</article>`).join('')||`<p class="hint">${state.rescueStaffReady?'Пока нет предложений. Заполните форму выше.':'Список ещё не загружен. Нажмите «Обновить список».'}</p>`}<button class="ops-cancel" data-action="close-op" ${busy?'disabled':''}>Закрыть</button></section>`;
 }
 async function saveStaffRescue(closeId){
- const d=rescueDraft();if(state.rescueStaffBusy||!state.rescueStaffReady||!hasStaffAuth())return;
+ const d=rescueDraft();if(state.rescueStaffBusy||state.rescueStaffLoading||!state.rescueStaffReady)return;
+ if(!hasStaffAuth()){state.rescueStaffMessage='Войдите под личным паролем сотрудника.';render();return;}
+ if(!closeId){const item=itemById(d.itemId),price=Number(d.price),quantity=Number(d.quantity),until=Date.parse(d.until+':00+03:00');
+  let error='';
+  if(!item||!(state.rescueSupportedCategories||['bakery','waffles','fitness']).includes(item.category)||menuPricePending(item)||itemStopped(item.id,state.staffShop))error='Выберите доступную выпечку или десерт с ценой.';
+  else if(!Number.isSafeInteger(quantity)||quantity<1||quantity>100)error='Укажите от 1 до 100 порций.';
+  else if(!Number.isSafeInteger(price)||price<1||price>=Number(item.sizes.m))error='Цена спасения должна быть ниже обычной цены.';
+  else if(!Number.isSafeInteger(until)||until<=rescueNow()+5*60000||until>rescueNow()+24*3600000)error='Укажите время получения: от 5 минут до 24 часов.';
+  else if(!d.freshConfirmed)error='Подтвердите срок годности и отложенное количество.';
+  if(error){state.rescueStaffMessage=error;render();return;}
+ }
  const target=closeId?(state.rescueStaffOffers||[]).find(x=>x.id===closeId):null,payload=closeId?{action:'close',id:closeId,expectedRevision:target?.revision,operationId:rescueId()}:{...d,action:'save',pickupUntil:Date.parse(d.until+':00+03:00')};
  const identity=stockIdentity();state.rescueStaffBusy=true;state.rescueStaffMessage='';render();
  try{const data=await rescueStaffRequest(payload);if(identity!==stockIdentity())return;if(!data.ok||data.shopId!==state.staffShop||data.offer?.id!==payload.id)throw Error(data.error||'Сервер не подтвердил предложение.');

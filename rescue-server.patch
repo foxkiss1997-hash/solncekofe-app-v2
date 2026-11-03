@@ -1,0 +1,41 @@
+--- a/server.js
++++ b/server.js
+@@ -367,7 +367,7 @@
+ async function handleRescueOperation(body,res){
+  try{
+   await rescueIdentity(body);
+-  if(body.action==='list'){await reconcileRescueHolds(body.shopId);const offers=await rescueMap(body.shopId);return staffReply(res,200,{ok:true,shopId:body.shopId,offers:Object.entries(offers).filter(([,x])=>verifyRescue(x)).map(([id,x])=>publicRescue(id,x,true))});}
++  if(body.action==='list'){await reconcileRescueHolds(body.shopId);const offers=await rescueMap(body.shopId);return staffReply(res,200,{ok:true,shopId:body.shopId,serverAt:Date.now(),categories:['bakery','waffles','fitness','desserts'],offers:Object.entries(offers).filter(([,x])=>verifyRescue(x)).map(([id,x])=>publicRescue(id,x,true))});}
+   if(!['save','close'].includes(body.action)||! /^[a-f0-9]{32}$/.test(body.id||''))throw Error('Неизвестное предложение.');
+   const path='/rescue_offers/'+body.shopId,snap=await fbSnapshot(path),offers=snap.value||{},old=offers[body.id];
+   if(old&&!verifyRescue(old))throw Error('Предложение не прошло проверку.');
+@@ -377,9 +377,9 @@
+   let next;
+   if(body.action==='close'){if(!old)throw Error('Предложение не найдено.');next={...old,active:false};}
+   else{
+-   const rawId=String(body.itemId||'').startsWith('x_')?String(body.itemId).slice(2):'',item=rawId?await fbGet('/menu/'+rawId):STOCK_BASE_ITEMS.filter(x=>x.category==='fitness').map(x=>({...x,price:330})).find(x=>x.id===body.itemId);
+-   if(!item||!['bakery','waffles','fitness'].includes(item.category))throw Error('Выберите выпечку или десерт из меню.');
+-   const override=await fbGet('/menu_overrides/'+body.itemId),originalPrice=Number(override?.sizes?.m||item.price),price=Number(body.price),quantity=Number(body.quantity),pickupUntil=Number(body.pickupUntil),now=Date.now();
++   const rawId=String(body.itemId||'').startsWith('x_')?String(body.itemId).slice(2):'',item=rawId?await fbGet('/menu/'+rawId):STOCK_BASE_ITEMS.filter(x=>x.category==='fitness').map(x=>({...x,price:350})).find(x=>x.id===body.itemId);
++   if(!item||!['bakery','waffles','fitness','desserts'].includes(item.category))throw Error('Выберите выпечку или десерт из меню.');
++   const override=await fbGet('/menu_overrides/'+body.itemId),originalPrice=Number(override?.sizes?.m??item.sizes?.m??item.price),price=Number(body.price),quantity=Number(body.quantity),pickupUntil=Number(body.pickupUntil),now=Date.now();
+    if(!Number.isSafeInteger(quantity)||quantity<1||quantity>100||quantity<(old?rescueUsed(old):0))throw Error('Количество: от 1 до 100, не меньше уже зарезервированного.');
+    if(!Number.isSafeInteger(price)||price<1||!Number.isFinite(originalPrice)||price>=originalPrice)throw Error('Укажите цену ниже обычной цены меню.');
+    if(!Number.isSafeInteger(pickupUntil)||pickupUntil<=now+5*60000||pickupUntil>now+24*3600000||body.freshConfirmed!==true)throw Error('Подтвердите срок годности и время получения: от 5 минут до 24 часов.');
+--- a/server.test.cjs
++++ b/server.test.cjs
+@@ -250,3 +250,14 @@
+ test('rescue signatures survive Firebase sorting nested JSON keys and stopped base items disappear',async()=>{const f=rescueFixture();await rescueOp(f);await f.c.reserveRescue(1,[rescueLine()],rescueKey);const original=f.db.get('/rescue_offers/1');const reorder=x=>x&&typeof x==='object'&&!Array.isArray(x)?Object.fromEntries(Object.keys(x).sort().reverse().map(k=>[k,reorder(x[k])])):x;f.put('/rescue_offers/1',reorder(original));assert.equal(f.c.verifyRescue(f.db.get('/rescue_offers/1')[rescueOfferId]),true);const r={writeHead(){},end(raw){this.data=JSON.parse(raw)}};await f.c.handleRescueList(1,r);assert.equal(r.data.offers.length,1);f.put('/shop_stoplist/1',{[rescueItem]:true});await f.c.handleRescueList(1,r);assert.equal(r.data.offers.length,0);});
+ 
+ test('Firebase omission of an empty holds object preserves the rescue signature',async()=>{const f=rescueFixture();await rescueOp(f);const offer=f.db.get('/rescue_offers/1')[rescueOfferId];delete offer.holds;assert.equal(f.c.verifyRescue(offer),true);});
++
++test('ordinary desserts are accepted and report their current menu price; unavailable prices are rejected',async()=>{
++ const f=rescueFixture();f.put('/menu/cake',{name:'Торт',category:'desserts',price:380});
++ const r=await rescueOp(f,{itemId:'x_cake',price:190});assert.equal(r.data.ok,true);assert.equal(r.data.offer.originalPrice,380);
++ const list={writeHead(){},end(raw){this.data=JSON.parse(raw)}};await f.c.handleRescueOperation({action:'list',shopId:1,submittedBy:'Анна',auth:{password:'pass'}},list);assert.ok(list.data.categories.includes('desserts'));
++ const g=rescueFixture();g.put('/menu/cake',{name:'Торт',category:'desserts',price:0});assert.equal((await rescueOp(g,{itemId:'x_cake',price:190})).data.ok,false);
++});
++test('base PP desserts use 350 rubles and explicit zero overrides cannot fall back to old prices',async()=>{
++ const f=rescueFixture();assert.equal((await rescueOp(f,{itemId:'ppcheesecake',price:340})).data.offer.originalPrice,350);
++ const g=rescueFixture();g.put('/menu_overrides/'+rescueItem,{sizes:{m:0}});assert.equal((await rescueOp(g)).data.ok,false);
++});
