@@ -22,7 +22,9 @@ function doPost(e){
     if(request.apiVersion!==3||!OPS_ALLOWED_ORIGINS.includes(request.returnOrigin)||!/^[a-f0-9]{32}$/.test(request.nonce||''))throw Error('Некорректный запрос.');
     const selected=selectOpsDestination_(request,PropertiesService.getScriptProperties());
     const props=selected.props,root=selected.root;
-    if(request.action==='createPickupOrder'){
+    if(['gamesList','gamesSave','gamesClose','gamesJoin','gamesLeave'].includes(request.action)){
+      answer=handleGames_(request,root,props);
+    }else if(request.action==='createPickupOrder'){
       if(request.mode!=='production')throw Error('Рабочие заказы недоступны в тестовом режиме.');
       answer=createPickupOrder_(request,props);
     }else if(['saveChecklistConfig','authorizeAdmin'].includes(request.action)){
