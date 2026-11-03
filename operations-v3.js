@@ -66,7 +66,7 @@ function selectStaffShop(value){
 function renderOpsAuth(){return hasStaffAuth()?'':`<label class="hint">Для отправки отчёта подтвердите личный пароль<input class="text-input" type="password" autocomplete="off" placeholder="Личный пароль сотрудника" data-action="ops-report-password"></label>`;}
 function renderOpsSync(){return `<div class="ops-wide"><div class="hint">${OPS_V3_TEST_MODE?'Тестовая версия · ':''}${state.opsPending||0} отчётов ожидают отправки в таблицу</div><button class="ops-cancel" data-action="ops-retry" ${opsQueueBusy?'disabled':''}>Повторить отправку</button>${state.opsSyncMessage?`<div class="hint">${esc(state.opsSyncMessage)}</div>`:''}</div>`;}
 function sendOpsRequest(body,password,admin=false){
-  if(!admin&&state.staffSessionToken&&!OPS_V3_TEST_MODE)return staffSessionOperation(body);
+  if(!admin&&!String(body.action).startsWith('games')&&state.staffSessionToken&&!OPS_V3_TEST_MODE)return staffSessionOperation(body);
 
   if(!REPORTS_WEBHOOK_URL)return Promise.reject(Error('Интеграция ещё не подключена. Отчёт сохранён на устройстве.'));
   return new Promise((resolve,reject)=>{
@@ -74,7 +74,7 @@ function sendOpsRequest(body,password,admin=false){
     const field=document.createElement('input');field.type='hidden';field.name='payload';field.value=JSON.stringify({apiVersion:3,nonce,returnOrigin:location.origin,mode:OPS_V3_TEST_MODE?'test':'production',...body,auth:{password,admin}});form.appendChild(field);
     let timer;const cleanup=()=>{clearTimeout(timer);window.removeEventListener('message',listener);form.remove();frame.remove();};
     const listener=e=>{if(!/^https:\/\/(?:script\.google\.com|(?:[a-z0-9-]+[.-])?script\.googleusercontent\.com)$/.test(e.origin)||e.data?.channel!=='solncekofe-ops-v3'||e.data.nonce!==nonce)return;cleanup();if(e.data.ok&&e.data.apiVersion===3)resolve(e.data);else reject(Error(e.data.error||'Таблица не подтвердила сохранение.'));};
-    window.addEventListener('message',listener);timer=setTimeout(()=>{cleanup();reject(Error('Нет подтверждения Google. Отчёт остаётся в очереди.'));},60000);
+    window.addEventListener('message',listener);timer=setTimeout(()=>{cleanup();reject(Error(String(body.action).startsWith('games')?'Нет подтверждения сервера игр. Обновите список.':'Нет подтверждения Google. Отчёт остаётся в очереди.'));},String(body.action).startsWith('games')?20000:60000);
     document.body.append(frame,form);try{form.submit();}catch(e){cleanup();reject(e);}
   });
 }

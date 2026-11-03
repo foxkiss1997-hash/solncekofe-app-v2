@@ -692,13 +692,15 @@
     <div id="app"></div>
   </div>
 
-<script src="operations-v3.js?v=20261024-payroll-v2"></script>
+<script src="operations-v3.js?v=20261103-games"></script>
 <script src="stable-ui.js?v=20261024-payroll-v2"></script>
 <script src="assets/loyalty-qr.js?v=20261024-payroll-v2"></script>
 <script src="team-loyalty.js?v=20261024-payroll-v2"></script>
 <script src="menu-photos.js?v=20261024-payroll-v2"></script>
-<script src="menu-experience.js?v=20261024-payroll-v2"></script>
+<script src="menu-experience.js?v=20261103-games"></script>
 <script src="rescue-menu.js?v=20261024-payroll-v2"></script>
+<script src="board-games.js?v=20261103"></script>
+<link rel="stylesheet" href="board-games.css?v=20261103">
 <script>
 /* ---------- DATA (menu: Солнцекофе, Yandex Eda) ---------- */
 const CATEGORIES = [
@@ -1695,6 +1697,7 @@ function renderAdmin(){
           <div class="tab ${state.adminTab==='orders'?'active':''} rippleable" data-action="admin-set-tab" data-tab="orders">Заказы</div>
           <div class="tab ${state.adminTab==='staff'?'active':''} rippleable" data-action="admin-set-tab" data-tab="staff">Сотрудники</div>
           <div class="tab ${state.adminTab==='menu'?'active':''} rippleable" data-action="admin-set-tab" data-tab="menu">Меню</div>
+          <button class="tab ${state.adminTab==='games'?'active':''}" data-action="admin-set-tab" data-tab="games">Настольные игры</button>
           <div class="tab ${state.adminTab==='posts'?'active':''} rippleable" data-action="admin-set-tab" data-tab="posts">Посты</div>
           <div class="tab ${state.adminTab==='wheel'?'active':''} rippleable" data-action="admin-set-tab" data-tab="wheel">Колесо</div>
           <div class="tab ${state.adminTab==='checklists'?'active':''} rippleable" data-action="admin-set-tab" data-tab="checklists">Чек-листы</div>
@@ -1703,7 +1706,7 @@ function renderAdmin(){
           <div class="tab ${state.adminTab==='reports'?'active':''} rippleable" data-action="admin-set-tab" data-tab="reports">Отчёты</div>
         </div>
       </div>
-      ${state.adminTab==='overview' ? renderTeamOverview() : state.adminTab==='attendance' ? renderOwnerAttendance() : state.adminTab==='schedule' ? renderTeamSchedule() : state.adminTab==='payroll' ? renderTeamPayroll() : state.adminTab==='loyalty' ? renderTeamLoyalty() : state.adminTab==='checklists' ? renderAdminChecklists() : state.adminTab==='orders' ? renderAdminOrdersTab() : state.adminTab==='staff' ? renderAdminStaffTab() : state.adminTab==='menu' ? renderAdminMenuTab() : state.adminTab==='posts' ? renderAdminPostsTab() : state.adminTab==='reports' ? renderAdminReportsTab() : renderAdminWheelTab()}
+      ${state.adminTab==='games' ? renderGamesContent(true) : state.adminTab==='overview' ? renderTeamOverview() : state.adminTab==='attendance' ? renderOwnerAttendance() : state.adminTab==='schedule' ? renderTeamSchedule() : state.adminTab==='payroll' ? renderTeamPayroll() : state.adminTab==='loyalty' ? renderTeamLoyalty() : state.adminTab==='checklists' ? renderAdminChecklists() : state.adminTab==='orders' ? renderAdminOrdersTab() : state.adminTab==='staff' ? renderAdminStaffTab() : state.adminTab==='menu' ? renderAdminMenuTab() : state.adminTab==='posts' ? renderAdminPostsTab() : state.adminTab==='reports' ? renderAdminReportsTab() : renderAdminWheelTab()}
     </div>
   `;
 }
@@ -2852,7 +2855,7 @@ function renderStatus(){
 
 /* ---------- ICONS ---------- */
 function tabBarHTML(active){
- const tabs=[['menu','coffee','Меню'],['card','credit-card','Карта'],['orders','receipt','Заказы'],['profile','user','Профиль']];
+ const tabs=[['menu','coffee','Меню'],['card','credit-card','Карта'],['orders','receipt','Заказы'],['games','calendar-blank','Игры'],['profile','user','Профиль']];
  return `<nav class="tabbar" aria-label="Основная навигация">${tabs.map(([id,icon,label])=>`<button class="tab-item ${active===id?'active':''}" data-action="tab-go-${id}" ${active===id?'aria-current="page"':''}>${menuIcon(icon)}<span>${label}</span></button>`).join('')}</nav>`;
 }
 
@@ -2945,6 +2948,7 @@ function render(){
   if(state.screen==='menu') html = renderMenu();
   else if(state.screen==='customize') html = renderCustomize();
   else if(state.screen==='cart') html = renderCart();
+  else if(state.screen==='games') html=renderBoardGames();
   else if(state.screen==='profile') html=renderGlassProfile();
   else if(state.screen==='card') html = renderCard();
   else if(state.screen==='orders') html = renderOrders();
@@ -3122,7 +3126,7 @@ document.addEventListener('click', (e)=>{
   else if(action==='save-checklist'){ submitShiftChecklist(); }
   else if(action==='export-reports-csv'){ exportReportsCSV(); }
   else if(action==='staff-scan-qr'){ scanLoyaltyQr(); }
-  else if(action==='admin-refresh'){ if(['overview','attendance'].includes(state.adminTab))loadTeamOverview();else if(state.adminTab==='schedule')teamLoadSchedule();else if(state.adminTab==='payroll')loadTeamPayroll();else loadAdminOrders(); }
+  else if(action==='admin-refresh'){ if(['overview','attendance'].includes(state.adminTab))loadTeamOverview();else if(state.adminTab==='schedule')teamLoadSchedule();else if(state.adminTab==='payroll')loadTeamPayroll();else if(state.adminTab==='games')gamesLoad();else loadAdminOrders(); }
   else if(action==='admin-set-tab'){
     state.adminTab = el.dataset.tab;
     if(['overview','attendance'].includes(state.adminTab))loadTeamOverview();
@@ -3261,38 +3265,37 @@ document.addEventListener('input', (e)=>{
 });
 
 async function loadExtraMenu(){
+  if(state.menuRefreshing)return;state.menuRefreshing=true;state.menuLoadError='';
   try{
-    const res = await fetch(DB_URL + '/menu.json');
+    const res = await menuReadResponse(DB_URL + '/menu.json');
     const obj = res.ok ? await res.json() : null;
-    if(obj){
-      EXTRA_ITEMS = Object.keys(obj).map(id=>{
+    if(obj===null||typeof obj==='object'){
+      EXTRA_ITEMS = Object.keys(obj||{}).map(id=>{
         const m = obj[id];
         return { id: 'x_'+id, dbId:id, category:m.category, name:m.name, sizes:m.sizes||{m:m.price}, hit:!!m.hit, icon:m.icon||'🍽️', photo:m.photo||null, weightGrams:Number(m.weightGrams)||null, sizeVolumes:m.sizeVolumes||null, custom:true };
       });
     }
-  }catch(e){ /* ignore, menu just stays with built-in items */ }
-  await loadMenuOverrides();
-  await loadStopList();
-  await loadShopAvailability();
+  }catch(e){ state.menuLoadError='Не удалось загрузить меню. Показана последняя версия — повторите загрузку.'; }
+  await Promise.all([loadMenuOverrides(),loadStopList(),loadShopAvailability()]);
   if(typeof loadRescueOffers==='function')await loadRescueOffers();
-  render();
+  state.menuRefreshing=false;render();
 }
 
 async function loadMenuOverrides(){
   try{
-    const res = await fetch(DB_URL + '/menu_overrides.json');
+    const res = await menuReadResponse(DB_URL + '/menu_overrides.json');
     const obj = res.ok ? await res.json() : null;
     MENU_OVERRIDES = obj || {};
-  }catch(e){ /* keep whatever we had */ }
+  }catch(e){state.menuLoadError='Не удалось обновить цены. Повторите загрузку.';}
 }
 
 async function loadStopList(){
   try{
-    const res = await fetch(DB_URL + '/stoplist.json');
+    const res = await menuReadResponse(DB_URL + '/stoplist.json');
     if(!res.ok)throw Error('Наличие не загружено.');
     const obj = await res.json();
     STOP_LIST = new Set(obj ? Object.keys(obj).filter(k=>obj[k]) : []);
-  }catch(e){ /* keep whatever we had */ }
+  }catch(e){state.menuLoadError='Не удалось обновить наличие. Повторите загрузку.';}
 }
 
 async function loadShopPhotos(){
